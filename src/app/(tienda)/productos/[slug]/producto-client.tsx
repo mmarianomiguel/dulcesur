@@ -8,6 +8,7 @@ import { formatCurrency, daysSinceAR } from "@/lib/formatters";
 import { slugify, productSlug } from "@/lib/utils";
 import { useCategoriasPermitidas } from "@/hooks/use-categorias-visibles";
 import { addRecentlyViewed } from "@/hooks/use-recently-viewed";
+import { VistosRecientementeBlock } from "@/components/tienda/vistos-recientemente";
 import {
   Package,
   Minus,
@@ -1072,6 +1073,7 @@ export default function ProductoClient({
           </div>
         </div>
       )}
+      <VistosRecientementeBlock excludeId={producto.id} />
     </div>
   );
 }

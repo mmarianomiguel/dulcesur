@@ -36,6 +36,7 @@ import { supabase } from "@/lib/supabase";
 import { slugify, productSlug } from "@/lib/utils";
 import { useCategoriasPermitidas } from "@/hooks/use-categorias-visibles";
 import InstallPrompt from "@/components/tienda/install-prompt";
+import { VistosRecientementeBlock } from "@/components/tienda/vistos-recientemente";
 
 /* ──────────────── types ──────────────── */
 
@@ -1665,6 +1666,7 @@ export default function TiendaPage({
       <AumentosRecientesBlock productos={initialAumentos} presMap={presMap} />
       {afterAumentosBloques.map((bloque) => renderBlock(bloque))}
       {remaining.map((bloque) => renderBlock(bloque))}
+      <VistosRecientementeBlock />
     </div>
   );
 }
