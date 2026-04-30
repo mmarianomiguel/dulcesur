@@ -3388,7 +3388,7 @@ export default function ListaPreciosPage() {
                     <p className="text-xs text-muted-foreground mb-3">
                       Guardá hasta 2 logos y elegí cuál usar para cada tipo de PDF. La elección se recuerda por modo.
                     </p>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div className="space-y-3">
                       {logoSlots.map((slot) => {
                         const isActive = activeSlotIdForCurrentMode === slot.id;
                         const isUploading = uploadingLogoSlot === slot.id;
@@ -3397,17 +3397,51 @@ export default function ListaPreciosPage() {
                             key={slot.id}
                             className={`border rounded-xl p-3 transition-colors ${isActive ? "border-primary bg-primary/5" : "border-border"}`}
                           >
-                            <div className="flex items-center justify-between mb-2 gap-2">
-                              <input
-                                type="text"
-                                value={slot.nombre}
-                                onChange={(e) => renameLogoSlot(slot.id, e.target.value)}
-                                className="flex-1 bg-transparent text-sm font-medium border-0 border-b border-transparent hover:border-border focus:border-primary focus:outline-none px-0 py-0.5"
-                              />
+                            <div className="flex items-center gap-3">
+                              <div className="flex items-center justify-center bg-background border border-dashed border-border rounded-lg overflow-hidden p-1.5 shrink-0" style={{ width: "84px", height: "48px" }}>
+                                {slot.base64 ? (
+                                  // eslint-disable-next-line @next/next/no-img-element
+                                  <img src={slot.base64} alt={slot.nombre} style={{ maxHeight: "100%", maxWidth: "100%", objectFit: "contain" }} />
+                                ) : (
+                                  <span className="text-[10px] text-muted-foreground">Sin logo</span>
+                                )}
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <input
+                                  type="text"
+                                  value={slot.nombre}
+                                  onChange={(e) => renameLogoSlot(slot.id, e.target.value)}
+                                  className="w-full bg-transparent text-sm font-medium border-0 border-b border-transparent hover:border-border focus:border-primary focus:outline-none px-0 py-0.5"
+                                />
+                                <div className="flex items-center gap-2 mt-1.5 flex-wrap">
+                                  <label className={`cursor-pointer text-xs text-center border border-border rounded-md px-2.5 py-1 hover:bg-accent transition-colors ${isUploading ? "opacity-60 pointer-events-none" : ""}`}>
+                                    {isUploading ? "Subiendo..." : (slot.base64 ? "Cambiar" : "Subir")}
+                                    <input
+                                      type="file"
+                                      accept="image/*"
+                                      onChange={(e) => {
+                                        const f = e.target.files?.[0];
+                                        if (f) handleSlotLogoUpload(slot.id, f);
+                                        e.target.value = "";
+                                      }}
+                                      className="hidden"
+                                    />
+                                  </label>
+                                  {slot.base64 && (
+                                    <button
+                                      type="button"
+                                      onClick={() => removeLogoSlot(slot.id)}
+                                      className="text-xs px-2.5 py-1 border border-border rounded-md text-muted-foreground hover:text-destructive hover:border-destructive/50 transition-colors"
+                                    >
+                                      Quitar
+                                    </button>
+                                  )}
+                                </div>
+                              </div>
                               <button
                                 type="button"
                                 onClick={() => setActiveSlotForCurrentMode(slot.id)}
-                                className={`text-[11px] px-2 py-0.5 rounded-full border transition-colors shrink-0 ${
+                                className={`text-[11px] px-2.5 py-1 rounded-full border transition-colors shrink-0 self-start ${
                                   isActive
                                     ? "bg-primary text-primary-foreground border-primary"
                                     : "border-border text-muted-foreground hover:bg-accent"
@@ -3415,38 +3449,6 @@ export default function ListaPreciosPage() {
                               >
                                 {isActive ? "✓ Activo" : "Usar"}
                               </button>
-                            </div>
-                            <div className="flex items-center justify-center bg-background border border-dashed border-border rounded-lg mb-2 overflow-hidden p-2" style={{ height: "56px" }}>
-                              {slot.base64 ? (
-                                // eslint-disable-next-line @next/next/no-img-element
-                                <img src={slot.base64} alt={slot.nombre} style={{ maxHeight: "100%", maxWidth: "100%", objectFit: "contain" }} />
-                              ) : (
-                                <span className="text-xs text-muted-foreground">Sin logo</span>
-                              )}
-                            </div>
-                            <div className="flex items-center gap-2">
-                              <label className={`flex-1 cursor-pointer text-xs text-center border border-border rounded-md px-2 py-1.5 hover:bg-accent transition-colors ${isUploading ? "opacity-60 pointer-events-none" : ""}`}>
-                                {isUploading ? "Subiendo..." : (slot.base64 ? "Cambiar" : "Subir")}
-                                <input
-                                  type="file"
-                                  accept="image/*"
-                                  onChange={(e) => {
-                                    const f = e.target.files?.[0];
-                                    if (f) handleSlotLogoUpload(slot.id, f);
-                                    e.target.value = "";
-                                  }}
-                                  className="hidden"
-                                />
-                              </label>
-                              {slot.base64 && (
-                                <button
-                                  type="button"
-                                  onClick={() => removeLogoSlot(slot.id)}
-                                  className="text-xs px-2 py-1.5 border border-border rounded-md text-muted-foreground hover:text-destructive hover:border-destructive/50 transition-colors"
-                                >
-                                  Quitar
-                                </button>
-                              )}
                             </div>
                           </div>
                         );
