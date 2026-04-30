@@ -1958,17 +1958,22 @@ export default function ProductosPage() {
         try { await supabase.from("precio_historial").insert(historyInserts); } catch { console.error("Error guardando historial de precios"); }
       }
 
-      // Update local products state
+      // Update local products state — incluye fecha_actualizacion cuando el precio cambia,
+      // así el badge "actualizado hoy" se refresca sin recargar la página.
+      const nowIso = new Date().toISOString();
       setProducts((prev) =>
         prev.map((p) => {
           const preview = massEditPreview.find((i) => i.id === p.id);
-          if (preview) {
-            const fp = getFinalPrecio(preview.newPrecio, preview.id);
-            return (massTarget === "costo" || massTarget === "fijar_costo")
-              ? { ...p, costo: preview.newCosto, precio: fp, precio_anterior: p.precio }
-              : { ...p, precio: fp, precio_anterior: p.precio };
+          if (!preview) return p;
+          const fp = getFinalPrecio(preview.newPrecio, preview.id);
+          const precioChanged = fp !== p.precio;
+          const base = (massTarget === "costo" || massTarget === "fijar_costo")
+            ? { ...p, costo: preview.newCosto, precio: fp, precio_anterior: p.precio }
+            : { ...p, precio: fp, precio_anterior: p.precio };
+          if (precioChanged) {
+            (base as any).fecha_actualizacion = nowIso;
           }
-          return p;
+          return base;
         })
       );
 
