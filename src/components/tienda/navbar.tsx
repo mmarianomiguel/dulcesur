@@ -111,10 +111,12 @@ export default function TiendaNavbar({ initial }: TiendaNavbarProps = {}) {
   }, []);
 
   useEffect(() => {
-    // Si ya se hidrató desde SSR, evita refetch — previene CLS y trabajo extra.
-    if (initial && initial.categorias && initial.categorias.length > 0) return;
+    // Categorias se cachean desde SSR (heavy). tienda_config + empresa se
+    // refetchean siempre porque el layout tiene revalidate=300 y queremos que
+    // cambios en umbral_envio_gratis / horarios / telefono se reflejen al toque.
+    const skipCategorias = !!(initial && initial.categorias && initial.categorias.length > 0);
     Promise.all([
-      supabase.from("categorias").select("id, nombre, restringida").order("nombre"),
+      skipCategorias ? Promise.resolve({ data: null }) : supabase.from("categorias").select("id, nombre, restringida").order("nombre"),
       supabase.from("empresa").select("nombre, telefono, white_label").limit(1).single(),
       supabase.from("tienda_config").select("logo_url, umbral_envio_gratis, horario_atencion_inicio, horario_atencion_fin, dias_atencion").limit(1).single(),
     ]).then(([{ data: cats }, { data: emp }, { data: tc }]) => {
