@@ -24,9 +24,12 @@ import {
 import { showAdminToast } from "@/components/admin-toast";
 import { ArrowLeft, Plus, Pencil, Trash2, Calendar, Power, PowerOff } from "lucide-react";
 
+type HeroTipo = "personalizado" | "aumento_marca" | "oferta_descuento" | "producto_destacado";
+
 interface HeroTemplate {
   id: string;
   nombre: string;
+  tipo: HeroTipo;
   titulo: string;
   subtitulo: string;
   boton_texto: string;
@@ -41,6 +44,7 @@ interface HeroTemplate {
 interface HeroProgramacion {
   id: string;
   template_id: string | null;
+  tipo: HeroTipo;
   titulo: string;
   subtitulo: string;
   boton_texto: string;
@@ -55,7 +59,12 @@ interface HeroProgramacion {
   prioridad: number;
   marcas: string[] | null;
   auto_porcentaje: boolean;
+  producto_id: string | null;
+  descuento_id: string | null;
 }
+
+interface ProductoLite { id: string; nombre: string; precio: number; imagen_url: string | null }
+interface DescuentoLite { id: string; nombre: string; porcentaje: number | null; activo: boolean; fecha_inicio: string | null; fecha_fin: string | null }
 
 const PLACEHOLDER_RE = /\{([a-z_][a-z0-9_]*)\}/gi;
 
@@ -76,6 +85,7 @@ function emptyTemplate(): HeroTemplate {
   return {
     id: "",
     nombre: "",
+    tipo: "personalizado",
     titulo: "",
     subtitulo: "",
     boton_texto: "",
@@ -134,6 +144,11 @@ export default function ProgramacionesPage() {
   const [progFechaHasta, setProgFechaHasta] = useState("");
   const [progPrioridad, setProgPrioridad] = useState(0);
   const [progAutoPct, setProgAutoPct] = useState(true);
+  const [progProductoId, setProgProductoId] = useState<string | null>(null);
+  const [progDescuentoId, setProgDescuentoId] = useState<string | null>(null);
+  const [productosCache, setProductosCache] = useState<ProductoLite[]>([]);
+  const [descuentosCache, setDescuentosCache] = useState<DescuentoLite[]>([]);
+  const [productoSearch, setProductoSearch] = useState("");
 
   const load = async () => {
     setLoading(true);
@@ -186,6 +201,33 @@ export default function ProgramacionesPage() {
 
   // ── Programaciones ──────────────────────────────────────────────────────
 
+  const ensureDescuentos = async () => {
+    if (descuentosCache.length > 0) return;
+    const today = new Date().toISOString().split("T")[0];
+    const { data } = await supabase
+      .from("descuentos")
+      .select("id, nombre, porcentaje, activo, fecha_inicio, fecha_fin")
+      .eq("activo", true)
+      .lte("fecha_inicio", today)
+      .or(`fecha_fin.is.null,fecha_fin.gte.${today}`)
+      .order("porcentaje", { ascending: false })
+      .limit(200);
+    setDescuentosCache((data as DescuentoLite[]) || []);
+  };
+
+  const searchProductos = async (q: string) => {
+    setProductoSearch(q);
+    if (q.trim().length < 2) { setProductosCache([]); return; }
+    const { data } = await supabase
+      .from("productos")
+      .select("id, nombre, precio, imagen_url")
+      .eq("activo", true)
+      .eq("visibilidad", "visible")
+      .ilike("nombre", `%${q}%`)
+      .limit(15);
+    setProductosCache((data as ProductoLite[]) || []);
+  };
+
   const startNewProg = () => {
     setProgTemplate(null);
     setProgValues({});
@@ -195,30 +237,43 @@ export default function ProgramacionesPage() {
     setProgFechaHasta(isoToLocal(after.toISOString()));
     setProgPrioridad(0);
     setProgAutoPct(true);
+    setProgProductoId(null);
+    setProgDescuentoId(null);
+    setProductoSearch("");
     setEditingProg({
-      id: "", template_id: null,
+      id: "", template_id: null, tipo: "personalizado",
       titulo: "", subtitulo: "", boton_texto: "", boton_link: "",
       boton_secundario_texto: "", boton_secundario_link: "",
       color_inicio: "#ec4899", color_fin: "#a855f7",
       fecha_desde: tomorrow.toISOString(), fecha_hasta: after.toISOString(),
       activo: true, prioridad: 0,
       marcas: null, auto_porcentaje: false,
+      producto_id: null, descuento_id: null,
     });
   };
 
   const editExistingProg = (p: HeroProgramacion) => {
-    setProgTemplate(null); // edit mode trabaja sobre los valores resueltos directos
+    setProgTemplate(null);
     setProgValues({});
     setProgFechaDesde(isoToLocal(p.fecha_desde));
     setProgFechaHasta(isoToLocal(p.fecha_hasta));
     setProgPrioridad(p.prioridad);
     setProgAutoPct(p.auto_porcentaje);
+    setProgProductoId(p.producto_id);
+    setProgDescuentoId(p.descuento_id);
+    setProductoSearch("");
     setEditingProg({ ...p });
+    if (p.tipo === "oferta_descuento") ensureDescuentos();
   };
 
   const onPickTemplate = (templateId: string) => {
     const tpl = templates.find((x) => x.id === templateId) || null;
     setProgTemplate(tpl);
+    setProgProductoId(null);
+    setProgDescuentoId(null);
+    setProductosCache([]);
+    setProductoSearch("");
+    if (tpl?.tipo === "oferta_descuento") ensureDescuentos();
     if (tpl && editingProg) {
       const vals: Record<string, string> = {};
       tpl.placeholders.forEach((k) => { vals[k] = ""; });
@@ -226,6 +281,7 @@ export default function ProgramacionesPage() {
       setEditingProg({
         ...editingProg,
         template_id: tpl.id,
+        tipo: tpl.tipo,
         titulo: tpl.titulo,
         subtitulo: tpl.subtitulo,
         boton_texto: tpl.boton_texto,
@@ -243,15 +299,25 @@ export default function ProgramacionesPage() {
     if (!progFechaDesde || !progFechaHasta) { showAdminToast("Fechas requeridas", "error"); return; }
     if (new Date(progFechaHasta) <= new Date(progFechaDesde)) { showAdminToast("La fecha hasta debe ser posterior a la desde", "error"); return; }
 
-    // Si hay template seleccionado y placeholders con valores, resolver.
-    // Si auto_porcentaje y la plantilla tiene {porcentaje}, dejarlo literal.
+    // Si hay template, resolver placeholders. Para tipos dinamicos (aumento_marca,
+    // oferta_descuento, producto_destacado), dejamos los placeholders que se
+    // resuelven en runtime literales (los completa el server al renderizar).
     let resolved = { ...editingProg };
-    const hasMarcas = !!progTemplate?.placeholders.includes("marcas");
-    const hasPorcentaje = !!progTemplate?.placeholders.includes("porcentaje");
-    const useAutoPct = hasPorcentaje && progAutoPct;
+    const tipo = progTemplate?.tipo || resolved.tipo || "personalizado";
+    const useAutoPct = tipo === "aumento_marca" && progAutoPct;
+
+    // Placeholders que deja el server (no se resuelven al guardar)
+    const RUNTIME_KEYS_BY_TIPO: Record<string, string[]> = {
+      aumento_marca: useAutoPct ? ["porcentaje"] : [],
+      oferta_descuento: ["nombre_descuento", "porcentaje"],
+      producto_destacado: ["nombre", "slug", "descripcion", "precio_actual", "precio_anterior", "descuento_pct"],
+    };
+    const runtimeKeys = RUNTIME_KEYS_BY_TIPO[tipo] || [];
+
     if (progTemplate && progTemplate.placeholders.length > 0) {
       const valsForFill = { ...progValues };
-      if (useAutoPct) delete valsForFill.porcentaje; // keep {porcentaje} literal
+      runtimeKeys.forEach((k) => delete valsForFill[k]);
+      // Para aumento_marca: la marca se llena al guardar (no es runtime)
       resolved = {
         ...resolved,
         titulo: fillPlaceholders(progTemplate.titulo, valsForFill),
@@ -263,13 +329,19 @@ export default function ProgramacionesPage() {
       };
     }
 
-    // Parsear lista de marcas (si la plantilla tiene placeholder marcas) → array
-    const marcasArray = hasMarcas && progValues.marcas
-      ? progValues.marcas.split(",").map((s) => s.trim()).filter(Boolean)
+    // marcas array: para aumento_marca (singular)
+    const marcasArray = tipo === "aumento_marca" && progValues.marca
+      ? [progValues.marca.trim()].filter(Boolean)
       : (editingProg.id ? editingProg.marcas : null);
+
+    // Validaciones por tipo
+    if (resolved.tipo === "producto_destacado" && !progProductoId) {
+      showAdminToast("Elegí un producto", "error"); return;
+    }
 
     const payload = {
       template_id: resolved.template_id,
+      tipo: resolved.tipo,
       titulo: resolved.titulo,
       subtitulo: resolved.subtitulo,
       boton_texto: resolved.boton_texto,
@@ -284,6 +356,8 @@ export default function ProgramacionesPage() {
       prioridad: progPrioridad,
       marcas: marcasArray && marcasArray.length > 0 ? marcasArray : null,
       auto_porcentaje: useAutoPct,
+      producto_id: progProductoId,
+      descuento_id: progDescuentoId,
     };
     const res = editingProg.id
       ? await supabase.from("hero_programaciones").update(payload).eq("id", editingProg.id)
@@ -313,8 +387,17 @@ export default function ProgramacionesPage() {
     if (!editingProg) return null;
     if (progTemplate && progTemplate.placeholders.length > 0) {
       const previewVals = { ...progValues };
-      if (progTemplate.placeholders.includes("porcentaje") && progAutoPct) {
-        previewVals.porcentaje = "~auto";
+      const tipo = progTemplate.tipo;
+      if (tipo === "aumento_marca" && progAutoPct) previewVals.porcentaje = "~auto";
+      if (tipo === "oferta_descuento") {
+        const d = progDescuentoId ? descuentosCache.find((x) => x.id === progDescuentoId) : descuentosCache[0];
+        previewVals.nombre_descuento = d?.nombre || "(descuento auto)";
+        previewVals.porcentaje = d?.porcentaje ? String(d.porcentaje) : "?";
+      }
+      if (tipo === "producto_destacado") {
+        const prod = productosCache.find((p) => p.id === progProductoId);
+        previewVals.nombre = prod?.nombre || "(producto)";
+        previewVals.slug = prod?.id || "";
       }
       return {
         titulo: fillPlaceholders(progTemplate.titulo, previewVals),
@@ -331,7 +414,7 @@ export default function ProgramacionesPage() {
       color_inicio: editingProg.color_inicio,
       color_fin: editingProg.color_fin,
     };
-  }, [editingProg, progTemplate, progValues, progAutoPct]);
+  }, [editingProg, progTemplate, progValues, progAutoPct, progDescuentoId, descuentosCache, progProductoId, productosCache]);
 
   return (
     <div className="container mx-auto p-4 md:p-6 max-w-6xl">
@@ -494,35 +577,106 @@ export default function ProgramacionesPage() {
                 </div>
               )}
 
-              {/* Inputs por placeholder */}
+              {/* Inputs por tipo / placeholder */}
               {progTemplate && progTemplate.placeholders.length > 0 && (
-                <div className="space-y-2 p-3 bg-blue-50/50 border border-blue-200 rounded-lg">
+                <div className="space-y-3 p-3 bg-blue-50/50 border border-blue-200 rounded-lg">
                   <div className="text-xs font-medium text-blue-800">Completá los datos:</div>
-                  {progTemplate.placeholders.includes("porcentaje") && (
-                    <label className="flex items-center gap-2 text-sm bg-white p-2 rounded border border-blue-200">
-                      <input
-                        type="checkbox"
-                        checked={progAutoPct}
-                        onChange={(e) => setProgAutoPct(e.target.checked)}
-                      />
-                      <span>Calcular % promedio automático <span className="text-xs text-muted-foreground">(de los aumentos de las marcas listadas, últimos 3 días)</span></span>
-                    </label>
-                  )}
-                  {progTemplate.placeholders.map((k) => {
-                    if (k === "porcentaje" && progAutoPct) return null;
-                    const isMarcas = k === "marcas";
-                    return (
-                      <div key={k}>
-                        <Label className="capitalize">{k.replace(/_/g, " ")}</Label>
+
+                  {/* TIPO: aumento_marca → input "marca" singular + auto pct toggle */}
+                  {progTemplate.tipo === "aumento_marca" && (
+                    <>
+                      <label className="flex items-center gap-2 text-sm bg-white p-2 rounded border border-blue-200">
+                        <input type="checkbox" checked={progAutoPct} onChange={(e) => setProgAutoPct(e.target.checked)} />
+                        <span>Calcular % promedio automático <span className="text-xs text-muted-foreground">(de los aumentos de la marca, últimos 3 días)</span></span>
+                      </label>
+                      <div>
+                        <Label>Marca</Label>
                         <Input
-                          value={progValues[k] || ""}
-                          onChange={(e) => setProgValues({ ...progValues, [k]: e.target.value })}
-                          placeholder={isMarcas ? "COCA COLA, ARCOR, BAGLEY" : `Valor para {${k}}`}
+                          value={progValues.marca || ""}
+                          onChange={(e) => setProgValues({ ...progValues, marca: e.target.value })}
+                          placeholder="COCA COLA"
                         />
-                        {isMarcas && <p className="text-[11px] text-muted-foreground mt-1">Separadas por coma. Se usan tanto para el texto como para filtrar el listado al que lleva el botón.</p>}
+                        <p className="text-[11px] text-muted-foreground mt-1">Se usa para el texto y para filtrar el listado del botón.</p>
                       </div>
-                    );
-                  })}
+                      {!progAutoPct && (
+                        <div>
+                          <Label>Porcentaje</Label>
+                          <Input value={progValues.porcentaje || ""} onChange={(e) => setProgValues({ ...progValues, porcentaje: e.target.value })} placeholder="12" />
+                        </div>
+                      )}
+                    </>
+                  )}
+
+                  {/* TIPO: oferta_descuento → picker de descuento o "auto" (top descuento) */}
+                  {progTemplate.tipo === "oferta_descuento" && (
+                    <>
+                      <label className="flex items-center gap-2 text-sm bg-white p-2 rounded border border-blue-200">
+                        <input
+                          type="checkbox"
+                          checked={progDescuentoId === null}
+                          onChange={(e) => setProgDescuentoId(e.target.checked ? null : (descuentosCache[0]?.id || null))}
+                        />
+                        <span>Auto · usar el descuento más grande activo</span>
+                      </label>
+                      {progDescuentoId !== null && (
+                        <div>
+                          <Label>Descuento</Label>
+                          <Select value={progDescuentoId || ""} onValueChange={(v) => v && setProgDescuentoId(v)}>
+                            <SelectTrigger><SelectValue placeholder="Elegir descuento…" /></SelectTrigger>
+                            <SelectContent>
+                              {descuentosCache.length === 0 && <div className="p-3 text-xs text-muted-foreground">No hay descuentos activos.</div>}
+                              {descuentosCache.map((d) => (
+                                <SelectItem key={d.id} value={d.id}>{d.nombre}{d.porcentaje ? ` · ${d.porcentaje}%` : ""}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      )}
+                      <p className="text-[11px] text-muted-foreground">El nombre y % se autocompletan desde el descuento al renderizar.</p>
+                    </>
+                  )}
+
+                  {/* TIPO: producto_destacado → producto picker (search) */}
+                  {progTemplate.tipo === "producto_destacado" && (
+                    <>
+                      <div>
+                        <Label>Buscar producto</Label>
+                        <Input
+                          value={productoSearch}
+                          onChange={(e) => searchProductos(e.target.value)}
+                          placeholder="Empezá a escribir el nombre…"
+                        />
+                      </div>
+                      {productosCache.length > 0 && (
+                        <div className="max-h-48 overflow-y-auto bg-white border rounded space-y-1">
+                          {productosCache.map((p) => (
+                            <button
+                              key={p.id}
+                              type="button"
+                              onClick={() => { setProgProductoId(p.id); setProductoSearch(p.nombre); setProductosCache([]); }}
+                              className={`w-full text-left px-2 py-1.5 text-sm hover:bg-blue-50 flex items-center gap-2 ${progProductoId === p.id ? "bg-blue-100" : ""}`}
+                            >
+                              {p.imagen_url && <img src={p.imagen_url} alt="" className="w-8 h-8 rounded object-cover" />}
+                              <span className="flex-1 truncate">{p.nombre}</span>
+                              <span className="text-xs text-muted-foreground">${p.precio}</span>
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                      {progProductoId && productosCache.length === 0 && (
+                        <div className="text-xs text-green-700 bg-green-50 p-2 rounded">Producto seleccionado.</div>
+                      )}
+                      <p className="text-[11px] text-muted-foreground">Nombre, imagen y precio se autocompletan desde el producto al renderizar.</p>
+                    </>
+                  )}
+
+                  {/* TIPO: personalizado → todos los placeholders como inputs simples */}
+                  {progTemplate.tipo === "personalizado" && progTemplate.placeholders.map((k) => (
+                    <div key={k}>
+                      <Label className="capitalize">{k.replace(/_/g, " ")}</Label>
+                      <Input value={progValues[k] || ""} onChange={(e) => setProgValues({ ...progValues, [k]: e.target.value })} placeholder={`Valor para {${k}}`} />
+                    </div>
+                  ))}
                 </div>
               )}
 

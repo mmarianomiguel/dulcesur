@@ -23,7 +23,7 @@ export default async function TiendaHomePage() {
       .single(),
     supabase
       .from("hero_programaciones")
-      .select("titulo, subtitulo, boton_texto, boton_link, boton_secundario_texto, boton_secundario_link, color_inicio, color_fin, marcas, auto_porcentaje")
+      .select("titulo, subtitulo, boton_texto, boton_link, boton_secundario_texto, boton_secundario_link, color_inicio, color_fin, marcas, auto_porcentaje, tipo, producto_id, descuento_id")
       .eq("activo", true)
       .lte("fecha_desde", nowIso)
       .gte("fecha_hasta", nowIso)
@@ -35,49 +35,122 @@ export default async function TiendaHomePage() {
   const blocks = (bloquesRes.data || []) as any[];
   let heroSlides = (heroProgRes.data || []) as any[];
 
-  // Auto-compute % promedio de aumento por marca para slides que lo requieran.
-  // Replica la lógica de /admin/notificaciones/enviar: productos con precio > precio_anterior
-  // en los últimos 3 días, agrupados por marca. Promedio de %s entre todos los productos
-  // de las marcas listadas.
-  const slidesAutoPct = heroSlides.filter((s) => s.auto_porcentaje && s.marcas?.length);
-  if (slidesAutoPct.length > 0) {
-    const hace3 = new Date();
-    hace3.setDate(hace3.getDate() - 3);
-    const { data: prods } = await supabase
-      .from("productos")
-      .select("precio, precio_anterior, marcas(nombre)")
-      .eq("activo", true)
-      .gt("precio_anterior", 0)
-      .gt("fecha_actualizacion", hace3.toISOString());
-    const filtered = (prods || []).filter((p: any) => Number(p.precio) > Number(p.precio_anterior));
-
-    const pctPorMarca = (marcas: string[]): number | null => {
-      const lcs = marcas.map((m) => m.toLowerCase());
-      const pcts: number[] = [];
-      for (const p of filtered) {
-        const m = (Array.isArray(p.marcas) ? p.marcas[0]?.nombre : (p.marcas as any)?.nombre) || "";
-        const lm = m.toLowerCase();
-        if (!lcs.some((f) => lm.includes(f))) continue;
-        const pct = ((Number(p.precio) - Number(p.precio_anterior)) / Number(p.precio_anterior)) * 100;
-        pcts.push(pct);
-      }
-      if (pcts.length === 0) return null;
-      return Math.round(pcts.reduce((a, b) => a + b, 0) / pcts.length);
-    };
-
-    heroSlides = heroSlides.map((s) => {
-      if (!s.auto_porcentaje || !s.marcas?.length) return s;
-      const pct = pctPorMarca(s.marcas);
-      const replacement = pct === null ? "" : String(pct);
-      const sub = (txt: string) => (txt || "").replace(/\{porcentaje\}/g, replacement);
-      return {
-        ...s,
-        titulo: sub(s.titulo),
-        subtitulo: sub(s.subtitulo),
-        boton_texto: sub(s.boton_texto),
-        boton_link: sub(s.boton_link),
-      };
+  // ── Enriquecer slides con datos dinámicos por tipo ─────────────────────
+  if (heroSlides.length > 0) {
+    const sub = (txt: string, vals: Record<string, string>) =>
+      (txt || "").replace(/\{([a-z_][a-z0-9_]*)\}/gi, (_, k) => vals[k] ?? `{${k}}`);
+    const fillSlide = (s: any, vals: Record<string, string>, extras: Record<string, any> = {}) => ({
+      ...s,
+      titulo: sub(s.titulo, vals),
+      subtitulo: sub(s.subtitulo, vals),
+      boton_texto: sub(s.boton_texto, vals),
+      boton_link: sub(s.boton_link, vals),
+      boton_secundario_texto: sub(s.boton_secundario_texto, vals),
+      boton_secundario_link: sub(s.boton_secundario_link, vals),
+      ...extras,
     });
+
+    // ─ aumento_marca: % promedio por marca, últimos 3 días
+    const slidesAutoPct = heroSlides.filter((s) => s.auto_porcentaje && s.marcas?.length);
+    if (slidesAutoPct.length > 0) {
+      const hace3 = new Date(); hace3.setDate(hace3.getDate() - 3);
+      const { data: prods } = await supabase
+        .from("productos")
+        .select("precio, precio_anterior, marcas(nombre)")
+        .eq("activo", true)
+        .gt("precio_anterior", 0)
+        .gt("fecha_actualizacion", hace3.toISOString());
+      const filtered = (prods || []).filter((p: any) => Number(p.precio) > Number(p.precio_anterior));
+      const pctPorMarca = (marcas: string[]): number | null => {
+        const lcs = marcas.map((m) => m.toLowerCase());
+        const pcts: number[] = [];
+        for (const p of filtered) {
+          const m = (Array.isArray(p.marcas) ? p.marcas[0]?.nombre : (p.marcas as any)?.nombre) || "";
+          if (!lcs.some((f) => m.toLowerCase().includes(f))) continue;
+          pcts.push(((Number(p.precio) - Number(p.precio_anterior)) / Number(p.precio_anterior)) * 100);
+        }
+        if (pcts.length === 0) return null;
+        return Math.round(pcts.reduce((a, b) => a + b, 0) / pcts.length);
+      };
+      heroSlides = heroSlides.map((s) => {
+        if (!s.auto_porcentaje || !s.marcas?.length) return s;
+        const pct = pctPorMarca(s.marcas);
+        return fillSlide(s, { porcentaje: pct === null ? "0" : String(pct) });
+      });
+    }
+
+    // ─ oferta_descuento: traer descuento (manual) o el top activo (auto)
+    const slidesOferta = heroSlides.filter((s) => s.tipo === "oferta_descuento");
+    if (slidesOferta.length > 0) {
+      const today = new Date().toISOString().split("T")[0];
+      const ids = slidesOferta.map((s) => s.descuento_id).filter(Boolean);
+      const [manualRes, autoRes] = await Promise.all([
+        ids.length > 0
+          ? supabase.from("descuentos").select("id, nombre, porcentaje").in("id", ids)
+          : Promise.resolve({ data: [] as any[] }),
+        // Top descuento activo para los slides en modo auto (descuento_id null)
+        slidesOferta.some((s) => !s.descuento_id)
+          ? supabase
+              .from("descuentos")
+              .select("id, nombre, porcentaje")
+              .eq("activo", true)
+              .lte("fecha_inicio", today)
+              .or(`fecha_fin.is.null,fecha_fin.gte.${today}`)
+              .order("porcentaje", { ascending: false })
+              .limit(1)
+              .maybeSingle()
+          : Promise.resolve({ data: null as any }),
+      ]);
+      const manualMap: Record<string, any> = {};
+      (manualRes.data || []).forEach((d: any) => { manualMap[d.id] = d; });
+      const topAuto = autoRes.data;
+      heroSlides = heroSlides.map((s) => {
+        if (s.tipo !== "oferta_descuento") return s;
+        const d = s.descuento_id ? manualMap[s.descuento_id] : topAuto;
+        if (!d) return null; // sin descuento → ocultar slide
+        return fillSlide(s, {
+          nombre_descuento: d.nombre || "Oferta",
+          porcentaje: d.porcentaje ? String(d.porcentaje) : "",
+        });
+      }).filter(Boolean);
+    }
+
+    // ─ producto_destacado: traer producto y enriquecer con imagen + precios
+    const slidesProd = heroSlides.filter((s) => s.tipo === "producto_destacado" && s.producto_id);
+    if (slidesProd.length > 0) {
+      const ids = slidesProd.map((s) => s.producto_id);
+      const { data: prods } = await supabase
+        .from("productos")
+        .select("id, nombre, precio, precio_anterior, imagen_url, descripcion")
+        .in("id", ids);
+      const prodMap: Record<string, any> = {};
+      (prods || []).forEach((p: any) => { prodMap[p.id] = p; });
+      // slugify reusable
+      const slug = (s: string) => (s || "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+      heroSlides = heroSlides.map((s) => {
+        if (s.tipo !== "producto_destacado" || !s.producto_id) return s;
+        const p = prodMap[s.producto_id];
+        if (!p) return null;
+        const precioAnterior = Number(p.precio_anterior || 0);
+        const precioActual = Number(p.precio);
+        const tieneOferta = precioAnterior > 0 && precioAnterior > precioActual;
+        const descuentoPct = tieneOferta ? Math.round(((precioAnterior - precioActual) / precioAnterior) * 100) : 0;
+        return fillSlide(s, {
+          nombre: p.nombre,
+          slug: `${slug(p.nombre)}-${p.id}`,
+          descripcion: p.descripcion || "",
+          precio_actual: String(precioActual),
+          precio_anterior: precioAnterior ? String(precioAnterior) : "",
+          descuento_pct: descuentoPct ? String(descuentoPct) : "",
+        }, {
+          producto: {
+            id: p.id, nombre: p.nombre, imagen_url: p.imagen_url,
+            precio: precioActual, precio_anterior: precioAnterior, descuento_pct: descuentoPct,
+            tiene_oferta: tieneOferta,
+          },
+        });
+      }).filter(Boolean);
+    }
   }
   const diasNuevo: number = configRes.data?.dias_badge_nuevo ?? 5;
   const tipos = blocks.map((b) => b.tipo);

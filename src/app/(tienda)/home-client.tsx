@@ -142,6 +142,80 @@ function SectionTitle({ children }: { children: React.ReactNode }) {
 
 /* ──────────────── block renderers ──────────────── */
 
+// Decoraciones esteticas reutilizables para todos los hero variants
+function HeroDecorations() {
+  return (
+    <>
+      <div className="absolute -top-12 -right-12 w-72 h-72 bg-white/10 rounded-full blur-2xl pointer-events-none" />
+      <div className="absolute -bottom-16 -left-16 w-64 h-64 bg-white/8 rounded-full blur-3xl pointer-events-none" />
+      <div className="absolute top-6 right-1/3 w-2 h-2 bg-white/40 rounded-full hidden md:block" />
+      <div className="absolute bottom-8 right-1/4 w-1.5 h-1.5 bg-white/40 rounded-full hidden md:block" />
+      <div
+        className="absolute inset-0 opacity-[0.08] pointer-events-none"
+        style={{
+          backgroundImage:
+            "radial-gradient(circle at 1px 1px, rgba(255,255,255,0.6) 1px, transparent 0)",
+          backgroundSize: "20px 20px",
+        }}
+      />
+    </>
+  );
+}
+
+// Hero variant for producto_destacado: split layout con imagen
+function HeroProductoSlide({ slide }: { slide: Record<string, any> }) {
+  const colorInicio = slide.color_inicio || "hsl(var(--primary))";
+  const colorFin = slide.color_fin || "hsl(var(--primary) / 0.7)";
+  const prod = slide.producto;
+  const link = slide.boton_link || (prod ? `/productos/${prod.id}` : "/productos");
+
+  return (
+    <Link
+      href={link}
+      className="relative overflow-hidden block min-h-[180px] md:min-h-[200px] group"
+      style={{ background: `linear-gradient(135deg, ${colorInicio}, ${colorFin})` }}
+    >
+      <HeroDecorations />
+      <div className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 md:py-8 w-full">
+        <div className="flex items-center justify-between gap-4 md:gap-8">
+          <div className="min-w-0 flex-1">
+            {prod?.tiene_oferta && (
+              <span className="inline-block bg-yellow-400 text-gray-900 text-[10px] md:text-xs font-bold px-2.5 py-1 rounded-full mb-2 uppercase tracking-wide">
+                ⚡ Oferta · {prod.descuento_pct}% off
+              </span>
+            )}
+            <h1 className="text-xl md:text-3xl font-extrabold text-white leading-tight tracking-tight line-clamp-2">
+              {slide.titulo || prod?.nombre || "Producto destacado"}
+            </h1>
+            {prod && (
+              <div className="flex items-baseline gap-2 mt-2">
+                <span className="text-2xl md:text-3xl font-bold text-white">${prod.precio.toLocaleString("es-AR")}</span>
+                {prod.tiene_oferta && (
+                  <span className="text-sm text-white/70 line-through">${prod.precio_anterior.toLocaleString("es-AR")}</span>
+                )}
+              </div>
+            )}
+            {slide.subtitulo && !prod?.tiene_oferta && (
+              <p className="text-sm md:text-base text-white/85 mt-2 max-w-md">{slide.subtitulo}</p>
+            )}
+            <span className="inline-flex items-center gap-1.5 mt-3 bg-white text-gray-900 rounded-full px-5 py-2 text-sm font-semibold shadow-lg group-hover:shadow-xl group-hover:scale-105 transition-all">
+              {slide.boton_texto || "Ver producto"} <span className="transition-transform group-hover:translate-x-0.5">→</span>
+            </span>
+          </div>
+          {prod?.imagen_url && (
+            <div className="shrink-0 w-24 h-24 md:w-40 md:h-40 relative">
+              <div className="absolute inset-0 bg-white/15 rounded-2xl rotate-6 blur-sm" />
+              <div className="relative w-full h-full bg-white rounded-2xl shadow-2xl overflow-hidden flex items-center justify-center">
+                <img src={prod.imagen_url} alt={prod.nombre} className="max-w-full max-h-full object-contain p-2" />
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    </Link>
+  );
+}
+
 function HeroCarousel({ slides }: { slides: Record<string, any>[] }) {
   const [idx, setIdx] = useState(0);
   const [paused, setPaused] = useState(false);
@@ -156,47 +230,67 @@ function HeroCarousel({ slides }: { slides: Record<string, any>[] }) {
   const cur = slides[idx] || {};
   const colorInicio = cur.color_inicio || "hsl(var(--primary))";
   const colorFin = cur.color_fin || "hsl(var(--primary) / 0.7)";
+  const isProducto = cur.tipo === "producto_destacado" && cur.producto;
+  const prod = cur.producto;
 
   return (
     <section
-      className="relative overflow-hidden min-h-[180px] md:min-h-[180px] transition-[background] duration-700"
+      className="relative overflow-hidden min-h-[180px] md:min-h-[200px] transition-[background] duration-700"
       style={{ background: `linear-gradient(135deg, ${colorInicio}, ${colorFin})` }}
       onMouseEnter={() => setPaused(true)}
       onMouseLeave={() => setPaused(false)}
     >
-      <div className="absolute top-0 right-0 w-48 h-48 bg-white/5 rounded-full -translate-y-1/4 translate-x-1/4 hidden md:block" />
-      <div className="absolute bottom-0 right-1/4 w-32 h-32 bg-white/5 rounded-full translate-y-1/3 hidden md:block" />
+      <HeroDecorations />
 
-      <div className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 md:py-10 w-full">
-        <div className="flex items-center justify-between gap-6">
-          <div className="min-w-0">
-            <h1 key={`t-${idx}`} className="text-2xl md:text-3xl font-bold text-white leading-tight animate-fade-in-up">
+      <div key={idx} className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 md:py-8 w-full animate-fade-in-up">
+        <div className="flex items-center justify-between gap-4 md:gap-8">
+          <div className="min-w-0 flex-1">
+            {isProducto && prod.tiene_oferta && (
+              <span className="inline-block bg-yellow-400 text-gray-900 text-[10px] md:text-xs font-bold px-2.5 py-1 rounded-full mb-2 uppercase tracking-wide">
+                ⚡ Oferta · {prod.descuento_pct}% off
+              </span>
+            )}
+            <h1 className="text-xl md:text-3xl font-extrabold text-white leading-tight tracking-tight line-clamp-2">
               {cur.titulo || "Bienvenido a nuestra tienda"}
             </h1>
-            {cur.subtitulo && (
-              <p key={`s-${idx}`} className="text-sm md:text-base text-white/85 mt-2 max-w-lg animate-fade-in-up">
-                {cur.subtitulo}
-              </p>
+            {isProducto && prod && (
+              <div className="flex items-baseline gap-2 mt-2">
+                <span className="text-2xl md:text-3xl font-bold text-white">${prod.precio.toLocaleString("es-AR")}</span>
+                {prod.tiene_oferta && (
+                  <span className="text-sm text-white/70 line-through">${prod.precio_anterior.toLocaleString("es-AR")}</span>
+                )}
+              </div>
             )}
+            {cur.subtitulo && !(isProducto && prod.tiene_oferta) && (
+              <p className="text-sm md:text-base text-white/85 mt-2 max-w-lg">{cur.subtitulo}</p>
+            )}
+            <div className="flex flex-wrap gap-2 mt-3">
+              {cur.boton_texto && (
+                <Link
+                  href={cur.boton_link || "/productos"}
+                  className="inline-flex items-center gap-1.5 bg-white text-gray-900 rounded-full px-5 py-2 text-sm font-semibold shadow-lg hover:shadow-xl hover:scale-105 active:scale-95 transition-all duration-200"
+                >
+                  {cur.boton_texto} <span>→</span>
+                </Link>
+              )}
+              {cur.boton_secundario_texto && (
+                <Link
+                  href={cur.boton_secundario_link || "/productos"}
+                  className="border-2 border-white text-white rounded-full px-5 py-2 text-sm font-semibold hover:bg-white/15 active:scale-95 transition-all duration-200"
+                >
+                  {cur.boton_secundario_texto}
+                </Link>
+              )}
+            </div>
           </div>
-          <div className="flex flex-wrap gap-3 shrink-0">
-            {cur.boton_texto && (
-              <Link
-                href={cur.boton_link || "/productos"}
-                className="bg-white text-gray-900 rounded-full px-6 py-2.5 text-sm font-semibold shadow-lg hover:shadow-xl hover:scale-105 active:scale-95 transition-all duration-200"
-              >
-                {cur.boton_texto}
-              </Link>
-            )}
-            {cur.boton_secundario_texto && (
-              <Link
-                href={cur.boton_secundario_link || "/productos"}
-                className="border-2 border-white text-white rounded-full px-6 py-2 text-sm font-semibold hover:bg-white/15 active:scale-95 transition-all duration-200"
-              >
-                {cur.boton_secundario_texto}
-              </Link>
-            )}
-          </div>
+          {isProducto && prod.imagen_url && (
+            <div className="shrink-0 w-24 h-24 md:w-40 md:h-40 relative">
+              <div className="absolute inset-0 bg-white/15 rounded-2xl rotate-6 blur-sm" />
+              <div className="relative w-full h-full bg-white rounded-2xl shadow-2xl overflow-hidden flex items-center justify-center">
+                <img src={prod.imagen_url} alt={prod.nombre} className="max-w-full max-h-full object-contain p-2" />
+              </div>
+            </div>
+          )}
         </div>
       </div>
 
@@ -240,20 +334,14 @@ function HeroBlock({ config }: { config: Record<string, any> }) {
   return (
     <section
       className="relative overflow-hidden min-h-[180px] md:min-h-[180px]"
-      style={{
-        background: `linear-gradient(135deg, ${colorInicio}, ${colorFin})`,
-      }}
+      style={{ background: `linear-gradient(135deg, ${colorInicio}, ${colorFin})` }}
     >
-      {/* subtle decorative elements */}
-      <div className="absolute top-0 right-0 w-48 h-48 bg-white/5 rounded-full -translate-y-1/4 translate-x-1/4 hidden md:block" />
-      <div className="absolute bottom-0 right-1/4 w-32 h-32 bg-white/5 rounded-full translate-y-1/3 hidden md:block" />
+      <HeroDecorations />
 
       <div className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 md:py-10 w-full">
         <div className="flex items-center justify-between gap-6">
           <div className="min-w-0">
-            {/* h1 sin animación de entrada — el algoritmo LCP requiere que el elemento principal
-                sea visible inmediatamente, sino reporta NO_LCP. */}
-            <h1 className="text-2xl md:text-3xl font-bold text-white leading-tight">
+            <h1 className="text-2xl md:text-3xl font-extrabold text-white leading-tight tracking-tight">
               {config.titulo || "Bienvenido a nuestra tienda"}
             </h1>
             {config.subtitulo && (
@@ -266,9 +354,9 @@ function HeroBlock({ config }: { config: Record<string, any> }) {
             {config.boton_texto && (
               <Link
                 href={config.boton_link || "/productos"}
-                className="bg-white text-gray-900 rounded-full px-6 py-2.5 text-sm font-semibold shadow-lg hover:shadow-xl hover:scale-105 active:scale-95 transition-all duration-200"
+                className="inline-flex items-center gap-1.5 bg-white text-gray-900 rounded-full px-6 py-2.5 text-sm font-semibold shadow-lg hover:shadow-xl hover:scale-105 active:scale-95 transition-all duration-200"
               >
-                {config.boton_texto}
+                {config.boton_texto} <span>→</span>
               </Link>
             )}
             {config.boton_secundario_texto && (
@@ -1415,6 +1503,16 @@ interface HeroSlide {
   boton_secundario_link?: string;
   color_inicio?: string;
   color_fin?: string;
+  tipo?: string;
+  producto?: {
+    id: string;
+    nombre: string;
+    imagen_url: string | null;
+    precio: number;
+    precio_anterior: number;
+    descuento_pct: number;
+    tiene_oferta: boolean;
+  };
 }
 
 interface HomeClientProps {
@@ -1656,7 +1754,11 @@ export default function TiendaPage({
           return <HeroCarousel key={bloque.id} slides={initialHeroSlides} />;
         }
         if (initialHeroSlides.length === 1) {
-          return <HeroBlock key={bloque.id} config={{ ...config, ...initialHeroSlides[0] }} />;
+          const s = initialHeroSlides[0] as any;
+          if (s.tipo === "producto_destacado" && s.producto) {
+            return <HeroProductoSlide key={bloque.id} slide={s} />;
+          }
+          return <HeroBlock key={bloque.id} config={{ ...config, ...s }} />;
         }
         return <HeroBlock key={bloque.id} config={config} />;
       case "trust_badges":
