@@ -142,6 +142,97 @@ function SectionTitle({ children }: { children: React.ReactNode }) {
 
 /* ──────────────── block renderers ──────────────── */
 
+function HeroCarousel({ slides }: { slides: Record<string, any>[] }) {
+  const [idx, setIdx] = useState(0);
+  const [paused, setPaused] = useState(false);
+
+  useEffect(() => {
+    if (paused || slides.length < 2) return;
+    const t = setInterval(() => setIdx((i) => (i + 1) % slides.length), 7000);
+    return () => clearInterval(t);
+  }, [paused, slides.length]);
+
+  const go = (delta: number) => setIdx((i) => (i + delta + slides.length) % slides.length);
+  const cur = slides[idx] || {};
+  const colorInicio = cur.color_inicio || "hsl(var(--primary))";
+  const colorFin = cur.color_fin || "hsl(var(--primary) / 0.7)";
+
+  return (
+    <section
+      className="relative overflow-hidden min-h-[180px] md:min-h-[180px] transition-[background] duration-700"
+      style={{ background: `linear-gradient(135deg, ${colorInicio}, ${colorFin})` }}
+      onMouseEnter={() => setPaused(true)}
+      onMouseLeave={() => setPaused(false)}
+    >
+      <div className="absolute top-0 right-0 w-48 h-48 bg-white/5 rounded-full -translate-y-1/4 translate-x-1/4 hidden md:block" />
+      <div className="absolute bottom-0 right-1/4 w-32 h-32 bg-white/5 rounded-full translate-y-1/3 hidden md:block" />
+
+      <div className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 md:py-10 w-full">
+        <div className="flex items-center justify-between gap-6">
+          <div className="min-w-0">
+            <h1 key={`t-${idx}`} className="text-2xl md:text-3xl font-bold text-white leading-tight animate-fade-in-up">
+              {cur.titulo || "Bienvenido a nuestra tienda"}
+            </h1>
+            {cur.subtitulo && (
+              <p key={`s-${idx}`} className="text-sm md:text-base text-white/85 mt-2 max-w-lg animate-fade-in-up">
+                {cur.subtitulo}
+              </p>
+            )}
+          </div>
+          <div className="flex flex-wrap gap-3 shrink-0">
+            {cur.boton_texto && (
+              <Link
+                href={cur.boton_link || "/productos"}
+                className="bg-white text-gray-900 rounded-full px-6 py-2.5 text-sm font-semibold shadow-lg hover:shadow-xl hover:scale-105 active:scale-95 transition-all duration-200"
+              >
+                {cur.boton_texto}
+              </Link>
+            )}
+            {cur.boton_secundario_texto && (
+              <Link
+                href={cur.boton_secundario_link || "/productos"}
+                className="border-2 border-white text-white rounded-full px-6 py-2 text-sm font-semibold hover:bg-white/15 active:scale-95 transition-all duration-200"
+              >
+                {cur.boton_secundario_texto}
+              </Link>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Flechas */}
+      <button
+        type="button"
+        aria-label="Anterior"
+        onClick={() => go(-1)}
+        className="absolute left-2 top-1/2 -translate-y-1/2 w-9 h-9 rounded-full bg-white/15 hover:bg-white/30 text-white flex items-center justify-center transition-colors z-20"
+      >
+        <span className="text-lg leading-none">‹</span>
+      </button>
+      <button
+        type="button"
+        aria-label="Siguiente"
+        onClick={() => go(1)}
+        className="absolute right-2 top-1/2 -translate-y-1/2 w-9 h-9 rounded-full bg-white/15 hover:bg-white/30 text-white flex items-center justify-center transition-colors z-20"
+      >
+        <span className="text-lg leading-none">›</span>
+      </button>
+
+      {/* Dots */}
+      <div className="absolute bottom-2 left-1/2 -translate-x-1/2 flex gap-1.5 z-20">
+        {slides.map((_, i) => (
+          <button
+            key={i}
+            aria-label={`Ir al slide ${i + 1}`}
+            onClick={() => setIdx(i)}
+            className={`h-1.5 rounded-full transition-all ${i === idx ? "w-6 bg-white" : "w-1.5 bg-white/50 hover:bg-white/75"}`}
+          />
+        ))}
+      </div>
+    </section>
+  );
+}
+
 function HeroBlock({ config }: { config: Record<string, any> }) {
   const colorInicio = config.color_inicio || "hsl(var(--primary))";
   const colorFin = config.color_fin || "hsl(var(--primary) / 0.7)";
@@ -1315,6 +1406,17 @@ function ImagenBannerBlock({ config }: { config: Record<string, any> }) {
 
 /* ──────────────── main page ──────────────── */
 
+interface HeroSlide {
+  titulo?: string;
+  subtitulo?: string;
+  boton_texto?: string;
+  boton_link?: string;
+  boton_secundario_texto?: string;
+  boton_secundario_link?: string;
+  color_inicio?: string;
+  color_fin?: string;
+}
+
 interface HomeClientProps {
   initialBloques?: Bloque[];
   initialCategorias?: Categoria[];
@@ -1330,6 +1432,7 @@ interface HomeClientProps {
   initialReingresos?: any[];
   initialOfertas?: any[];
   initialActiveDiscounts?: any[];
+  initialHeroSlides?: HeroSlide[];
 }
 
 export default function TiendaPage({
@@ -1347,6 +1450,7 @@ export default function TiendaPage({
   initialReingresos = [],
   initialOfertas = [],
   initialActiveDiscounts = [],
+  initialHeroSlides = [],
 }: HomeClientProps = {}) {
   const hasInitial = !!initialBloques;
   const [bloques, setBloques] = useState<Bloque[]>(initialBloques || []);
@@ -1548,6 +1652,12 @@ export default function TiendaPage({
 
     switch (bloque.tipo) {
       case "hero":
+        if (initialHeroSlides.length >= 2) {
+          return <HeroCarousel key={bloque.id} slides={initialHeroSlides} />;
+        }
+        if (initialHeroSlides.length === 1) {
+          return <HeroBlock key={bloque.id} config={{ ...config, ...initialHeroSlides[0] }} />;
+        }
         return <HeroBlock key={bloque.id} config={config} />;
       case "trust_badges":
         return <TrustBadgesBlock key={bloque.id} config={config} />;
