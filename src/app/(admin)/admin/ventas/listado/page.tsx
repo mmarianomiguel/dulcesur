@@ -216,6 +216,8 @@ export default function ListadoVentasPage() {
   const [filterSource, setFilterSource] = useState<"todos" | "pos" | "online">("todos");
   const [confirmDialog, setConfirmDialog] = useState<{ open: boolean; title: string; message: string; onConfirm: () => void }>({ open: false, title: "", message: "", onConfirm: () => {} });
   const [entregarDialog, setEntregarDialog] = useState<{ open: boolean; order: Pedido | null }>({ open: false, order: null });
+  // Prompt para mandar mensaje de WhatsApp al cliente cuando se marca un retiro como armado.
+  const [waPrompt, setWaPrompt] = useState<{ open: boolean; telefono: string; mensaje: string; nombreCliente: string }>({ open: false, telefono: "", mensaje: "", nombreCliente: "" });
 
   // ══════════════════════════════════════════════════════════════
   // HISTORIAL DE VENTAS STATE
@@ -2433,6 +2435,14 @@ export default function ListadoVentasPage() {
           }).catch(() => {});
         }
       }
+
+      // WhatsApp prompt: solo para retiros con teléfono cargado
+      if (esRetiro && pedido.telefono) {
+        const primerNombre = (pedido.nombre_cliente || "").trim().split(" ")[0] || "Hola";
+        const totalFmt = "$" + Math.round(pedido.total || 0).toLocaleString("es-AR");
+        const waMsg = `Hola ${primerNombre}! Tu pedido #${pedido.numero} ya está listo para retirar.\n\nEl total es: ${totalFmt}\n\nTe esperamos! 🍬`;
+        setWaPrompt({ open: true, telefono: pedido.telefono, mensaje: waMsg, nombreCliente: primerNombre });
+      }
     }
 
     // Update local state instead of full refetch for speed
@@ -3583,6 +3593,60 @@ export default function ListadoVentasPage() {
           <div className="flex justify-end gap-2 pt-4">
             <Button variant="outline" onClick={() => setConfirmDialog(prev => ({ ...prev, open: false }))}>Cancelar</Button>
             <Button onClick={() => { confirmDialog.onConfirm(); setConfirmDialog(prev => ({ ...prev, open: false })); }}>Confirmar</Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* WhatsApp prompt — al marcar retiro como armado */}
+      <Dialog open={waPrompt.open} onOpenChange={(o) => setWaPrompt(prev => ({ ...prev, open: o }))}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <span className="text-emerald-500 text-2xl">💬</span>
+              Avisar al cliente por WhatsApp
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <p className="text-sm text-muted-foreground">
+              {waPrompt.nombreCliente} · <span className="font-mono">{waPrompt.telefono}</span>
+            </p>
+            <div>
+              <label className="block text-xs font-medium text-muted-foreground mb-1.5">Mensaje</label>
+              <textarea
+                value={waPrompt.mensaje}
+                onChange={(ev) => setWaPrompt(prev => ({ ...prev, mensaje: ev.target.value }))}
+                rows={6}
+                className="w-full text-sm border border-border rounded-lg px-3 py-2 bg-background focus:outline-none focus:ring-2 focus:ring-primary resize-none"
+              />
+              <p className="text-[11px] text-muted-foreground mt-1">
+                Editalo si querés. Al apretar &quot;Abrir WhatsApp&quot; se abre la app/web con el mensaje listo, vos solo apretás Enviar.
+              </p>
+            </div>
+            <div className="flex flex-col sm:flex-row gap-2 pt-2">
+              <Button
+                variant="outline"
+                className="sm:flex-1"
+                onClick={() => setWaPrompt(prev => ({ ...prev, open: false }))}
+              >
+                No avisar
+              </Button>
+              <Button
+                className="sm:flex-1 bg-emerald-600 hover:bg-emerald-700 text-white"
+                onClick={() => {
+                  // Normalizar telefono argentino: solo dígitos, prepend "549" si no tiene país
+                  let digits = waPrompt.telefono.replace(/\D/g, "");
+                  if (digits.startsWith("0")) digits = digits.slice(1);
+                  if (digits.startsWith("15")) digits = digits.slice(2);
+                  if (!digits.startsWith("54")) digits = "549" + digits;
+                  else if (!digits.startsWith("549")) digits = "549" + digits.slice(2);
+                  const url = `https://wa.me/${digits}?text=${encodeURIComponent(waPrompt.mensaje)}`;
+                  window.open(url, "_blank", "noopener,noreferrer");
+                  setWaPrompt(prev => ({ ...prev, open: false }));
+                }}
+              >
+                Abrir WhatsApp
+              </Button>
+            </div>
           </div>
         </DialogContent>
       </Dialog>
