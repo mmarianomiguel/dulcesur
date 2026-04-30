@@ -2281,14 +2281,15 @@ export default function ListaPreciosPage() {
           ctx.save();
           ctx.translate(150, 345);
           ctx.rotate(-3 * Math.PI / 180);
-          ctx.fillStyle = "#f4c828"; ctx.strokeStyle = "#222"; ctx.lineWidth = 3;
+          // Pink magenta de la marca, texto blanco, stroke oscuro tenue
+          ctx.fillStyle = "#e91e63"; ctx.strokeStyle = "#1a1a1a"; ctx.lineWidth = 3;
           const badgeText = `★  ${opts.etiquetaBadge.trim().toUpperCase()}`;
           ctx.font = `900 ${config.story_tamañoBadge}px Arial, sans-serif`;
           const bw = ctx.measureText(badgeText).width + 60;
           const bh = 80;
           roundRect(ctx, 0, 0, bw, bh, 10);
           ctx.fill(); ctx.stroke();
-          ctx.fillStyle = "#222"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+          ctx.fillStyle = "#ffffff"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
           ctx.fillText(badgeText, bw / 2, bh / 2 + 2);
           ctx.restore();
         }
