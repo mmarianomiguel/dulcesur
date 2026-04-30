@@ -93,6 +93,7 @@ const navigation: NavItem[] = [
       { name: "Descuentos", href: "/admin/productos/descuentos" },
       { name: "Lista de precios", href: "/admin/productos/lista-precios" },
       { name: "Categorías y marcas", href: "/admin/productos/marcas" },
+      { name: "Generador de imágenes", href: "/admin/marketing/imagenes" },
     ],
   },
   { name: "Proveedores", href: "/admin/proveedores", icon: Truck },
