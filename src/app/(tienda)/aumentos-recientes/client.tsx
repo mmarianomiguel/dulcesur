@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useRef } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { TrendingUp, Package, ArrowLeft, Search, X, ChevronLeft, ChevronRight, SlidersHorizontal } from "lucide-react";
@@ -47,6 +47,19 @@ export default function AumentosRecientesClient({
   const [page, setPage] = useState(1);
   const [selectedPres, setSelectedPres] = useState<Record<string, number>>({});
   const [filtroOpen, setFiltroOpen] = useState(false);
+  const gridTopRef = useRef<HTMLDivElement>(null);
+
+  const goToPage = (p: number) => {
+    setPage(p);
+    // Scroll al top del grid (debajo del header sticky)
+    setTimeout(() => {
+      const target = gridTopRef.current;
+      if (!target) return;
+      const headerOffset = 60; // alto del header sticky
+      const top = target.getBoundingClientRect().top + window.scrollY - headerOffset;
+      window.scrollTo({ top, behavior: "smooth" });
+    }, 0);
+  };
 
   // Categorías únicas para los filtros
   const categorias = useMemo(() => {
@@ -302,6 +315,7 @@ export default function AumentosRecientesClient({
 
       {/* Grid */}
       <div className="max-w-7xl mx-auto px-4 pb-6">
+        <div ref={gridTopRef} className="scroll-mt-20" />
         {paginated.length === 0 ? (
           <div className="text-center py-20 text-gray-400">
             <TrendingUp className="w-12 h-12 mx-auto mb-4 opacity-30" />
@@ -420,7 +434,7 @@ export default function AumentosRecientesClient({
         {totalPages > 1 && (
           <div className="flex items-center justify-center gap-2 mt-8">
             <button
-              onClick={() => setPage((p) => Math.max(1, p - 1))}
+              onClick={() => goToPage(Math.max(1, page - 1))}
               disabled={page === 1}
               className="w-8 h-8 rounded-lg border border-gray-200 bg-white flex items-center justify-center text-gray-500 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
             >
@@ -440,7 +454,7 @@ export default function AumentosRecientesClient({
                 ) : (
                   <button
                     key={p}
-                    onClick={() => setPage(p as number)}
+                    onClick={() => goToPage(p as number)}
                     className={`w-8 h-8 rounded-lg border text-xs font-medium transition-all ${
                       page === p
                         ? "bg-orange-500 border-orange-500 text-white"
@@ -453,7 +467,7 @@ export default function AumentosRecientesClient({
               )}
 
             <button
-              onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+              onClick={() => goToPage(Math.min(totalPages, page + 1))}
               disabled={page === totalPages}
               className="w-8 h-8 rounded-lg border border-gray-200 bg-white flex items-center justify-center text-gray-500 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
             >

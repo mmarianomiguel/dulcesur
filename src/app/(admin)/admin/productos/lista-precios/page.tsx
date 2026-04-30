@@ -278,16 +278,52 @@ export default function ListaPreciosPage() {
   const [listaGroupMode, setListaGroupMode] = useState<"none" | "categoria" | "subcategoria">("categoria");
   const [pdfUrl, setPdfUrl] = useState<string | null>(null);
   const [showPreview, setShowPreview] = useState(false);
-  const [logoBase64, setLogoBase64] = useState<string | null>(null);
+  // Sistema de 2 slots de logo persistidos en localStorage. Cada modo de PDF
+  // recuerda qué slot prefiere (mapping en activeLogoByMode).
+  type LogoSlot = { id: "slot1" | "slot2"; nombre: string; base64: string | null };
+  type LogoModeKey = "general" | PdfStyle;
+  const [logoSlots, setLogoSlots] = useState<LogoSlot[]>(() => {
+    try {
+      const saved = localStorage.getItem("listaPreciosLogoSlots");
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length === 2) return parsed as LogoSlot[];
+      }
+    } catch {}
+    return [
+      { id: "slot1", nombre: "Logo 1", base64: null },
+      { id: "slot2", nombre: "Logo 2", base64: null },
+    ];
+  });
+  const [activeLogoByMode, setActiveLogoByMode] = useState<Record<string, "slot1" | "slot2">>(() => {
+    try {
+      const saved = localStorage.getItem("listaPreciosActiveLogoByMode");
+      if (saved) return JSON.parse(saved) as Record<string, "slot1" | "slot2">;
+    } catch {}
+    return {};
+  });
+  const [uploadingLogoSlot, setUploadingLogoSlot] = useState<string | null>(null);
+  // Derivado: el logo "activo" para el modo del configTab actual.
+  const activeSlotIdForCurrentMode = activeLogoByMode[configTab as string] || "slot1";
+  const activeSlot = logoSlots.find((s) => s.id === activeSlotIdForCurrentMode) || logoSlots[0];
+  const logoBase64 = activeSlot?.base64 || null;
+  // setLogoBase64 actualiza el slot activo del modo actual (back-compat con código existente)
+  const setLogoBase64 = (val: string | null) => {
+    const slotId = activeSlotIdForCurrentMode;
+    setLogoSlots((prev) => prev.map((s) => s.id === slotId ? { ...s, base64: val } : s));
+  };
   const [logoAspectRatio, setLogoAspectRatio] = useState(1); // width / height
   const [generating, setGenerating] = useState(false);
   const [generatingProgress, setGeneratingProgress] = useState<{ done: number; total: number } | null>(null);
   const itemsPerPage = 50;
 
-  // Load logo from localStorage on mount
-  // Load logo: white-label (empresa) > localStorage > hardcoded fallback
+  // Bootstrap del slot1 si está vacío: usar white-label (empresa) o el logo legacy
+  // de localStorage. NO sobrescribe slots que ya tengan logo cargado por el usuario.
   useEffect(() => {
-    const loadLogoFromUrl = (url: string) => {
+    const slot1 = logoSlots.find((s) => s.id === "slot1");
+    if (slot1?.base64) return; // Slot1 ya tiene logo, no tocar
+
+    const loadFromUrl = (url: string) => {
       fetch(url)
         .then((r) => r.blob())
         .then((blob) => {
@@ -295,11 +331,7 @@ export default function ListaPreciosPage() {
           reader.onloadend = () => {
             if (reader.result) {
               const src = reader.result as string;
-              setLogoBase64(src);
-              localStorage.setItem("listaPreciosLogo", src);
-              const img = new window.Image();
-              img.onload = () => { if (img.height > 0) setLogoAspectRatio(img.width / img.height); };
-              img.src = src;
+              setLogoSlots((prev) => prev.map((s) => s.id === "slot1" ? { ...s, base64: src } : s));
             }
           };
           reader.readAsDataURL(blob);
@@ -308,34 +340,41 @@ export default function ListaPreciosPage() {
     };
 
     try {
-      // 1. Check localStorage cache
-      const savedLogo = localStorage.getItem("listaPreciosLogo");
-      if (savedLogo) {
-        setLogoBase64(savedLogo);
-        const img = new window.Image();
-        img.onload = () => { if (img.height > 0) setLogoAspectRatio(img.width / img.height); };
-        img.src = savedLogo;
+      // 1. localStorage legacy (versión anterior con un solo logo)
+      const legacy = localStorage.getItem("listaPreciosLogo");
+      if (legacy) {
+        setLogoSlots((prev) => prev.map((s) => s.id === "slot1" ? { ...s, base64: legacy } : s));
+        return;
       }
-
-      // 2. Always try to refresh from white-label (empresa) config
+      // 2. white-label de empresa (cache)
       const wlStored = localStorage.getItem("white_label_config");
       const wlLogo = wlStored ? JSON.parse(wlStored)?.logo_url : null;
-      if (wlLogo) {
-        loadLogoFromUrl(wlLogo);
-      } else {
-        // Fetch from DB
-        supabase.from("empresa").select("white_label").limit(1).single().then(({ data }) => {
-          const dbLogo = (data?.white_label as any)?.logo_url;
-          if (dbLogo) {
-            loadLogoFromUrl(dbLogo);
-          } else if (!savedLogo) {
-            // 3. Fallback: hardcoded default
-            loadLogoFromUrl("https://res.cloudinary.com/dss3lnovd/image/upload/v1774728837/dulcesur/Logotipo_DulceSur_2_rfwpdf.png");
-          }
-        });
-      }
+      if (wlLogo) { loadFromUrl(wlLogo); return; }
+      // 3. white-label de empresa (DB)
+      supabase.from("empresa").select("white_label").limit(1).single().then(({ data }) => {
+        const dbLogo = (data?.white_label as any)?.logo_url;
+        if (dbLogo) loadFromUrl(dbLogo);
+        else loadFromUrl("https://res.cloudinary.com/dss3lnovd/image/upload/v1774728837/dulcesur/Logotipo_DulceSur_2_rfwpdf.png");
+      });
     } catch (err) { console.error("Logo load error:", err); }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Recompute aspect ratio when active slot changes
+  useEffect(() => {
+    if (!logoBase64) return;
+    const img = new window.Image();
+    img.onload = () => { if (img.height > 0) setLogoAspectRatio(img.width / img.height); };
+    img.src = logoBase64;
+  }, [logoBase64]);
+
+  // Persist slots and activeLogoByMode
+  useEffect(() => {
+    try { localStorage.setItem("listaPreciosLogoSlots", JSON.stringify(logoSlots)); } catch {}
+  }, [logoSlots]);
+  useEffect(() => {
+    try { localStorage.setItem("listaPreciosActiveLogoByMode", JSON.stringify(activeLogoByMode)); } catch {}
+  }, [activeLogoByMode]);
 
   // Save config to localStorage on change
   useEffect(() => {
@@ -344,16 +383,7 @@ export default function ListaPreciosPage() {
     } catch (err) { console.error("Parse error:", err); }
   }, [config]);
 
-  // Save logo to localStorage on change
-  useEffect(() => {
-    try {
-      if (logoBase64) {
-        localStorage.setItem("listaPreciosLogo", logoBase64);
-      } else {
-        localStorage.removeItem("listaPreciosLogo");
-      }
-    } catch (err) { console.error("Parse error:", err); }
-  }, [logoBase64]);
+  // (logo persistence se maneja en logoSlots useEffect arriba)
 
   // Fetch products from Supabase
   const fetchProducts = useCallback(async () => {
@@ -602,6 +632,48 @@ export default function ListaPreciosPage() {
       computeLogoAspectRatio(result);
     };
     reader.readAsDataURL(file);
+  };
+
+  // Subir logo a un slot específico: lee como base64 (uso inmediato en el PDF) +
+  // lo sube a Cloudinary en background (para sobrevivir a clear localStorage / otros browsers).
+  const handleSlotLogoUpload = async (slotId: "slot1" | "slot2", file: File) => {
+    setUploadingLogoSlot(slotId);
+    try {
+      // 1. Read as base64 — uso inmediato (jsPDF embebe base64 directo)
+      const base64 = await new Promise<string>((resolve, reject) => {
+        const r = new FileReader();
+        r.onload = () => resolve(r.result as string);
+        r.onerror = reject;
+        r.readAsDataURL(file);
+      });
+      setLogoSlots((prev) => prev.map((s) => s.id === slotId ? { ...s, base64 } : s));
+      computeLogoAspectRatio(base64);
+
+      // 2. Sube a Cloudinary en background (no bloquea UI, no rompe si falla)
+      try {
+        const fd = new FormData();
+        fd.append("file", file);
+        await fetch("/api/upload", { method: "POST", body: fd });
+      } catch (err) {
+        console.warn("Cloudinary upload falló (logo igual queda en localStorage):", err);
+      }
+    } catch (err) {
+      console.error("Logo slot upload error:", err);
+    } finally {
+      setUploadingLogoSlot(null);
+    }
+  };
+
+  const setActiveSlotForCurrentMode = (slotId: "slot1" | "slot2") => {
+    setActiveLogoByMode((prev) => ({ ...prev, [configTab as string]: slotId }));
+  };
+
+  const renameLogoSlot = (slotId: "slot1" | "slot2", nuevoNombre: string) => {
+    setLogoSlots((prev) => prev.map((s) => s.id === slotId ? { ...s, nombre: nuevoNombre.slice(0, 30) || s.nombre } : s));
+  };
+
+  const removeLogoSlot = (slotId: "slot1" | "slot2") => {
+    setLogoSlots((prev) => prev.map((s) => s.id === slotId ? { ...s, base64: null } : s));
   };
 
   const handleGenerateClick = () => {
@@ -3312,15 +3384,78 @@ export default function ListaPreciosPage() {
                     <input type="text" value={config.webUrl} onChange={(e) => updateConfig("webUrl", e.target.value)} className="w-full border border-border rounded-lg px-3 py-2 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary" />
                   </div>
                   <div>
-                    <h3 className="text-sm font-semibold mb-3 uppercase tracking-wider">Logo</h3>
-                    <div className="flex items-center gap-4">
-                      {logoBase64 && <img src={logoBase64} alt="Logo" className="h-12 object-contain border border-border rounded-lg p-1" />}
-                      <label className="cursor-pointer text-sm border border-border rounded-lg px-3 py-2 hover:bg-accent transition-colors">
-                        {logoBase64 ? "Cambiar logo" : "Subir logo"}
-                        <input type="file" accept="image/*" onChange={handleLogoUpload} className="hidden" />
-                      </label>
+                    <h3 className="text-sm font-semibold mb-1 uppercase tracking-wider">Logos</h3>
+                    <p className="text-xs text-muted-foreground mb-3">
+                      Guardá hasta 2 logos y elegí cuál usar para cada tipo de PDF. La elección se recuerda por modo.
+                    </p>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      {logoSlots.map((slot) => {
+                        const isActive = activeSlotIdForCurrentMode === slot.id;
+                        const isUploading = uploadingLogoSlot === slot.id;
+                        return (
+                          <div
+                            key={slot.id}
+                            className={`border rounded-xl p-3 transition-colors ${isActive ? "border-primary bg-primary/5" : "border-border"}`}
+                          >
+                            <div className="flex items-center justify-between mb-2 gap-2">
+                              <input
+                                type="text"
+                                value={slot.nombre}
+                                onChange={(e) => renameLogoSlot(slot.id, e.target.value)}
+                                className="flex-1 bg-transparent text-sm font-medium border-0 border-b border-transparent hover:border-border focus:border-primary focus:outline-none px-0 py-0.5"
+                              />
+                              <button
+                                type="button"
+                                onClick={() => setActiveSlotForCurrentMode(slot.id)}
+                                className={`text-[11px] px-2 py-0.5 rounded-full border transition-colors shrink-0 ${
+                                  isActive
+                                    ? "bg-primary text-primary-foreground border-primary"
+                                    : "border-border text-muted-foreground hover:bg-accent"
+                                }`}
+                              >
+                                {isActive ? "✓ Activo" : "Usar"}
+                              </button>
+                            </div>
+                            <div className="flex items-center justify-center bg-background border border-dashed border-border rounded-lg mb-2 overflow-hidden p-2" style={{ height: "56px" }}>
+                              {slot.base64 ? (
+                                // eslint-disable-next-line @next/next/no-img-element
+                                <img src={slot.base64} alt={slot.nombre} style={{ maxHeight: "100%", maxWidth: "100%", objectFit: "contain" }} />
+                              ) : (
+                                <span className="text-xs text-muted-foreground">Sin logo</span>
+                              )}
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <label className={`flex-1 cursor-pointer text-xs text-center border border-border rounded-md px-2 py-1.5 hover:bg-accent transition-colors ${isUploading ? "opacity-60 pointer-events-none" : ""}`}>
+                                {isUploading ? "Subiendo..." : (slot.base64 ? "Cambiar" : "Subir")}
+                                <input
+                                  type="file"
+                                  accept="image/*"
+                                  onChange={(e) => {
+                                    const f = e.target.files?.[0];
+                                    if (f) handleSlotLogoUpload(slot.id, f);
+                                    e.target.value = "";
+                                  }}
+                                  className="hidden"
+                                />
+                              </label>
+                              {slot.base64 && (
+                                <button
+                                  type="button"
+                                  onClick={() => removeLogoSlot(slot.id)}
+                                  className="text-xs px-2 py-1.5 border border-border rounded-md text-muted-foreground hover:text-destructive hover:border-destructive/50 transition-colors"
+                                >
+                                  Quitar
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
                     </div>
-                    <div className="mt-3">
+                    <p className="text-[11px] text-muted-foreground mt-2">
+                      Logo activo para este modo: <span className="font-medium text-foreground">{activeSlot?.nombre || "—"}</span>
+                    </p>
+                    <div className="mt-4">
                       <label className="block text-xs text-muted-foreground mb-1">Tamaño del logo ({config.logoTamaño}mm)</label>
                       <input type="range" min={4} max={30} step={1} value={config.logoTamaño} onChange={(e) => updateConfig("logoTamaño", Number(e.target.value))} className="w-full accent-primary" />
                     </div>
