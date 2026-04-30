@@ -29,9 +29,20 @@ export function VistosRecientementeBlock({ excludeId }: { excludeId?: string } =
   const stored = useRecentlyViewed(excludeId);
   const { filtrarCategorias } = useCategoriasPermitidas();
   const [productos, setProductos] = useState<ProductoFresh[]>([]);
+  const [isLogged, setIsLogged] = useState(false);
 
   useEffect(() => {
-    if (stored.length === 0) {
+    try {
+      const raw = localStorage.getItem("cliente_auth");
+      const auth = raw ? JSON.parse(raw) : null;
+      setIsLogged(!!auth?.id);
+    } catch {
+      setIsLogged(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!isLogged || stored.length === 0) {
       setProductos([]);
       return;
     }
@@ -61,9 +72,9 @@ export function VistosRecientementeBlock({ excludeId }: { excludeId?: string } =
       setProductos(ordered);
     })();
     return () => { cancelled = true; };
-  }, [stored, filtrarCategorias]);
+  }, [isLogged, stored, filtrarCategorias]);
 
-  if (productos.length === 0) return null;
+  if (!isLogged || productos.length === 0) return null;
 
   return (
     <section className="py-8 md:py-10">

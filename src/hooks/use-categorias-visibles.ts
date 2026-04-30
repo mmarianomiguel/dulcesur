@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
 
 interface CategoriaConRestriccion {
@@ -55,13 +55,13 @@ export function useCategoriasPermitidas() {
   }, []);
 
   /** Filter an array of categories, hiding restricted ones the client can't access */
-  const filtrarCategorias = <T extends CategoriaConRestriccion>(cats: T[]): T[] => {
+  const filtrarCategorias = useCallback(<T extends CategoriaConRestriccion>(cats: T[]): T[] => {
     if (!loaded) return cats;
     return cats.filter((cat) => {
       if (!cat.restringida) return true;
       return permitidas?.includes(cat.id) ?? false;
     });
-  };
+  }, [loaded, permitidas]);
 
   return { permitidas, loaded, filtrarCategorias };
 }
