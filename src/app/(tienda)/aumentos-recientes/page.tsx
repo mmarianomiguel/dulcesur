@@ -8,8 +8,18 @@ export const metadata = {
   description: "Productos que actualizaron su precio en los últimos 3 días.",
 };
 
-export default async function AumentosRecientesPage() {
+export default async function AumentosRecientesPage({
+  searchParams,
+}: {
+  searchParams?: Promise<{ marcas?: string }>;
+}) {
   const supabase = createServerSupabase();
+  const params = (await searchParams) || {};
+  const marcasFiltro = (params.marcas || "")
+    .split(",")
+    .map((m) => m.trim().toLowerCase())
+    .filter(Boolean);
+
   const now = new Date(
     new Date().toLocaleString("en-US", { timeZone: "America/Argentina/Buenos_Aires" })
   );
@@ -26,13 +36,20 @@ export default async function AumentosRecientesPage() {
     .gt("fecha_actualizacion", cutoff)
     .order("fecha_actualizacion", { ascending: false });
 
-  const productos = (data || [])
+  let productos = (data || [])
     .filter((p: any) => Number(p.precio) > Number(p.precio_anterior))
     .map((p: any) => ({
       ...p,
       categorias: Array.isArray(p.categorias) ? (p.categorias[0] ?? null) : p.categorias,
       marcas: Array.isArray(p.marcas) ? (p.marcas[0] ?? null) : p.marcas,
     }));
+
+  if (marcasFiltro.length > 0) {
+    productos = productos.filter((p: any) => {
+      const m = (p.marcas?.nombre || "").toLowerCase();
+      return marcasFiltro.some((f) => m.includes(f));
+    });
+  }
 
   // Traer presentaciones de los productos con aumento
   let presentacionesMap: Record<string, any[]> = {};
