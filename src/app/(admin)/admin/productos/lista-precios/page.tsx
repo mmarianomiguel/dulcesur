@@ -2304,12 +2304,12 @@ export default function ListaPreciosPage() {
           ctx.fillText(tituloPrincipal, W / 2, 290);
           ctx.restore();
 
-          // Subtítulo cursivo "¡imperdible!" debajo
+          // Subtítulo cursivo "¡imperdible!" — sutil, chico, color rosa con leve transparencia
           ctx.save();
-          ctx.translate(W / 2, 410);
+          ctx.translate(W / 2, 400);
           ctx.rotate(-3 * Math.PI / 180);
-          ctx.font = `italic 700 70px "Brush Script MT", "Lucida Handwriting", cursive`;
-          ctx.fillStyle = accentColor;
+          ctx.font = `italic 500 44px "Brush Script MT", "Lucida Handwriting", cursive`;
+          ctx.fillStyle = `${accentColor}cc`; // 80% opacity
           ctx.textAlign = "center";
           ctx.textBaseline = "middle";
           ctx.fillText("¡imperdible!", 0, 0);
