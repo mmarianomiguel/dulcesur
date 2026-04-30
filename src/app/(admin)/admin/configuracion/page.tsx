@@ -11,13 +11,16 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
-import { Building2, Loader2, Check } from "lucide-react";
+import { Building2, Loader2, Check, MapPin, ChevronDown, ChevronRight } from "lucide-react";
 import { showAdminToast } from "@/components/admin-toast";
 
 export default function EmpresaPage() {
   const [empresa, setEmpresa] = useState<Empresa | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [advancedOpen, setAdvancedOpen] = useState(false);
+  const [mapsUrlInput, setMapsUrlInput] = useState("");
+  const [resolvingMaps, setResolvingMaps] = useState(false);
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -30,6 +33,45 @@ export default function EmpresaPage() {
 
   const e = (key: keyof Empresa, value: string) => {
     if (empresa) setEmpresa({ ...empresa, [key]: value });
+  };
+
+  const updateLocationFromMapsUrl = async () => {
+    if (!empresa) return;
+    const url = mapsUrlInput.trim();
+    if (!url) {
+      showAdminToast("Pegá un link de Google Maps", "error");
+      return;
+    }
+    setResolvingMaps(true);
+    try {
+      const res = await fetch("/api/maps-url-to-coords", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        showAdminToast(data?.error || "No se pudo procesar el link", "error");
+        return;
+      }
+      const { lat, lng } = data;
+      const { error } = await supabase
+        .from("empresa")
+        .update({ lat, lng })
+        .eq("id", empresa.id);
+      if (error) {
+        showAdminToast("Error al guardar las coordenadas", "error");
+        return;
+      }
+      setEmpresa({ ...empresa, lat, lng } as any);
+      setMapsUrlInput("");
+      showAdminToast(`Ubicación actualizada (${lat.toFixed(5)}, ${lng.toFixed(5)})`, "success");
+    } catch (err) {
+      console.error(err);
+      showAdminToast("Error de red al procesar el link", "error");
+    } finally {
+      setResolvingMaps(false);
+    }
   };
 
   const save = async () => {
@@ -121,6 +163,65 @@ export default function EmpresaPage() {
                 <Input value={empresa?.telefono || ""} onChange={(ev) => e("telefono", ev.target.value)} />
               </div>
             </div>
+          </div>
+          <Separator />
+          {/* Avanzado — ubicación exacta para hoja de ruta */}
+          <div>
+            <button
+              type="button"
+              onClick={() => setAdvancedOpen((v) => !v)}
+              className="flex items-center gap-1.5 text-xs font-semibold text-muted-foreground uppercase tracking-wider hover:text-foreground transition-colors"
+            >
+              {advancedOpen ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
+              Avanzado
+            </button>
+            {advancedOpen && (
+              <div className="mt-3 space-y-3">
+                <div className="rounded-lg border border-border bg-muted/30 p-4 space-y-3">
+                  <div className="flex items-start gap-3">
+                    <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
+                      <MapPin className="w-4 h-4 text-primary" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium">Ubicación exacta del local</p>
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        Punto de partida para optimizar la hoja de ruta. Pegá el link de tu local desde Google Maps (compartir → copiar link) y se actualizan las coordenadas automáticamente.
+                      </p>
+                      {empresa && ((empresa as any).lat != null && (empresa as any).lng != null) && (
+                        <p className="text-[11px] text-muted-foreground mt-1.5 font-mono">
+                          Actual: {Number((empresa as any).lat).toFixed(5)}, {Number((empresa as any).lng).toFixed(5)}{" "}
+                          <a
+                            href={`https://www.google.com/maps?q=${(empresa as any).lat},${(empresa as any).lng}`}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="text-primary hover:underline ml-1"
+                          >
+                            Ver en Maps
+                          </a>
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                  <div className="flex flex-col sm:flex-row gap-2">
+                    <Input
+                      value={mapsUrlInput}
+                      onChange={(ev) => setMapsUrlInput(ev.target.value)}
+                      placeholder="https://maps.app.goo.gl/..."
+                      className="flex-1"
+                    />
+                    <Button
+                      type="button"
+                      onClick={updateLocationFromMapsUrl}
+                      disabled={resolvingMaps || !mapsUrlInput.trim()}
+                      variant="outline"
+                    >
+                      {resolvingMaps ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <MapPin className="w-4 h-4 mr-2" />}
+                      Actualizar ubicación
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
           <Separator />
           <div className="flex justify-end">
