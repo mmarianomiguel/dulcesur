@@ -23,7 +23,7 @@ export default async function TiendaHomePage() {
       .single(),
     supabase
       .from("hero_programaciones")
-      .select("titulo, subtitulo, boton_texto, boton_link, boton_secundario_texto, boton_secundario_link, color_inicio, color_fin")
+      .select("titulo, subtitulo, boton_texto, boton_link, boton_secundario_texto, boton_secundario_link, color_inicio, color_fin, marcas, auto_porcentaje")
       .eq("activo", true)
       .lte("fecha_desde", nowIso)
       .gte("fecha_hasta", nowIso)
@@ -33,7 +33,52 @@ export default async function TiendaHomePage() {
   ]);
 
   const blocks = (bloquesRes.data || []) as any[];
-  const heroSlides = (heroProgRes.data || []) as any[];
+  let heroSlides = (heroProgRes.data || []) as any[];
+
+  // Auto-compute % promedio de aumento por marca para slides que lo requieran.
+  // Replica la lógica de /admin/notificaciones/enviar: productos con precio > precio_anterior
+  // en los últimos 3 días, agrupados por marca. Promedio de %s entre todos los productos
+  // de las marcas listadas.
+  const slidesAutoPct = heroSlides.filter((s) => s.auto_porcentaje && s.marcas?.length);
+  if (slidesAutoPct.length > 0) {
+    const hace3 = new Date();
+    hace3.setDate(hace3.getDate() - 3);
+    const { data: prods } = await supabase
+      .from("productos")
+      .select("precio, precio_anterior, marcas(nombre)")
+      .eq("activo", true)
+      .gt("precio_anterior", 0)
+      .gt("fecha_actualizacion", hace3.toISOString());
+    const filtered = (prods || []).filter((p: any) => Number(p.precio) > Number(p.precio_anterior));
+
+    const pctPorMarca = (marcas: string[]): number | null => {
+      const lcs = marcas.map((m) => m.toLowerCase());
+      const pcts: number[] = [];
+      for (const p of filtered) {
+        const m = (Array.isArray(p.marcas) ? p.marcas[0]?.nombre : (p.marcas as any)?.nombre) || "";
+        const lm = m.toLowerCase();
+        if (!lcs.some((f) => lm.includes(f))) continue;
+        const pct = ((Number(p.precio) - Number(p.precio_anterior)) / Number(p.precio_anterior)) * 100;
+        pcts.push(pct);
+      }
+      if (pcts.length === 0) return null;
+      return Math.round(pcts.reduce((a, b) => a + b, 0) / pcts.length);
+    };
+
+    heroSlides = heroSlides.map((s) => {
+      if (!s.auto_porcentaje || !s.marcas?.length) return s;
+      const pct = pctPorMarca(s.marcas);
+      const replacement = pct === null ? "" : String(pct);
+      const sub = (txt: string) => (txt || "").replace(/\{porcentaje\}/g, replacement);
+      return {
+        ...s,
+        titulo: sub(s.titulo),
+        subtitulo: sub(s.subtitulo),
+        boton_texto: sub(s.boton_texto),
+        boton_link: sub(s.boton_link),
+      };
+    });
+  }
   const diasNuevo: number = configRes.data?.dias_badge_nuevo ?? 5;
   const tipos = blocks.map((b) => b.tipo);
 

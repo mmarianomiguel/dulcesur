@@ -53,6 +53,8 @@ interface HeroProgramacion {
   fecha_hasta: string;
   activo: boolean;
   prioridad: number;
+  marcas: string[] | null;
+  auto_porcentaje: boolean;
 }
 
 const PLACEHOLDER_RE = /\{([a-z_][a-z0-9_]*)\}/gi;
@@ -131,6 +133,7 @@ export default function ProgramacionesPage() {
   const [progFechaDesde, setProgFechaDesde] = useState("");
   const [progFechaHasta, setProgFechaHasta] = useState("");
   const [progPrioridad, setProgPrioridad] = useState(0);
+  const [progAutoPct, setProgAutoPct] = useState(true);
 
   const load = async () => {
     setLoading(true);
@@ -191,6 +194,7 @@ export default function ProgramacionesPage() {
     setProgFechaDesde(isoToLocal(tomorrow.toISOString()));
     setProgFechaHasta(isoToLocal(after.toISOString()));
     setProgPrioridad(0);
+    setProgAutoPct(true);
     setEditingProg({
       id: "", template_id: null,
       titulo: "", subtitulo: "", boton_texto: "", boton_link: "",
@@ -198,6 +202,7 @@ export default function ProgramacionesPage() {
       color_inicio: "#ec4899", color_fin: "#a855f7",
       fecha_desde: tomorrow.toISOString(), fecha_hasta: after.toISOString(),
       activo: true, prioridad: 0,
+      marcas: null, auto_porcentaje: false,
     });
   };
 
@@ -207,6 +212,7 @@ export default function ProgramacionesPage() {
     setProgFechaDesde(isoToLocal(p.fecha_desde));
     setProgFechaHasta(isoToLocal(p.fecha_hasta));
     setProgPrioridad(p.prioridad);
+    setProgAutoPct(p.auto_porcentaje);
     setEditingProg({ ...p });
   };
 
@@ -238,18 +244,29 @@ export default function ProgramacionesPage() {
     if (new Date(progFechaHasta) <= new Date(progFechaDesde)) { showAdminToast("La fecha hasta debe ser posterior a la desde", "error"); return; }
 
     // Si hay template seleccionado y placeholders con valores, resolver.
+    // Si auto_porcentaje y la plantilla tiene {porcentaje}, dejarlo literal.
     let resolved = { ...editingProg };
+    const hasMarcas = !!progTemplate?.placeholders.includes("marcas");
+    const hasPorcentaje = !!progTemplate?.placeholders.includes("porcentaje");
+    const useAutoPct = hasPorcentaje && progAutoPct;
     if (progTemplate && progTemplate.placeholders.length > 0) {
+      const valsForFill = { ...progValues };
+      if (useAutoPct) delete valsForFill.porcentaje; // keep {porcentaje} literal
       resolved = {
         ...resolved,
-        titulo: fillPlaceholders(progTemplate.titulo, progValues),
-        subtitulo: fillPlaceholders(progTemplate.subtitulo, progValues),
-        boton_texto: fillPlaceholders(progTemplate.boton_texto, progValues),
-        boton_link: fillPlaceholders(progTemplate.boton_link, progValues),
-        boton_secundario_texto: fillPlaceholders(progTemplate.boton_secundario_texto, progValues),
-        boton_secundario_link: fillPlaceholders(progTemplate.boton_secundario_link, progValues),
+        titulo: fillPlaceholders(progTemplate.titulo, valsForFill),
+        subtitulo: fillPlaceholders(progTemplate.subtitulo, valsForFill),
+        boton_texto: fillPlaceholders(progTemplate.boton_texto, valsForFill),
+        boton_link: fillPlaceholders(progTemplate.boton_link, valsForFill),
+        boton_secundario_texto: fillPlaceholders(progTemplate.boton_secundario_texto, valsForFill),
+        boton_secundario_link: fillPlaceholders(progTemplate.boton_secundario_link, valsForFill),
       };
     }
+
+    // Parsear lista de marcas (si la plantilla tiene placeholder marcas) → array
+    const marcasArray = hasMarcas && progValues.marcas
+      ? progValues.marcas.split(",").map((s) => s.trim()).filter(Boolean)
+      : (editingProg.id ? editingProg.marcas : null);
 
     const payload = {
       template_id: resolved.template_id,
@@ -265,6 +282,8 @@ export default function ProgramacionesPage() {
       fecha_hasta: localToIso(progFechaHasta),
       activo: resolved.activo,
       prioridad: progPrioridad,
+      marcas: marcasArray && marcasArray.length > 0 ? marcasArray : null,
+      auto_porcentaje: useAutoPct,
     };
     const res = editingProg.id
       ? await supabase.from("hero_programaciones").update(payload).eq("id", editingProg.id)
@@ -293,10 +312,14 @@ export default function ProgramacionesPage() {
   const livePreview = useMemo(() => {
     if (!editingProg) return null;
     if (progTemplate && progTemplate.placeholders.length > 0) {
+      const previewVals = { ...progValues };
+      if (progTemplate.placeholders.includes("porcentaje") && progAutoPct) {
+        previewVals.porcentaje = "~auto";
+      }
       return {
-        titulo: fillPlaceholders(progTemplate.titulo, progValues),
-        subtitulo: fillPlaceholders(progTemplate.subtitulo, progValues),
-        boton_texto: fillPlaceholders(progTemplate.boton_texto, progValues),
+        titulo: fillPlaceholders(progTemplate.titulo, previewVals),
+        subtitulo: fillPlaceholders(progTemplate.subtitulo, previewVals),
+        boton_texto: fillPlaceholders(progTemplate.boton_texto, previewVals),
         color_inicio: editingProg.color_inicio,
         color_fin: editingProg.color_fin,
       };
@@ -308,7 +331,7 @@ export default function ProgramacionesPage() {
       color_inicio: editingProg.color_inicio,
       color_fin: editingProg.color_fin,
     };
-  }, [editingProg, progTemplate, progValues]);
+  }, [editingProg, progTemplate, progValues, progAutoPct]);
 
   return (
     <div className="container mx-auto p-4 md:p-6 max-w-6xl">
@@ -475,12 +498,31 @@ export default function ProgramacionesPage() {
               {progTemplate && progTemplate.placeholders.length > 0 && (
                 <div className="space-y-2 p-3 bg-blue-50/50 border border-blue-200 rounded-lg">
                   <div className="text-xs font-medium text-blue-800">Completá los datos:</div>
-                  {progTemplate.placeholders.map((k) => (
-                    <div key={k}>
-                      <Label className="capitalize">{k.replace(/_/g, " ")}</Label>
-                      <Input value={progValues[k] || ""} onChange={(e) => setProgValues({ ...progValues, [k]: e.target.value })} placeholder={`Valor para {${k}}`} />
-                    </div>
-                  ))}
+                  {progTemplate.placeholders.includes("porcentaje") && (
+                    <label className="flex items-center gap-2 text-sm bg-white p-2 rounded border border-blue-200">
+                      <input
+                        type="checkbox"
+                        checked={progAutoPct}
+                        onChange={(e) => setProgAutoPct(e.target.checked)}
+                      />
+                      <span>Calcular % promedio automático <span className="text-xs text-muted-foreground">(de los aumentos de las marcas listadas, últimos 3 días)</span></span>
+                    </label>
+                  )}
+                  {progTemplate.placeholders.map((k) => {
+                    if (k === "porcentaje" && progAutoPct) return null;
+                    const isMarcas = k === "marcas";
+                    return (
+                      <div key={k}>
+                        <Label className="capitalize">{k.replace(/_/g, " ")}</Label>
+                        <Input
+                          value={progValues[k] || ""}
+                          onChange={(e) => setProgValues({ ...progValues, [k]: e.target.value })}
+                          placeholder={isMarcas ? "COCA COLA, ARCOR, BAGLEY" : `Valor para {${k}}`}
+                        />
+                        {isMarcas && <p className="text-[11px] text-muted-foreground mt-1">Separadas por coma. Se usan tanto para el texto como para filtrar el listado al que lleva el botón.</p>}
+                      </div>
+                    );
+                  })}
                 </div>
               )}
 
