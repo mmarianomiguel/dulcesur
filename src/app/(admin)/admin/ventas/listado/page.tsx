@@ -69,6 +69,7 @@ import {
   PrinterCheck,
 } from "lucide-react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { defaultReceiptConfig } from "@/components/receipt-print-view";
 import type { ReceiptConfig, ReceiptLineItem, ReceiptSale } from "@/components/receipt-print-view";
 import { PrintPreviewDialog } from "@/components/print-preview-dialog";
@@ -211,6 +212,7 @@ const estadoBadge: Record<string, { bg: string; text: string; label: string }> =
 };
 
 export default function ListadoVentasPage() {
+  const router = useRouter();
   const currentUser = useCurrentUser();
   // ─── Unified source filter ───
   const [filterSource, setFilterSource] = useState<"todos" | "pos" | "online">("todos");
@@ -223,6 +225,7 @@ export default function ListadoVentasPage() {
   // HISTORIAL DE VENTAS STATE
   // ══════════════════════════════════════════════════════════════
   const [ventas, setVentas] = useState<VentaRow[]>([]);
+  const [contextMenu, setContextMenu] = useState<{ x: number; y: number; order: Pedido } | null>(null);
   const [limitReached, setLimitReached] = useState(false);
   const [loading, setLoading] = useState(true);
   const [filterOrigen, setFilterOrigen] = useState("all");
@@ -465,6 +468,35 @@ export default function ListadoVentasPage() {
       }
     }).catch((err) => console.error("Error cargando datos de referencia:", err));
   }, []);
+
+  const handleContextMenu = (e: React.MouseEvent, order: Pedido) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const menuWidth = 220;
+    const menuHeight = 360;
+    const vw = window.innerWidth;
+    const vh = window.innerHeight;
+    let x = e.clientX;
+    let y = e.clientY;
+    if (x + menuWidth > vw - 8) x = vw - menuWidth - 8;
+    if (y + menuHeight > vh - 8) y = vh - menuHeight - 8;
+    if (y < 8) y = 8;
+    setContextMenu({ x, y, order });
+  };
+
+  useEffect(() => {
+    if (!contextMenu) return;
+    const close = () => setContextMenu(null);
+    const handleKey = (e: KeyboardEvent) => { if (e.key === "Escape") close(); };
+    document.addEventListener("click", close);
+    document.addEventListener("keydown", handleKey);
+    window.addEventListener("scroll", close, true);
+    return () => {
+      document.removeEventListener("click", close);
+      document.removeEventListener("keydown", handleKey);
+      window.removeEventListener("scroll", close, true);
+    };
+  }, [contextMenu]);
 
   const openDetail = async (v: VentaRow) => {
     const [{ data }, { data: movData }, { data: clienteData }, { data: cobroSaldoData }] = await Promise.all([
@@ -2913,7 +2945,7 @@ export default function ListadoVentasPage() {
             const currentStep = order.estado === "cancelado" ? -1 : estadoSteps.indexOf(order.estado);
 
             return (
-              <Card key={`${order._source}-${order._ventaId || order.id}-${idx}`} className={`transition-all ${order.estado === "cancelado" ? "opacity-50" : "hover:shadow-md"}`}>
+              <Card key={`${order._source}-${order._ventaId || order.id}-${idx}`} onContextMenu={(e) => handleContextMenu(e, order)} className={`transition-all ${order.estado === "cancelado" ? "opacity-50" : "hover:shadow-md"}`}>
                 <CardContent className="p-4 sm:p-5">
                   <div className="flex flex-col sm:flex-row sm:items-start gap-4">
                     {/* Left: Customer & order info */}
@@ -3785,6 +3817,101 @@ export default function ListadoVentasPage() {
           })()}
         </DialogContent>
       </Dialog>
+
+      {contextMenu && (() => {
+        const order = contextMenu.order;
+        const v = ventas.find((vr) => vr.id === order._ventaId) || ventas.find((vr) => vr.numero === order.numero);
+        const isCancelled = order.estado === "cancelado" || order.estado === "anulada";
+        const isDelivered = order.estado === "entregado";
+        return (
+          <div
+            className="fixed z-50 bg-background border border-border rounded-xl shadow-lg py-1 min-w-[220px]"
+            style={{ left: contextMenu.x, top: contextMenu.y, maxHeight: "calc(100vh - 16px)", overflowY: "auto" }}
+            onClick={(e) => e.stopPropagation()}
+            onContextMenu={(e) => e.preventDefault()}
+          >
+            <div className="px-3 py-2 border-b">
+              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide truncate">
+                {`#${order.numero} — ${order.nombre_cliente}`.slice(0, 32)}
+                {`#${order.numero} — ${order.nombre_cliente}`.length > 32 ? "..." : ""}
+              </p>
+            </div>
+            <div className="py-1">
+              <button
+                className="flex items-center gap-2.5 w-full px-3 py-2 text-sm hover:bg-muted/60 transition-colors text-left"
+                onClick={() => { setContextMenu(null); poOpenDetail(order); }}
+              >
+                <Eye className="w-4 h-4 text-muted-foreground" /> Ver detalle
+              </button>
+              <button
+                className="flex items-center gap-2.5 w-full px-3 py-2 text-sm hover:bg-muted/60 transition-colors text-left"
+                onClick={async () => {
+                  setContextMenu(null);
+                  try {
+                    let ventaForPrint = v;
+                    if (!ventaForPrint) {
+                      const { data: rows } = await supabase.from("ventas").select("*, clientes(nombre, cuit, domicilio, telefono, email)").eq("numero", order.numero).order("created_at", { ascending: false }).limit(1);
+                      if (rows && rows.length > 0) ventaForPrint = rows[0] as any;
+                    }
+                    if (ventaForPrint) {
+                      if (order.nombre_cliente && (order._source === "pedidos" || (order as any).isOnline)) {
+                        (ventaForPrint as any).clientes = { nombre: order.nombre_cliente, cuit: "", domicilio: order.direccion_texto || "", telefono: order.telefono || "", email: order.email || "" };
+                      }
+                      preparePrint(ventaForPrint);
+                    } else {
+                      showAdminToast("No se encontró la venta vinculada para imprimir", "error");
+                    }
+                  } catch {
+                    showAdminToast("Error al preparar impresión", "error");
+                  }
+                }}
+              >
+                {(order as any)._impreso_at ? <PrinterCheck className="w-4 h-4 text-emerald-600" /> : <Printer className="w-4 h-4 text-muted-foreground" />}
+                {(order as any)._impreso_at ? "Reimprimir comprobante" : "Imprimir comprobante"}
+              </button>
+              {!isDelivered && !isCancelled && (
+                <button
+                  className="flex items-center gap-2.5 w-full px-3 py-2 text-sm hover:bg-muted/60 transition-colors text-left"
+                  onClick={async () => {
+                    setContextMenu(null);
+                    if (v) {
+                      await marcarEntregado(v);
+                    } else {
+                      await poHandleEstadoChange(order, "entregado");
+                      setVentas(prev => prev.map(vr => vr.numero === order.numero ? { ...vr, estado: "entregado", entregado: true } as any : vr));
+                      showAdminToast("Marcado como entregado", "success");
+                    }
+                  }}
+                >
+                  <CheckCircle className="w-4 h-4 text-green-600" /> Marcar entregado
+                </button>
+              )}
+            </div>
+            <div className="border-t py-1">
+              <button
+                className="flex items-center gap-2.5 w-full px-3 py-2 text-sm hover:bg-muted/60 transition-colors text-left disabled:opacity-50 disabled:cursor-not-allowed"
+                disabled={!order.nombre_cliente}
+                onClick={() => {
+                  setContextMenu(null);
+                  router.push(`/admin/clientes?buscar=${encodeURIComponent(order.nombre_cliente || "")}`);
+                }}
+              >
+                <User className="w-4 h-4 text-muted-foreground" /> Ver cliente
+              </button>
+            </div>
+            {!isCancelled && v && (
+              <div className="border-t py-1">
+                <button
+                  className="flex items-center gap-2.5 w-full px-3 py-2 text-sm hover:bg-muted/60 transition-colors text-left text-destructive"
+                  onClick={() => { setContextMenu(null); setAnularVenta(v); setAnularMotivo(""); }}
+                >
+                  <Ban className="w-4 h-4" /> Anular venta
+                </button>
+              </div>
+            )}
+          </div>
+        );
+      })()}
     </div>
   );
 }
