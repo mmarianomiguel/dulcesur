@@ -54,6 +54,10 @@ import {
   AlertCircle,
   Package,
   CalendarDays,
+  Copy,
+  Gift,
+  Percent,
+  Tag,
 } from "lucide-react";
 
 import { ReceiptPrintView, defaultReceiptConfig } from "@/components/receipt-print-view";
@@ -253,6 +257,8 @@ export default function VentasPage() {
 
   // selected cart item for arrow key navigation
   const [selectedItemIdx, setSelectedItemIdx] = useState(-1);
+  const [cartContextMenu, setCartContextMenu] = useState<{ x: number; y: number; itemId: string } | null>(null);
+  const [quickViewItem, setQuickViewItem] = useState<LineItem | null>(null);
   const cartListRef = useRef<HTMLDivElement>(null);
   const qtyBuffer = useRef("");
   const qtyBufferTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -663,6 +669,91 @@ export default function VentasPage() {
     });
     setSearchOpen(false);
     setProductSearch("");
+  };
+
+  useEffect(() => {
+    if (!cartContextMenu) return;
+    const close = () => setCartContextMenu(null);
+    const handleKey = (e: KeyboardEvent) => { if (e.key === "Escape") close(); };
+    document.addEventListener("click", close);
+    document.addEventListener("keydown", handleKey);
+    window.addEventListener("scroll", close, true);
+    return () => {
+      document.removeEventListener("click", close);
+      document.removeEventListener("keydown", handleKey);
+      window.removeEventListener("scroll", close, true);
+    };
+  }, [cartContextMenu]);
+
+  const handleCartContextMenu = (e: React.MouseEvent, itemId: string) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const menuWidth = 240;
+    const menuHeight = 380;
+    const vw = window.innerWidth;
+    const vh = window.innerHeight;
+    let x = e.clientX;
+    let y = e.clientY;
+    if (x + menuWidth > vw - 8) x = vw - menuWidth - 8;
+    if (y + menuHeight > vh - 8) y = vh - menuHeight - 8;
+    if (y < 8) y = 8;
+    setCartContextMenu({ x, y, itemId });
+  };
+
+  const duplicateCartItem = (itemId: string) => {
+    setItems((prev) => {
+      const idx = prev.findIndex((i) => i.id === itemId);
+      if (idx === -1) return prev;
+      const orig = prev[idx];
+      const copy: LineItem = {
+        ...orig,
+        id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+        qty: 1,
+        subtotal: orig.price * 1 * (1 - orig.discount / 100),
+      };
+      const next = [...prev];
+      next.splice(idx + 1, 0, copy);
+      return next;
+    });
+  };
+
+  const setItemPresentacion = (itemId: string, presNombre: string) => {
+    setItems((prev) => prev.map((i) => {
+      if (i.id !== itemId) return i;
+      if (presNombre === i.presentacion) return i;
+      const pres = (presentacionesMap[i.producto_id] || []).find((p) => p.nombre === presNombre);
+      const prod = products.find((p) => p.id === i.producto_id);
+      if (presNombre === "Unidad" || (!pres && presNombre === "Unidad")) {
+        const unitPrice = prod?.precio ?? i.price;
+        const newDiscount = prod ? getProductDiscount(prod, "Unidad") : i.discount;
+        return {
+          ...i,
+          price: unitPrice,
+          code: prod?.codigo || i.code,
+          description: prod?.nombre || i.description.replace(/\s*\(.*\)$/, ""),
+          presentacion: "Unidad",
+          unidades_por_presentacion: 1,
+          discount: newDiscount,
+          subtotal: unitPrice * i.qty * (1 - newDiscount / 100),
+          costo_unitario: prod?.costo ?? i.costo_unitario,
+        };
+      }
+      if (!pres) return i;
+      const newDiscount = prod ? getProductDiscount(prod, pres.nombre) : i.discount;
+      const presUnits = Number(pres.cantidad) || 1;
+      const newCosto = pres.costo > 0 ? pres.costo : (prod?.costo ?? 0) * presUnits;
+      return {
+        ...i,
+        price: pres.precio,
+        code: pres.codigo || prod?.codigo || i.code,
+        description: prod ? `${prod.nombre} (${pres.nombre})` : i.description,
+        presentacion: pres.nombre,
+        unidades_por_presentacion: presUnits,
+        discount: newDiscount,
+        subtotal: pres.precio * i.qty * (1 - newDiscount / 100),
+        costo_unitario: newCosto,
+      };
+    }));
   };
 
   const updateItemDiscount = (id: string, discount: number) => {
@@ -2297,6 +2388,7 @@ export default function VentasPage() {
                           idx === selectedItemIdx ? "bg-emerald-50 border-l-4 border-l-emerald-500" : "hover:bg-muted/50"
                         }`}
                         onClick={() => setSelectedItemIdx(idx)}
+                        onContextMenu={(e) => { setSelectedItemIdx(idx); handleCartContextMenu(e, item.id); }}
                       >
                         <div className="flex-1 min-w-0">
                           <div className="flex items-start lg:items-center gap-1 flex-wrap lg:flex-nowrap">
@@ -4236,6 +4328,149 @@ export default function VentasPage() {
               </div>
             </div>
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Cart item context menu */}
+      {cartContextMenu && (() => {
+        const item = items.find((i) => i.id === cartContextMenu.itemId);
+        if (!item) return null;
+        const presList = presentacionesMap[item.producto_id] || [];
+        const allPres: { nombre: string; precio?: number }[] = [];
+        const seen = new Set<string>();
+        for (const p of presList) {
+          if (!seen.has(p.nombre)) { allPres.push({ nombre: p.nombre, precio: p.precio }); seen.add(p.nombre); }
+        }
+        if (!seen.has("Unidad")) allPres.unshift({ nombre: "Unidad" });
+        return (
+          <div
+            className="fixed z-50 bg-background border border-border rounded-xl shadow-lg py-1 min-w-[240px]"
+            style={{ left: cartContextMenu.x, top: cartContextMenu.y, maxHeight: "calc(100vh - 16px)", overflowY: "auto" }}
+            onClick={(e) => e.stopPropagation()}
+            onContextMenu={(e) => e.preventDefault()}
+          >
+            <div className="px-3 py-2 border-b">
+              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide truncate">
+                {item.description.length > 32 ? item.description.slice(0, 30) + "..." : item.description}
+              </p>
+            </div>
+            {allPres.length > 1 && (
+              <>
+                <div className="px-3 pt-2 pb-1 text-[10px] font-semibold text-muted-foreground uppercase">Presentación</div>
+                <div className="py-1">
+                  {allPres.map((pres) => (
+                    <button
+                      key={pres.nombre}
+                      className={`flex items-center gap-2.5 w-full px-3 py-1.5 text-sm hover:bg-muted/60 transition-colors text-left ${pres.nombre === item.presentacion ? "bg-emerald-50 font-medium" : ""}`}
+                      onClick={() => { setItemPresentacion(item.id, pres.nombre); setCartContextMenu(null); }}
+                    >
+                      <ArrowLeftRight className="w-4 h-4 text-muted-foreground" />
+                      <span className="flex-1">{pres.nombre}</span>
+                      {pres.nombre === item.presentacion && <Check className="w-3.5 h-3.5 text-emerald-600" />}
+                    </button>
+                  ))}
+                </div>
+                <div className="border-t" />
+              </>
+            )}
+            <div className="px-3 pt-2 pb-1 text-[10px] font-semibold text-muted-foreground uppercase">Descuento</div>
+            <div className="py-1">
+              {[5, 10, 15].map((pct) => (
+                <button
+                  key={pct}
+                  className="flex items-center gap-2.5 w-full px-3 py-1.5 text-sm hover:bg-muted/60 transition-colors text-left"
+                  onClick={() => { updateItemDiscount(item.id, pct); setCartContextMenu(null); }}
+                >
+                  <Percent className="w-4 h-4 text-muted-foreground" />
+                  <span>{pct}%</span>
+                </button>
+              ))}
+              {item.discount > 0 && (
+                <button
+                  className="flex items-center gap-2.5 w-full px-3 py-1.5 text-sm hover:bg-muted/60 transition-colors text-left"
+                  onClick={() => { updateItemDiscount(item.id, 0); setCartContextMenu(null); }}
+                >
+                  <X className="w-4 h-4 text-muted-foreground" /> Quitar descuento
+                </button>
+              )}
+            </div>
+            <div className="border-t py-1">
+              <button
+                className="flex items-center gap-2.5 w-full px-3 py-2 text-sm hover:bg-muted/60 transition-colors text-left"
+                onClick={() => { setQuickViewItem(item); setCartContextMenu(null); }}
+              >
+                <Eye className="w-4 h-4 text-muted-foreground" /> Vista rápida
+              </button>
+              <button
+                className="flex items-center gap-2.5 w-full px-3 py-2 text-sm hover:bg-muted/60 transition-colors text-left"
+                onClick={() => { duplicateCartItem(item.id); setCartContextMenu(null); }}
+              >
+                <Copy className="w-4 h-4 text-muted-foreground" /> Duplicar línea
+              </button>
+              <button
+                className="flex items-center gap-2.5 w-full px-3 py-2 text-sm hover:bg-muted/60 transition-colors text-left"
+                onClick={() => { updateItemDiscount(item.id, 100); setCartContextMenu(null); }}
+              >
+                <Gift className="w-4 h-4 text-muted-foreground" /> Marcar como cortesía
+              </button>
+            </div>
+            <div className="border-t py-1">
+              <button
+                className="flex items-center gap-2.5 w-full px-3 py-2 text-sm hover:bg-muted/60 transition-colors text-left text-destructive"
+                onClick={() => { removeItem(item.id); setCartContextMenu(null); }}
+              >
+                <Trash2 className="w-4 h-4" /> Quitar del carrito
+              </button>
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* Quick view dialog */}
+      <Dialog open={!!quickViewItem} onOpenChange={(o) => { if (!o) setQuickViewItem(null); }}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>{quickViewItem?.description}</DialogTitle>
+          </DialogHeader>
+          {quickViewItem && (() => {
+            const prod = products.find((p) => p.id === quickViewItem.producto_id);
+            const presList = presentacionesMap[quickViewItem.producto_id] || [];
+            return (
+              <div className="space-y-3 text-sm">
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <p className="text-xs text-muted-foreground">Código</p>
+                    <p className="font-mono">{quickViewItem.code || "—"}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-muted-foreground">Stock disponible</p>
+                    <p className={`font-semibold ${quickViewItem.stock <= 0 ? "text-red-500" : ""}`}>{quickViewItem.stock}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-muted-foreground">Costo (unidad)</p>
+                    <p className="font-medium">{formatCurrency(quickViewItem.costo_unitario / (quickViewItem.unidades_por_presentacion || 1))}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-muted-foreground">Precio unidad</p>
+                    <p className="font-medium">{formatCurrency(prod?.precio || 0)}</p>
+                  </div>
+                </div>
+                {presList.length > 0 && (
+                  <div className="border-t pt-3">
+                    <p className="text-xs font-semibold text-muted-foreground uppercase mb-2">Presentaciones disponibles</p>
+                    <div className="space-y-1">
+                      {presList.map((pr) => (
+                        <div key={pr.id} className="flex items-center justify-between text-sm">
+                          <span>{pr.nombre} <span className="text-muted-foreground text-xs">(x{pr.cantidad})</span></span>
+                          <span className="font-mono font-medium">{formatCurrency(pr.precio)}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            );
+          })()}
         </DialogContent>
       </Dialog>
 
