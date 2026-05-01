@@ -13,7 +13,7 @@ const nextConfig: NextConfig = {
   },
   images: {
     loader: "custom",
-    loaderFile: "./src/lib/cloudinary-loader.ts",
+    loaderFile: "./src/lib/image-loader.ts",
     formats: ["image/avif", "image/webp"],
     minimumCacheTTL: 3600,
     deviceSizes: [256, 384, 640, 750, 828, 1080, 1200],

@@ -1,0 +1,377 @@
+[
+  {
+    "producto_id": "fb76f683-9f31-4533-a33b-1947da15dba0",
+    "old_url": "https://res.cloudinary.com/dss3lnovd/image/upload/v1775474221/dulcesur/papel-higienico-campanita-plus-4x30mts_webp.webp",
+    "new_url": "https://oepqhdjuujfdlpjjktbs.supabase.co/storage/v1/object/public/productos/fb76f683-9f31-4533-a33b-1947da15dba0.webp?v=1774617005249"
+  },
+  {
+    "producto_id": "542471eb-be53-44ef-bfe8-cc5c79865e69",
+    "old_url": "https://res.cloudinary.com/dss3lnovd/image/upload/v1775474658/dulcesur/galletitas-pepitos-118g_webp.webp",
+    "new_url": "https://oepqhdjuujfdlpjjktbs.supabase.co/storage/v1/object/public/productos/542471eb-be53-44ef-bfe8-cc5c79865e69.webp?v=1774379341475"
+  },
+  {
+    "producto_id": "29520d8b-4a92-460b-9ca1-336ce6e84ee5",
+    "old_url": "https://res.cloudinary.com/dss3lnovd/image/upload/v1775474232/dulcesur/galletitas-mini-oreo-50g_webp.webp",
+    "new_url": "https://oepqhdjuujfdlpjjktbs.supabase.co/storage/v1/object/public/productos/29520d8b-4a92-460b-9ca1-336ce6e84ee5.webp?v=1774828800000"
+  },
+  {
+    "producto_id": "6c9140af-3f68-4ebf-85f7-d3da736d25d7",
+    "old_url": "https://res.cloudinary.com/dss3lnovd/image/upload/v1775474643/dulcesur/malvavisco-gongys-28g_webp.webp",
+    "new_url": "https://oepqhdjuujfdlpjjktbs.supabase.co/storage/v1/object/public/productos/6c9140af-3f68-4ebf-85f7-d3da736d25d7.webp?v=1774483200000"
+  },
+  {
+    "producto_id": "af16b0d2-ce0b-4904-8964-a8b378f21c38",
+    "old_url": "https://res.cloudinary.com/dss3lnovd/image/upload/v1775475951/dulcesur/red-point-20-on-click_webp.webp",
+    "new_url": "https://oepqhdjuujfdlpjjktbs.supabase.co/storage/v1/object/public/productos/af16b0d2-ce0b-4904-8964-a8b378f21c38.webp?v=1775163383272"
+  },
+  {
+    "producto_id": "4ee8f9db-85a2-4708-8ccc-8a7933ef8bf1",
+    "old_url": "https://res.cloudinary.com/dss3lnovd/image/upload/v1775474671/dulcesur/alfajor-cofler-block-triple_webp.webp",
+    "new_url": "https://oepqhdjuujfdlpjjktbs.supabase.co/storage/v1/object/public/productos/4ee8f9db-85a2-4708-8ccc-8a7933ef8bf1.webp?v=1777472391547"
+  },
+  {
+    "producto_id": "2040f487-546b-4c04-85b2-72033932b529",
+    "old_url": "https://res.cloudinary.com/dss3lnovd/image/upload/v1775474949/dulcesur/capullito-tapitas-barbacoa-80g_webp.webp",
+    "new_url": "https://oepqhdjuujfdlpjjktbs.supabase.co/storage/v1/object/public/productos/2040f487-546b-4c04-85b2-72033932b529.webp?v=1776816000000"
+  },
+  {
+    "producto_id": "d1d7aa6b-e7dc-4b6c-917a-8b925c33236b",
+    "old_url": "https://res.cloudinary.com/dss3lnovd/image/upload/v1775474543/dulcesur/takis-xplosion-49g_webp.webp",
+    "new_url": "https://oepqhdjuujfdlpjjktbs.supabase.co/storage/v1/object/public/productos/d1d7aa6b-e7dc-4b6c-917a-8b925c33236b.webp?v=1776082337626"
+  },
+  {
+    "producto_id": "f5fd102d-8229-473a-b7f6-661cb2af6caf",
+    "old_url": "https://res.cloudinary.com/dss3lnovd/image/upload/v1775475605/dulcesur/galletitas-pitusas-frutilla-160g_webp.webp",
+    "new_url": "https://oepqhdjuujfdlpjjktbs.supabase.co/storage/v1/object/public/productos/f5fd102d-8229-473a-b7f6-661cb2af6caf.webp?v=1775100791006"
+  },
+  {
+    "producto_id": "cc5acbae-3d31-4aac-9117-139ddaee6bc3",
+    "old_url": "https://res.cloudinary.com/dss3lnovd/image/upload/v1775475297/dulcesur/leche-la-serenisima-sachet-1l_webp.webp",
+    "new_url": "https://oepqhdjuujfdlpjjktbs.supabase.co/storage/v1/object/public/productos/cc5acbae-3d31-4aac-9117-139ddaee6bc3.webp?v=1777556326889"
+  },
+  {
+    "producto_id": "fa3f7eb9-dde0-49b1-8833-d2e89d2265e9",
+    "old_url": "https://res.cloudinary.com/dss3lnovd/image/upload/v1775474237/dulcesur/galletitas-surtido-bagley-398g_webp.webp",
+    "new_url": "https://oepqhdjuujfdlpjjktbs.supabase.co/storage/v1/object/public/productos/fa3f7eb9-dde0-49b1-8833-d2e89d2265e9.webp?v=1777477128158"
+  },
+  {
+    "producto_id": "dfd9be19-0b33-4ec8-af8e-7b2d5ff05491",
+    "old_url": "https://res.cloudinary.com/dss3lnovd/image/upload/v1775474610/dulcesur/turron-arcor_webp.webp",
+    "new_url": "https://oepqhdjuujfdlpjjktbs.supabase.co/storage/v1/object/public/productos/dfd9be19-0b33-4ec8-af8e-7b2d5ff05491.webp?v=1777474291686"
+  },
+  {
+    "producto_id": "b905ff97-bce6-4f33-98df-c020d48981da",
+    "old_url": "https://res.cloudinary.com/dss3lnovd/image/upload/v1775474540/dulcesur/queso-rallado-serenisima-35g_webp.webp",
+    "new_url": "https://oepqhdjuujfdlpjjktbs.supabase.co/storage/v1/object/public/productos/b905ff97-bce6-4f33-98df-c020d48981da.webp?v=1777555787037"
+  },
+  {
+    "producto_id": "e7c65d33-0949-41a6-bf38-1bd4bbab257b",
+    "old_url": "https://res.cloudinary.com/dss3lnovd/image/upload/v1775474679/dulcesur/confites-rocklet-20g_webp.webp",
+    "new_url": "https://oepqhdjuujfdlpjjktbs.supabase.co/storage/v1/object/public/productos/e7c65d33-0949-41a6-bf38-1bd4bbab257b.webp?v=1777474046872"
+  },
+  {
+    "producto_id": "eb11c557-4823-47b2-b7ad-be507ef55485",
+    "old_url": "https://res.cloudinary.com/dss3lnovd/image/upload/v1775474331/dulcesur/alfajor-bon-o-bon-simple-chocolate-40g_webp.webp",
+    "new_url": "https://oepqhdjuujfdlpjjktbs.supabase.co/storage/v1/object/public/productos/eb11c557-4823-47b2-b7ad-be507ef55485.webp?v=1777472423907"
+  },
+  {
+    "producto_id": "3a84bbd9-7d3e-49ce-aa0b-19b61358e411",
+    "old_url": "https://res.cloudinary.com/dss3lnovd/image/upload/v1775474708/dulcesur/chicle-beldent-tutti-fruti_webp.webp",
+    "new_url": "https://oepqhdjuujfdlpjjktbs.supabase.co/storage/v1/object/public/productos/3a84bbd9-7d3e-49ce-aa0b-19b61358e411.webp?v=1774483200000"
+  },
+  {
+    "producto_id": "da8030a0-c9b1-4560-9bfd-7a6891b2f3b8",
+    "old_url": "https://res.cloudinary.com/dss3lnovd/image/upload/v1775474654/dulcesur/galletitas-parnor-suavecitas-140g_webp.webp",
+    "new_url": "https://oepqhdjuujfdlpjjktbs.supabase.co/storage/v1/object/public/productos/da8030a0-c9b1-4560-9bfd-7a6891b2f3b8.webp?v=1775100788529"
+  },
+  {
+    "producto_id": "80593fd8-4bb6-438d-b47f-4f6fc46cd307",
+    "old_url": "https://res.cloudinary.com/dss3lnovd/image/upload/v1775474759/dulcesur/galletitas-oblea-oblita-vainilla-50g_webp.webp",
+    "new_url": "https://oepqhdjuujfdlpjjktbs.supabase.co/storage/v1/object/public/productos/80593fd8-4bb6-438d-b47f-4f6fc46cd307.webp?v=1774379335484"
+  },
+  {
+    "producto_id": "46a9e3ca-ef9b-4f15-b8ce-323d18cbe0c3",
+    "old_url": "https://res.cloudinary.com/dss3lnovd/image/upload/v1775475396/dulcesur/papas-slices-clasicas-70g_webp.webp",
+    "new_url": "https://oepqhdjuujfdlpjjktbs.supabase.co/storage/v1/object/public/productos/46a9e3ca-ef9b-4f15-b8ce-323d18cbe0c3.webp?v=1774483200000"
+  },
+  {
+    "producto_id": "39fde149-a73e-448b-bd8f-430415488e2e",
+    "old_url": "https://res.cloudinary.com/dss3lnovd/image/upload/v1775478356/dulcesur/pfkypqzk3ed1micdaddi.jpg",
+    "new_url": "https://oepqhdjuujfdlpjjktbs.supabase.co/storage/v1/object/public/productos/39fde149-a73e-448b-bd8f-430415488e2e.webp?v=1777475927947"
+  },
+  {
+    "producto_id": "830f5b6a-cb29-4a0b-bac8-1090e4d4e10d",
+    "old_url": "https://res.cloudinary.com/dss3lnovd/image/upload/v1775474606/dulcesur/galletitas-don-satur-salado-200g_webp.webp",
+    "new_url": "https://oepqhdjuujfdlpjjktbs.supabase.co/storage/v1/object/public/productos/830f5b6a-cb29-4a0b-bac8-1090e4d4e10d.webp?v=1777560215982"
+  },
+  {
+    "producto_id": "2b4ffd35-1786-44cc-83c1-6671c5c143ea",
+    "old_url": "https://res.cloudinary.com/dss3lnovd/image/upload/v1775474867/dulcesur/sal-fina-celusal-500g_webp.webp",
+    "new_url": "https://oepqhdjuujfdlpjjktbs.supabase.co/storage/v1/object/public/productos/2b4ffd35-1786-44cc-83c1-6671c5c143ea.webp?v=1775606400000"
+  },
+  {
+    "producto_id": "35c06019-fec8-43a0-bd00-bc756d2a5f43",
+    "old_url": "https://res.cloudinary.com/dss3lnovd/image/upload/v1775474791/dulcesur/galletitas-parnor-mini-mantecadas-170g_webp.webp",
+    "new_url": "https://oepqhdjuujfdlpjjktbs.supabase.co/storage/v1/object/public/productos/35c06019-fec8-43a0-bd00-bc756d2a5f43.webp?v=1775100785818"
+  },
+  {
+    "producto_id": "4b05e580-1127-4d6f-af77-bf5972fee6d7",
+    "old_url": "https://res.cloudinary.com/dss3lnovd/image/upload/v1775474820/dulcesur/galletitas-oblea-oblita-100g-frutilla_webp.webp",
+    "new_url": "https://oepqhdjuujfdlpjjktbs.supabase.co/storage/v1/object/public/productos/4b05e580-1127-4d6f-af77-bf5972fee6d7.webp?v=1774569600000"
+  },
+  {
+    "producto_id": "32e309c3-83b7-4a3a-9695-fb5ae48554e4",
+    "old_url": "https://res.cloudinary.com/dss3lnovd/image/upload/v1775474702/dulcesur/papas-slices-chedar-65g_webp.webp",
+    "new_url": "https://oepqhdjuujfdlpjjktbs.supabase.co/storage/v1/object/public/productos/32e309c3-83b7-4a3a-9695-fb5ae48554e4.webp?v=1774483200000"
+  },
+  {
+    "producto_id": "d5e5f955-3383-4278-8ece-b9fec329acd3",
+    "old_url": "https://res.cloudinary.com/dss3lnovd/image/upload/v1775474919/dulcesur/toallita-lina_webp.webp",
+    "new_url": "https://oepqhdjuujfdlpjjktbs.supabase.co/storage/v1/object/public/productos/d5e5f955-3383-4278-8ece-b9fec329acd3.webp?v=1775305459603"
+  },
+  {
+    "producto_id": "eeb74c06-2e5f-4192-a8bf-c35f071ed39e",
+    "old_url": "https://res.cloudinary.com/dss3lnovd/image/upload/v1775475620/dulcesur/papas-slices-jamon-serrano-65g_webp.webp",
+    "new_url": "https://oepqhdjuujfdlpjjktbs.supabase.co/storage/v1/object/public/productos/eeb74c06-2e5f-4192-a8bf-c35f071ed39e.webp?v=1774483200000"
+  },
+  {
+    "producto_id": "fe0a4828-ede3-47bc-87d2-b5f9741fd50d",
+    "old_url": "https://res.cloudinary.com/dss3lnovd/image/upload/v1775474907/dulcesur/galletitas-mini-alfajor-solitas-160g_webp.webp",
+    "new_url": "https://oepqhdjuujfdlpjjktbs.supabase.co/storage/v1/object/public/productos/fe0a4828-ede3-47bc-87d2-b5f9741fd50d.webp?v=1777464984210"
+  },
+  {
+    "producto_id": "0a7024fb-ea8c-415b-8a6a-a91774916304",
+    "old_url": "https://res.cloudinary.com/dss3lnovd/image/upload/v1775474974/dulcesur/chicle-beldent-menta_webp.webp",
+    "new_url": "https://oepqhdjuujfdlpjjktbs.supabase.co/storage/v1/object/public/productos/0a7024fb-ea8c-415b-8a6a-a91774916304.webp?v=1774483200000"
+  },
+  {
+    "producto_id": "fba1bda0-8666-4df0-8055-f626132302c6",
+    "old_url": "https://res.cloudinary.com/dss3lnovd/image/upload/v1775474944/dulcesur/alfajor-jorgito-negro_webp.webp",
+    "new_url": "https://oepqhdjuujfdlpjjktbs.supabase.co/storage/v1/object/public/productos/fba1bda0-8666-4df0-8055-f626132302c6.webp?v=1775050790136"
+  },
+  {
+    "producto_id": "28d9ea7c-4807-42c4-b933-8ff467864820",
+    "old_url": "https://res.cloudinary.com/dss3lnovd/image/upload/v1775474937/dulcesur/oblea-smack_webp.webp",
+    "new_url": "https://oepqhdjuujfdlpjjktbs.supabase.co/storage/v1/object/public/productos/28d9ea7c-4807-42c4-b933-8ff467864820.webp?v=1776516580866"
+  },
+  {
+    "producto_id": "dc2963a8-3c95-4e33-a155-a5ff87e3c692",
+    "old_url": "https://res.cloudinary.com/dss3lnovd/image/upload/v1775474968/dulcesur/galletitas-coronitas-frambuesa-140g_webp.webp",
+    "new_url": "https://oepqhdjuujfdlpjjktbs.supabase.co/storage/v1/object/public/productos/dc2963a8-3c95-4e33-a155-a5ff87e3c692.webp?v=1776049853886"
+  },
+  {
+    "producto_id": "76d37640-1de6-4c29-9b3d-528319632f50",
+    "old_url": "https://res.cloudinary.com/dss3lnovd/image/upload/v1775474966/dulcesur/takis-original-49g_webp.webp",
+    "new_url": "https://oepqhdjuujfdlpjjktbs.supabase.co/storage/v1/object/public/productos/76d37640-1de6-4c29-9b3d-528319632f50.webp?v=1776082319953"
+  },
+  {
+    "producto_id": "89ca5929-36aa-489e-b18e-60b271e28726",
+    "old_url": "https://res.cloudinary.com/dss3lnovd/image/upload/v1775475022/dulcesur/mayonesa-natura-125cc_webp.webp",
+    "new_url": "https://oepqhdjuujfdlpjjktbs.supabase.co/storage/v1/object/public/productos/89ca5929-36aa-489e-b18e-60b271e28726.webp?v=1776952708330"
+  },
+  {
+    "producto_id": "99affc18-9ec2-4d9c-9f38-3b7b3a3c1b0b",
+    "old_url": "https://res.cloudinary.com/dss3lnovd/image/upload/v1775474993/dulcesur/red-point-ks-20_webp.webp",
+    "new_url": "https://oepqhdjuujfdlpjjktbs.supabase.co/storage/v1/object/public/productos/99affc18-9ec2-4d9c-9f38-3b7b3a3c1b0b.webp?v=1775163410373"
+  },
+  {
+    "producto_id": "13e79c41-2d32-4a0c-8c75-3364ad3f13c0",
+    "old_url": "https://res.cloudinary.com/dss3lnovd/image/upload/v1775475091/dulcesur/palitos-salados-chedar-120g_webp.webp",
+    "new_url": "https://oepqhdjuujfdlpjjktbs.supabase.co/storage/v1/object/public/productos/13e79c41-2d32-4a0c-8c75-3364ad3f13c0.webp?v=1774483200000"
+  },
+  {
+    "producto_id": "7f20124c-c013-4439-8f1a-35b0a13459ed",
+    "old_url": "https://res.cloudinary.com/dss3lnovd/image/upload/v1775475062/dulcesur/conito-4g-queso-65g_webp.webp",
+    "new_url": "https://oepqhdjuujfdlpjjktbs.supabase.co/storage/v1/object/public/productos/7f20124c-c013-4439-8f1a-35b0a13459ed.webp?v=1774483200000"
+  },
+  {
+    "producto_id": "3cd09c16-3561-4989-bc85-dcb2915c2498",
+    "old_url": "https://res.cloudinary.com/dss3lnovd/image/upload/v1775582217/dulcesur/tbaajvk9seazlo6m4bx6.jpg",
+    "new_url": "https://oepqhdjuujfdlpjjktbs.supabase.co/storage/v1/object/public/productos/3cd09c16-3561-4989-bc85-dcb2915c2498.webp?v=1775582255408"
+  },
+  {
+    "producto_id": "9976615c-eab3-4f77-8430-1b06f4296347",
+    "old_url": "https://res.cloudinary.com/dss3lnovd/image/upload/v1775475113/dulcesur/alfajor-rasta-negro-70g_webp.webp",
+    "new_url": "https://oepqhdjuujfdlpjjktbs.supabase.co/storage/v1/object/public/productos/9976615c-eab3-4f77-8430-1b06f4296347.webp?v=1775520000000"
+  },
+  {
+    "producto_id": "99df8d43-b480-47f9-b082-9866607f1172",
+    "old_url": "https://res.cloudinary.com/dss3lnovd/image/upload/v1775475126/dulcesur/chicle-beldent-strong_webp.webp",
+    "new_url": "https://oepqhdjuujfdlpjjktbs.supabase.co/storage/v1/object/public/productos/99df8d43-b480-47f9-b082-9866607f1172.webp?v=1774483200000"
+  },
+  {
+    "producto_id": "6cf3615b-b5aa-4150-babf-969e01010287",
+    "old_url": "https://res.cloudinary.com/dss3lnovd/image/upload/v1775475106/dulcesur/kiyvzerui7jxsz81vllu_webp.webp",
+    "new_url": "https://oepqhdjuujfdlpjjktbs.supabase.co/storage/v1/object/public/productos/6cf3615b-b5aa-4150-babf-969e01010287.webp?v=1777248000000"
+  },
+  {
+    "producto_id": "283f2be9-0edc-4f20-b8de-b84f568e1831",
+    "old_url": "https://res.cloudinary.com/dss3lnovd/image/upload/v1776259990/dulcesur/fu7tbsl6bhoifv4gemfw.jpg",
+    "new_url": "https://oepqhdjuujfdlpjjktbs.supabase.co/storage/v1/object/public/productos/283f2be9-0edc-4f20-b8de-b84f568e1831.webp?v=1774483200000"
+  },
+  {
+    "producto_id": "499c7737-6f59-49c2-8a74-7382f42c3e92",
+    "old_url": "https://res.cloudinary.com/dss3lnovd/image/upload/v1775475166/dulcesur/uvasal_webp.webp",
+    "new_url": "https://oepqhdjuujfdlpjjktbs.supabase.co/storage/v1/object/public/productos/499c7737-6f59-49c2-8a74-7382f42c3e92.webp?v=1777075200000"
+  },
+  {
+    "producto_id": "f460a979-40fe-4ecb-8b3c-10522510a048",
+    "old_url": "https://res.cloudinary.com/dss3lnovd/image/upload/v1775475148/dulcesur/encendedor-pura-mecha_webp.webp",
+    "new_url": "https://oepqhdjuujfdlpjjktbs.supabase.co/storage/v1/object/public/productos/f460a979-40fe-4ecb-8b3c-10522510a048.webp?v=1774483200000"
+  },
+  {
+    "producto_id": "56fe38c0-e743-4d99-b486-1a2a9685d2f4",
+    "old_url": "https://res.cloudinary.com/dss3lnovd/image/upload/v1775475288/dulcesur/galletitas-don-satur-agridulce-200g_webp.webp",
+    "new_url": "https://oepqhdjuujfdlpjjktbs.supabase.co/storage/v1/object/public/productos/56fe38c0-e743-4d99-b486-1a2a9685d2f4.webp?v=1777560214299"
+  },
+  {
+    "producto_id": "ebf019cf-f811-4558-a078-049c7b0ea19e",
+    "old_url": "https://res.cloudinary.com/dss3lnovd/image/upload/v1775475364/dulcesur/aceite-san-vicente-girasol-900ml_webp.webp",
+    "new_url": "https://oepqhdjuujfdlpjjktbs.supabase.co/storage/v1/object/public/productos/ebf019cf-f811-4558-a078-049c7b0ea19e.webp?v=1777382945681"
+  },
+  {
+    "producto_id": "f995ffbe-6980-423a-86d7-07828700fcd0",
+    "old_url": "https://res.cloudinary.com/dss3lnovd/image/upload/v1775475424/dulcesur/picadillo-swift-90g_webp.webp",
+    "new_url": "https://oepqhdjuujfdlpjjktbs.supabase.co/storage/v1/object/public/productos/f995ffbe-6980-423a-86d7-07828700fcd0.webp?v=1775735631286"
+  },
+  {
+    "producto_id": "82708e62-900a-4cb0-b4b4-a813b91ad586",
+    "old_url": "https://res.cloudinary.com/dss3lnovd/image/upload/v1775475426/dulcesur/alfajor-bon-o-bon-triple_webp.webp",
+    "new_url": "https://oepqhdjuujfdlpjjktbs.supabase.co/storage/v1/object/public/productos/82708e62-900a-4cb0-b4b4-a813b91ad586.webp?v=1777472389961"
+  },
+  {
+    "producto_id": "a53b42e7-0da2-4500-be14-e79ec2c0ba3f",
+    "old_url": "https://res.cloudinary.com/dss3lnovd/image/upload/v1775474490/dulcesur/capullito-larguitos-80g_webp.webp",
+    "new_url": "https://oepqhdjuujfdlpjjktbs.supabase.co/storage/v1/object/public/productos/a53b42e7-0da2-4500-be14-e79ec2c0ba3f.webp?v=1776816000000"
+  },
+  {
+    "producto_id": "b9cfd68c-2b24-4b90-acb6-07a700d305fa",
+    "old_url": "https://res.cloudinary.com/dss3lnovd/image/upload/v1775475411/dulcesur/galletitas-rex-sobre-75g_webp.webp",
+    "new_url": "https://oepqhdjuujfdlpjjktbs.supabase.co/storage/v1/object/public/productos/b9cfd68c-2b24-4b90-acb6-07a700d305fa.webp?v=1777476923758"
+  },
+  {
+    "producto_id": "72af17c5-b216-4a4c-95ae-be3da01ea5eb",
+    "old_url": "https://res.cloudinary.com/dss3lnovd/image/upload/v1775475449/dulcesur/chocolate-cofler-block-38g_webp.webp",
+    "new_url": "https://oepqhdjuujfdlpjjktbs.supabase.co/storage/v1/object/public/productos/72af17c5-b216-4a4c-95ae-be3da01ea5eb.webp?v=1775305408655"
+  },
+  {
+    "producto_id": "94056d58-e08e-4797-88c9-3cae91d6d231",
+    "old_url": "https://res.cloudinary.com/dss3lnovd/image/upload/v1775475516/dulcesur/galletitas-pitusas-chocolate-160g_webp.webp",
+    "new_url": "https://oepqhdjuujfdlpjjktbs.supabase.co/storage/v1/object/public/productos/94056d58-e08e-4797-88c9-3cae91d6d231.webp?v=1775100790272"
+  },
+  {
+    "producto_id": "8699158e-2a91-4f14-a546-4d569166562c",
+    "old_url": "https://res.cloudinary.com/dss3lnovd/image/upload/v1775475520/dulcesur/palitos-salados-clasicos-slices-120g_webp.webp",
+    "new_url": "https://oepqhdjuujfdlpjjktbs.supabase.co/storage/v1/object/public/productos/8699158e-2a91-4f14-a546-4d569166562c.webp?v=1774483200000"
+  },
+  {
+    "producto_id": "1e738a35-f6ae-436d-beab-eca17bbf7daa",
+    "old_url": "https://res.cloudinary.com/dss3lnovd/image/upload/v1775475535/dulcesur/galletitas-oblea-oblita-frutilla-50g_webp.webp",
+    "new_url": "https://oepqhdjuujfdlpjjktbs.supabase.co/storage/v1/object/public/productos/1e738a35-f6ae-436d-beab-eca17bbf7daa.webp?v=1774483200000"
+  },
+  {
+    "producto_id": "1b8313d0-b95f-4f7d-8a05-cde64e5dd47c",
+    "old_url": "https://res.cloudinary.com/dss3lnovd/image/upload/v1775475576/dulcesur/papas-slices-ketchup-65g_webp.webp",
+    "new_url": "https://oepqhdjuujfdlpjjktbs.supabase.co/storage/v1/object/public/productos/1b8313d0-b95f-4f7d-8a05-cde64e5dd47c.webp?v=1774483200000"
+  },
+  {
+    "producto_id": "b77a8d1a-00f4-468b-835c-0c14053915a7",
+    "old_url": "https://res.cloudinary.com/dss3lnovd/image/upload/v1775475609/dulcesur/galletitas-oreo-118g_webp.webp",
+    "new_url": "https://oepqhdjuujfdlpjjktbs.supabase.co/storage/v1/object/public/productos/b77a8d1a-00f4-468b-835c-0c14053915a7.webp?v=1774872809137"
+  },
+  {
+    "producto_id": "4dc9152f-e9b6-430f-9bf1-addf9f9edd2a",
+    "old_url": "https://res.cloudinary.com/dss3lnovd/image/upload/v1775475630/dulcesur/alfajor-guaymallen-triple-negro_webp.webp",
+    "new_url": "https://oepqhdjuujfdlpjjktbs.supabase.co/storage/v1/object/public/productos/4dc9152f-e9b6-430f-9bf1-addf9f9edd2a.webp?v=1775876339274"
+  },
+  {
+    "producto_id": "3c92c50e-8321-4d9f-a29f-6b0068b05cb5",
+    "old_url": "https://res.cloudinary.com/dss3lnovd/image/upload/v1775475594/dulcesur/galletitas-ca%25C3%25B1oncitos-200g_webp.webp",
+    "new_url": "https://oepqhdjuujfdlpjjktbs.supabase.co/storage/v1/object/public/productos/3c92c50e-8321-4d9f-a29f-6b0068b05cb5.webp?v=1777465261037"
+  },
+  {
+    "producto_id": "c42d7f94-9318-400f-9995-b89da7bf5631",
+    "old_url": "https://res.cloudinary.com/dss3lnovd/image/upload/v1775475656/dulcesur/chocolate-daqui-70g_webp.webp",
+    "new_url": "https://oepqhdjuujfdlpjjktbs.supabase.co/storage/v1/object/public/productos/c42d7f94-9318-400f-9995-b89da7bf5631.webp?v=1776779192264"
+  },
+  {
+    "producto_id": "8e5149e5-cd2f-4d8c-a205-ea4a9bf34653",
+    "old_url": "https://res.cloudinary.com/dss3lnovd/image/upload/v1775474571/dulcesur/capullito-pizzitas-80g_webp.webp",
+    "new_url": "https://oepqhdjuujfdlpjjktbs.supabase.co/storage/v1/object/public/productos/8e5149e5-cd2f-4d8c-a205-ea4a9bf34653.webp?v=1776816000000"
+  },
+  {
+    "producto_id": "177cd4c4-4aad-46a6-97f9-ea77536f09ff",
+    "old_url": "https://res.cloudinary.com/dss3lnovd/image/upload/v1775475644/dulcesur/galletitas-mediatarde-clasicas-tripack-315g_webp.webp",
+    "new_url": "https://oepqhdjuujfdlpjjktbs.supabase.co/storage/v1/object/public/productos/177cd4c4-4aad-46a6-97f9-ea77536f09ff.webp?v=1777476796238"
+  },
+  {
+    "producto_id": "8ebfa2b1-e825-4468-9473-377b8a032ae9",
+    "old_url": "https://res.cloudinary.com/dss3lnovd/image/upload/v1775475701/dulcesur/turron-misky_webp.webp",
+    "new_url": "https://oepqhdjuujfdlpjjktbs.supabase.co/storage/v1/object/public/productos/8ebfa2b1-e825-4468-9473-377b8a032ae9.webp?v=1777475868302"
+  },
+  {
+    "producto_id": "5ec8ec2f-b7c7-4054-b995-5b66abe96535",
+    "old_url": "https://res.cloudinary.com/dss3lnovd/image/upload/v1775475699/dulcesur/alikal_webp.webp",
+    "new_url": "https://oepqhdjuujfdlpjjktbs.supabase.co/storage/v1/object/public/productos/5ec8ec2f-b7c7-4054-b995-5b66abe96535.webp?v=1777075200000"
+  },
+  {
+    "producto_id": "b4a57000-a6fc-45f6-9fa6-2e33bab65db2",
+    "old_url": "https://res.cloudinary.com/dss3lnovd/image/upload/v1775475751/dulcesur/palitos-salados-jamon-serrano-120g_webp.webp",
+    "new_url": "https://oepqhdjuujfdlpjjktbs.supabase.co/storage/v1/object/public/productos/b4a57000-a6fc-45f6-9fa6-2e33bab65db2.webp?v=1774498682445"
+  },
+  {
+    "producto_id": "9b80b48b-9ce7-4e2f-a722-3f990b662a61",
+    "old_url": "https://res.cloudinary.com/dss3lnovd/image/upload/v1775475813/dulcesur/toallita-ladysoft-normal_webp.webp",
+    "new_url": "https://oepqhdjuujfdlpjjktbs.supabase.co/storage/v1/object/public/productos/9b80b48b-9ce7-4e2f-a722-3f990b662a61.webp?v=1774379345759"
+  },
+  {
+    "producto_id": "1c09872f-74c9-49d1-be6b-f3a67e9d762d",
+    "old_url": "https://res.cloudinary.com/dss3lnovd/image/upload/v1775475798/dulcesur/galletitas-surtido-diversion-400g_webp.webp",
+    "new_url": "https://oepqhdjuujfdlpjjktbs.supabase.co/storage/v1/object/public/productos/1c09872f-74c9-49d1-be6b-f3a67e9d762d.webp?v=1777476244963"
+  },
+  {
+    "producto_id": "2ad1668a-45f9-4833-b2a9-50d61f2430fb",
+    "old_url": "https://res.cloudinary.com/dss3lnovd/image/upload/v1775475795/dulcesur/alfajor-chocotorta-triple_webp.webp",
+    "new_url": "https://oepqhdjuujfdlpjjktbs.supabase.co/storage/v1/object/public/productos/2ad1668a-45f9-4833-b2a9-50d61f2430fb.webp?v=1777472390766"
+  },
+  {
+    "producto_id": "88606e21-683f-4bef-8d92-470c9ca933a3",
+    "old_url": "https://res.cloudinary.com/dss3lnovd/image/upload/v1775475803/dulcesur/galletitas-pitusas-vainilla-160g_webp.webp",
+    "new_url": "https://oepqhdjuujfdlpjjktbs.supabase.co/storage/v1/object/public/productos/88606e21-683f-4bef-8d92-470c9ca933a3.webp?v=1775100878686"
+  },
+  {
+    "producto_id": "2d417dec-2867-41c1-8bb0-8b83ebf3cb79",
+    "old_url": "https://res.cloudinary.com/dss3lnovd/image/upload/v1775475845/dulcesur/galletitas-pitusas-black-chocolate-160g_webp.webp",
+    "new_url": "https://oepqhdjuujfdlpjjktbs.supabase.co/storage/v1/object/public/productos/2d417dec-2867-41c1-8bb0-8b83ebf3cb79.webp?v=1775564362690"
+  },
+  {
+    "producto_id": "94289700-094b-4870-8e5f-a2e382659925",
+    "old_url": "https://res.cloudinary.com/dss3lnovd/image/upload/v1775474234/dulcesur/alfajor-jorgito-blanco_webp.webp",
+    "new_url": "https://oepqhdjuujfdlpjjktbs.supabase.co/storage/v1/object/public/productos/94289700-094b-4870-8e5f-a2e382659925.webp?v=1775050782710"
+  },
+  {
+    "producto_id": "4155e272-0883-4b4a-965f-856d696aafa5",
+    "old_url": "https://res.cloudinary.com/dss3lnovd/image/upload/v1775475833/dulcesur/galletitas-mediatarde-sandwich-tripack-321g_webp.webp",
+    "new_url": "https://oepqhdjuujfdlpjjktbs.supabase.co/storage/v1/object/public/productos/4155e272-0883-4b4a-965f-856d696aafa5.webp?v=1777476780250"
+  },
+  {
+    "producto_id": "d0dbc393-d017-4f88-8395-836942de5e55",
+    "old_url": "https://res.cloudinary.com/dss3lnovd/image/upload/v1775475866/dulcesur/prestobarba-gillete-2-filos_webp.webp",
+    "new_url": "https://oepqhdjuujfdlpjjktbs.supabase.co/storage/v1/object/public/productos/d0dbc393-d017-4f88-8395-836942de5e55.webp?v=1774483200000"
+  },
+  {
+    "producto_id": "7d49f3fe-3e86-48da-99f9-7a4e71e33e1a",
+    "old_url": "https://res.cloudinary.com/dss3lnovd/image/upload/v1775474056/dulcesur/alfajor-guaymallen-simple-blanco_webp.webp",
+    "new_url": "https://oepqhdjuujfdlpjjktbs.supabase.co/storage/v1/object/public/productos/7d49f3fe-3e86-48da-99f9-7a4e71e33e1a.webp?v=1775876336878"
+  },
+  {
+    "producto_id": "2afd2e8c-ca94-4de5-8402-646575bf92b0",
+    "old_url": "https://res.cloudinary.com/dss3lnovd/image/upload/v1775475972/dulcesur/galletitas-oblea-oblita-chocolate-50g_webp.webp",
+    "new_url": "https://oepqhdjuujfdlpjjktbs.supabase.co/storage/v1/object/public/productos/2afd2e8c-ca94-4de5-8402-646575bf92b0.webp?v=1774483200000"
+  },
+  {
+    "producto_id": "073b8217-4067-45fd-9ecf-1993bbb57510",
+    "old_url": "https://res.cloudinary.com/dss3lnovd/image/upload/v1775475089/dulcesur/capullito-palitos-de-maiz-80g_webp.webp",
+    "new_url": "https://oepqhdjuujfdlpjjktbs.supabase.co/storage/v1/object/public/productos/073b8217-4067-45fd-9ecf-1993bbb57510.webp?v=1776816000000"
+  }
+]

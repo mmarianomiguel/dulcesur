@@ -295,8 +295,8 @@ export default function VentasPage() {
   // Light refresh: only products + presentaciones (for tab focus)
   const refreshProducts = useCallback(async () => {
     const [{ data: prods1 }, { data: prods2 }, { data: presData1 }, { data: presData2 }] = await Promise.all([
-      supabase.from("productos").select("id, codigo, codigos_adicionales, nombre, precio, costo, stock, unidad_medida, categoria_id, subcategoria_id, marca_id, es_combo").eq("activo", true).order("nombre").range(0, 999),
-      supabase.from("productos").select("id, codigo, codigos_adicionales, nombre, precio, costo, stock, unidad_medida, categoria_id, subcategoria_id, marca_id, es_combo").eq("activo", true).order("nombre").range(1000, 2999),
+      supabase.from("productos").select("id, codigo, codigos_adicionales, nombre, precio, costo, stock, unidad_medida, categoria_id, subcategoria_id, marca_id, es_combo, imagen_url").eq("activo", true).order("nombre").range(0, 999),
+      supabase.from("productos").select("id, codigo, codigos_adicionales, nombre, precio, costo, stock, unidad_medida, categoria_id, subcategoria_id, marca_id, es_combo, imagen_url").eq("activo", true).order("nombre").range(1000, 2999),
       supabase.from("presentaciones").select("id, producto_id, nombre, cantidad, precio, costo, sku").order("id").range(0, 999),
       supabase.from("presentaciones").select("id, producto_id, nombre, cantidad, precio, costo, sku").order("id").range(1000, 2999),
     ]);
@@ -317,8 +317,8 @@ export default function VentasPage() {
     const [{ data: prods1 }, { data: prods2 }, { data: cls }, { data: sls }, { data: listas }, { data: zonasData },
            { data: allComboItems }, { data: descuentosData }, { data: presData1 }, { data: presData2 },
            { data: empData }, { data: tcData }, { data: cuentasData }] = await Promise.all([
-      supabase.from("productos").select("id, codigo, codigos_adicionales, nombre, precio, costo, stock, unidad_medida, categoria_id, subcategoria_id, marca_id, es_combo").eq("activo", true).order("nombre").range(0, 999),
-      supabase.from("productos").select("id, codigo, codigos_adicionales, nombre, precio, costo, stock, unidad_medida, categoria_id, subcategoria_id, marca_id, es_combo").eq("activo", true).order("nombre").range(1000, 2999),
+      supabase.from("productos").select("id, codigo, codigos_adicionales, nombre, precio, costo, stock, unidad_medida, categoria_id, subcategoria_id, marca_id, es_combo, imagen_url").eq("activo", true).order("nombre").range(0, 999),
+      supabase.from("productos").select("id, codigo, codigos_adicionales, nombre, precio, costo, stock, unidad_medida, categoria_id, subcategoria_id, marca_id, es_combo, imagen_url").eq("activo", true).order("nombre").range(1000, 2999),
       supabase.from("clientes").select("id, codigo_cliente, nombre, email, telefono, saldo, situacion_iva, tipo_factura, tipo_documento, numero_documento, cuit, razon_social, domicilio, domicilio_comercial, domicilio_fiscal, localidad, provincia, codigo_postal, barrio, vendedor_id, observacion, zona_entrega, limite_credito").eq("activo", true).order("nombre"),
       supabase.from("usuarios").select("id, nombre, email, rol, activo").eq("activo", true).eq("rol", "vendedor"),
       supabase.from("listas_precios").select("id, nombre, porcentaje_ajuste, es_default").eq("activa", true).order("nombre"),

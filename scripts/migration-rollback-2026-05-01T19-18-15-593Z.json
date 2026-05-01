@@ -1,0 +1,52 @@
+[
+  {
+    "producto_id": "0274cf23-7885-4584-b800-a943a485a797",
+    "old_url": "https://res.cloudinary.com/dss3lnovd/image/upload/v1775475383/dulcesur/alfajor-guaymallen-simple-negro_webp.webp",
+    "new_url": "https://oepqhdjuujfdlpjjktbs.supabase.co/storage/v1/object/public/productos/0274cf23-7885-4584-b800-a943a485a797.webp?v=1775876337714"
+  },
+  {
+    "producto_id": "02791666-1910-4371-896e-36cdcb6ab137",
+    "old_url": "https://res.cloudinary.com/dss3lnovd/image/upload/v1775475216/dulcesur/coca-cola-mini-250cc-pack-x12-un_webp.webp",
+    "new_url": "https://oepqhdjuujfdlpjjktbs.supabase.co/storage/v1/object/public/productos/02791666-1910-4371-896e-36cdcb6ab137.webp?v=1775600499847"
+  },
+  {
+    "producto_id": "027d8fa0-c507-418d-9f53-84967618f19e",
+    "old_url": "https://res.cloudinary.com/dss3lnovd/image/upload/v1775475422/dulcesur/pan-rallado-preferido-500g_webp.webp",
+    "new_url": "https://oepqhdjuujfdlpjjktbs.supabase.co/storage/v1/object/public/productos/027d8fa0-c507-418d-9f53-84967618f19e.webp?v=1775655373411"
+  },
+  {
+    "producto_id": "02a9aa78-1698-4d65-887f-15a534da0880",
+    "old_url": "https://res.cloudinary.com/dss3lnovd/image/upload/v1775474779/dulcesur/turron-de-mani-namur-crocante-georgalos-90g_webp.webp",
+    "new_url": "https://oepqhdjuujfdlpjjktbs.supabase.co/storage/v1/object/public/productos/02a9aa78-1698-4d65-887f-15a534da0880.webp?v=1774379343323"
+  },
+  {
+    "producto_id": "0323249e-3b43-4409-ae2b-1a7defff3507",
+    "old_url": "https://res.cloudinary.com/dss3lnovd/image/upload/v1775475900/dulcesur/mr-pop-frutal_webp.webp",
+    "new_url": "https://oepqhdjuujfdlpjjktbs.supabase.co/storage/v1/object/public/productos/0323249e-3b43-4409-ae2b-1a7defff3507.webp?v=1777474235889"
+  },
+  {
+    "producto_id": "033670b8-1ce1-4515-9e4e-8cef03454c4c",
+    "old_url": "https://res.cloudinary.com/dss3lnovd/image/upload/v1775474532/dulcesur/takis-fuego-49g_webp.webp",
+    "new_url": "https://oepqhdjuujfdlpjjktbs.supabase.co/storage/v1/object/public/productos/033670b8-1ce1-4515-9e4e-8cef03454c4c.webp?v=1774379340882"
+  },
+  {
+    "producto_id": "03a34fe6-e81e-4c4d-9630-a11f810ca08a",
+    "old_url": "https://res.cloudinary.com/dss3lnovd/image/upload/v1775475354/dulcesur/broches-plasticos-clip-x12-un_webp.webp",
+    "new_url": "https://oepqhdjuujfdlpjjktbs.supabase.co/storage/v1/object/public/productos/03a34fe6-e81e-4c4d-9630-a11f810ca08a.webp?v=1777037732895"
+  },
+  {
+    "producto_id": "03b3574d-4703-48f6-9c38-3f25af5638fa",
+    "old_url": "https://res.cloudinary.com/dss3lnovd/image/upload/v1775474320/dulcesur/galletitas-mini-rellenas-nona-streamer-surtidos-150g_webp.webp",
+    "new_url": "https://oepqhdjuujfdlpjjktbs.supabase.co/storage/v1/object/public/productos/03b3574d-4703-48f6-9c38-3f25af5638fa.webp?v=1777383664499"
+  },
+  {
+    "producto_id": "041de143-980a-48a4-84eb-7039bb9ba31d",
+    "old_url": "https://res.cloudinary.com/dss3lnovd/image/upload/v1775474850/dulcesur/chupetin-fierita-tattoo-50un_webp.webp",
+    "new_url": "https://oepqhdjuujfdlpjjktbs.supabase.co/storage/v1/object/public/productos/041de143-980a-48a4-84eb-7039bb9ba31d.webp?v=1775001600000"
+  },
+  {
+    "producto_id": "042df0ec-5199-4746-bb5f-49b5ffe47f0e",
+    "old_url": "https://res.cloudinary.com/dss3lnovd/image/upload/v1775475598/dulcesur/pastilla-bull-dog-mix-sandiamanzana_webp.webp",
+    "new_url": "https://oepqhdjuujfdlpjjktbs.supabase.co/storage/v1/object/public/productos/042df0ec-5199-4746-bb5f-49b5ffe47f0e.webp?v=1774379342717"
+  }
+]

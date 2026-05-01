@@ -1,0 +1,52 @@
+[
+  {
+    "producto_id": "000f988d-6903-4beb-ab45-1eba5bcc1c3d",
+    "old_url": "https://res.cloudinary.com/dss3lnovd/image/upload/v1775475510/dulcesur/wve528jh8dowb9xwxfm2_webp.webp",
+    "new_url": "https://oepqhdjuujfdlpjjktbs.supabase.co/storage/v1/object/public/productos/000f988d-6903-4beb-ab45-1eba5bcc1c3d.webp?v=1774506635222"
+  },
+  {
+    "producto_id": "003307d1-e58b-4843-98af-938bc0c8be8c",
+    "old_url": "https://res.cloudinary.com/dss3lnovd/image/upload/v1775475286/dulcesur/algodon-estrella-75g_webp.webp",
+    "new_url": "https://oepqhdjuujfdlpjjktbs.supabase.co/storage/v1/object/public/productos/003307d1-e58b-4843-98af-938bc0c8be8c.webp?v=1774379347589"
+  },
+  {
+    "producto_id": "006b0a74-f6ff-4308-9f1a-621c9dd036e0",
+    "old_url": "https://res.cloudinary.com/dss3lnovd/image/upload/v1775474773/dulcesur/dgzf8ab9skevl7dr6daw_webp.webp",
+    "new_url": "https://oepqhdjuujfdlpjjktbs.supabase.co/storage/v1/object/public/productos/006b0a74-f6ff-4308-9f1a-621c9dd036e0.webp?v=1777476003717"
+  },
+  {
+    "producto_id": "00a3a556-901e-4d2d-bf33-5b7923818d87",
+    "old_url": "https://res.cloudinary.com/dss3lnovd/image/upload/v1775474985/dulcesur/magdalena-pozo-dulce-de-leche-200g_webp.webp",
+    "new_url": "https://oepqhdjuujfdlpjjktbs.supabase.co/storage/v1/object/public/productos/00a3a556-901e-4d2d-bf33-5b7923818d87.webp?v=1775927234391"
+  },
+  {
+    "producto_id": "011e1e9a-e0a6-4faa-9344-2be324782176",
+    "old_url": "https://res.cloudinary.com/dss3lnovd/image/upload/v1775474735/dulcesur/galletitas-cofler-block-124g_webp.webp",
+    "new_url": "https://oepqhdjuujfdlpjjktbs.supabase.co/storage/v1/object/public/productos/011e1e9a-e0a6-4faa-9344-2be324782176.webp?v=1777476429248"
+  },
+  {
+    "producto_id": "011f608a-7851-4b2b-8693-f6abfc9d51bf",
+    "old_url": "https://res.cloudinary.com/dss3lnovd/image/upload/v1775475587/dulcesur/galletitas-galleguitas-200g_webp.webp",
+    "new_url": "https://oepqhdjuujfdlpjjktbs.supabase.co/storage/v1/object/public/productos/011f608a-7851-4b2b-8693-f6abfc9d51bf.webp?v=1777465262758"
+  },
+  {
+    "producto_id": "017573bf-6c4d-4a57-8f16-29489609f273",
+    "old_url": "https://res.cloudinary.com/dss3lnovd/image/upload/v1775475085/dulcesur/galletitas-ns-tradicionales-300g_webp.webp",
+    "new_url": "https://oepqhdjuujfdlpjjktbs.supabase.co/storage/v1/object/public/productos/017573bf-6c4d-4a57-8f16-29489609f273.webp?v=1774379345759"
+  },
+  {
+    "producto_id": "01c58822-607c-494e-9f1b-83a2347b457b",
+    "old_url": "https://res.cloudinary.com/dss3lnovd/image/upload/v1775474633/dulcesur/galletitas-talitas-urquiza-jamon-100g_webp.webp",
+    "new_url": "https://oepqhdjuujfdlpjjktbs.supabase.co/storage/v1/object/public/productos/01c58822-607c-494e-9f1b-83a2347b457b.webp?v=1774507899017"
+  },
+  {
+    "producto_id": "022993de-f21e-4dc2-ba5f-3c826ebb9e62",
+    "old_url": "https://res.cloudinary.com/dss3lnovd/image/upload/v1775478368/dulcesur/dwclszwrte6npnud19jo.png",
+    "new_url": "https://oepqhdjuujfdlpjjktbs.supabase.co/storage/v1/object/public/productos/022993de-f21e-4dc2-ba5f-3c826ebb9e62.webp?v=1777475928763"
+  },
+  {
+    "producto_id": "023b798d-416f-4e91-b814-2bbb1e6143bc",
+    "old_url": "https://res.cloudinary.com/dss3lnovd/image/upload/v1775474357/dulcesur/turron-fulbito-caramel-caja-x50-un_webp.webp",
+    "new_url": "https://oepqhdjuujfdlpjjktbs.supabase.co/storage/v1/object/public/productos/023b798d-416f-4e91-b814-2bbb1e6143bc.webp?v=1774495342252"
+  }
+]
