@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useLayoutEffect, useState, useCallback, useRef, useMemo } from "react";
+import { useRouter } from "next/navigation";
 import { todayARG, nowTimeARG, formatCurrency } from "@/lib/formatters";
 import { supabase } from "@/lib/supabase";
 import { showAdminToast } from "@/components/admin-toast";
@@ -139,6 +140,7 @@ function initials(name: string) {
 
 // ---------- component ----------
 export default function VentasPage() {
+  const router = useRouter();
   const currentUser = useCurrentUser();
   // --- data ---
   const [products, setProducts] = useState<Producto[]>([]);
@@ -260,6 +262,8 @@ export default function VentasPage() {
   const [selectedItemIdx, setSelectedItemIdx] = useState(-1);
   const [cartContextMenu, setCartContextMenu] = useState<{ x: number; y: number; itemId: string } | null>(null);
   const cartMenuRef = useRef<HTMLDivElement>(null);
+  const [clientContextMenu, setClientContextMenu] = useState<{ x: number; y: number } | null>(null);
+  const clientMenuRef = useRef<HTMLDivElement>(null);
   const [quickViewItem, setQuickViewItem] = useState<LineItem | null>(null);
   const [editPriceItem, setEditPriceItem] = useState<LineItem | null>(null);
   const [editPriceValue, setEditPriceValue] = useState("");
@@ -711,6 +715,68 @@ export default function VentasPage() {
       window.removeEventListener("scroll", close, true);
     };
   }, [cartContextMenu]);
+
+  useEffect(() => {
+    if (!clientContextMenu) return;
+    const close = () => setClientContextMenu(null);
+    const handleKey = (e: KeyboardEvent) => { if (e.key === "Escape") close(); };
+    document.addEventListener("click", close);
+    document.addEventListener("keydown", handleKey);
+    window.addEventListener("scroll", close, true);
+    return () => {
+      document.removeEventListener("click", close);
+      document.removeEventListener("keydown", handleKey);
+      window.removeEventListener("scroll", close, true);
+    };
+  }, [clientContextMenu]);
+
+  useLayoutEffect(() => {
+    if (!clientContextMenu) return;
+    const el = clientMenuRef.current;
+    if (!el) return;
+    const rect = el.getBoundingClientRect();
+    const vh = window.innerHeight;
+    const vw = window.innerWidth;
+    let nx = clientContextMenu.x;
+    let ny = clientContextMenu.y;
+    let needs = false;
+    if (rect.bottom > vh - 8) { ny = Math.max(8, vh - rect.height - 8); needs = true; }
+    if (rect.right > vw - 8) { nx = Math.max(8, vw - rect.width - 8); needs = true; }
+    if (needs && (nx !== clientContextMenu.x || ny !== clientContextMenu.y)) {
+      setClientContextMenu({ x: nx, y: ny });
+    }
+  }, [clientContextMenu]);
+
+  const handleClientContextMenu = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setClientContextMenu({ x: e.clientX, y: e.clientY });
+  };
+
+  const clearSelectedClient = () => {
+    if (items.length > 0 && (formaPago === "Cuenta Corriente" || (formaPago === "Mixto" && mixtoCuentaCorriente > 0))) {
+      setConfirmDialog({
+        open: true,
+        title: "Cambiar cliente",
+        message: "Hay items en el carrito con Cuenta Corriente. ¿Cambiar cliente?",
+        onConfirm: () => {
+          setClientId("");
+          setClientAddresses([]);
+          setSelectedAddressId("");
+          setDeliveryMethod("pickup");
+          setCobrarEnEntrega(false);
+          if (codigoClienteRef.current) codigoClienteRef.current.value = "";
+        },
+      });
+      return;
+    }
+    setClientId("");
+    setClientAddresses([]);
+    setSelectedAddressId("");
+    setDeliveryMethod("pickup");
+    setCobrarEnEntrega(false);
+    if (codigoClienteRef.current) codigoClienteRef.current.value = "";
+  };
 
   const handleCartContextMenu = (e: React.MouseEvent, itemId: string) => {
     e.preventDefault();
@@ -2348,6 +2414,7 @@ export default function VentasPage() {
                   setClientHighlight(0);
                   setClientDialogOpen(true);
                 }}
+                onContextMenu={handleClientContextMenu}
                 className="flex items-center gap-2 flex-1 px-3 h-9 text-left hover:bg-accent transition-colors"
               >
                 <User className="w-4 h-4 text-muted-foreground shrink-0" />
@@ -4526,6 +4593,59 @@ export default function VentasPage() {
           </div>
         );
       })()}
+
+      {/* Client context menu */}
+      {clientContextMenu && (
+        <div
+          ref={clientMenuRef}
+          className="fixed z-50 bg-background border border-border rounded-xl shadow-lg py-1 min-w-[220px]"
+          style={{ left: clientContextMenu.x, top: clientContextMenu.y, maxHeight: "calc(100vh - 16px)", overflowY: "auto" }}
+          onClick={(e) => e.stopPropagation()}
+          onContextMenu={(e) => e.preventDefault()}
+        >
+          <div className="px-3 py-2 border-b">
+            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide truncate">
+              {selectedClient ? selectedClient.nombre : "Consumidor Final"}
+            </p>
+          </div>
+          <div className="py-1">
+            <button
+              className="flex items-center gap-2.5 w-full px-3 py-2 text-sm hover:bg-muted/60 transition-colors text-left"
+              onClick={() => {
+                setClientContextMenu(null);
+                setClientSearch("");
+                setClientHighlight(0);
+                setClientDialogOpen(true);
+              }}
+            >
+              <Search className="w-4 h-4 text-muted-foreground" /> {selectedClient ? "Cambiar cliente" : "Buscar cliente"}
+            </button>
+            {selectedClient && (
+              <>
+                <button
+                  className="flex items-center gap-2.5 w-full px-3 py-2 text-sm hover:bg-muted/60 transition-colors text-left"
+                  onClick={() => { setClientContextMenu(null); router.push(`/admin/clientes?buscar=${encodeURIComponent(selectedClient.nombre)}`); }}
+                >
+                  <Eye className="w-4 h-4 text-muted-foreground" /> Ver cuenta corriente
+                </button>
+                <button
+                  className="flex items-center gap-2.5 w-full px-3 py-2 text-sm hover:bg-muted/60 transition-colors text-left"
+                  onClick={() => { setClientContextMenu(null); router.push(`/admin/ventas/listado?buscar=${encodeURIComponent(selectedClient.nombre)}`); }}
+                >
+                  <FileText className="w-4 h-4 text-muted-foreground" /> Ver últimas ventas
+                </button>
+                <div className="border-t my-1" />
+                <button
+                  className="flex items-center gap-2.5 w-full px-3 py-2 text-sm hover:bg-muted/60 transition-colors text-left text-destructive"
+                  onClick={() => { setClientContextMenu(null); clearSelectedClient(); }}
+                >
+                  <X className="w-4 h-4" /> Quitar cliente
+                </button>
+              </>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Edit price dialog */}
       <Dialog open={!!editPriceItem} onOpenChange={(o) => { if (!o) { setEditPriceItem(null); setEditPriceValue(""); } }}>
