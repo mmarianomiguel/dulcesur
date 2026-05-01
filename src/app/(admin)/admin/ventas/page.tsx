@@ -692,7 +692,10 @@ export default function VentasPage() {
     e.preventDefault();
     e.stopPropagation();
     const menuWidth = 240;
-    const menuHeight = 380;
+    // Altura estimada teniendo en cuenta multiples presentaciones del producto.
+    const item = items.find((i) => i.id === itemId);
+    const presCount = item ? (presentacionesMap[item.producto_id]?.length || 1) : 1;
+    const menuHeight = 380 + Math.max(0, presCount - 1) * 28;
     const vw = window.innerWidth;
     const vh = window.innerHeight;
     let x = e.clientX;
