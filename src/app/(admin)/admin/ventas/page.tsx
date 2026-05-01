@@ -259,6 +259,8 @@ export default function VentasPage() {
   const [selectedItemIdx, setSelectedItemIdx] = useState(-1);
   const [cartContextMenu, setCartContextMenu] = useState<{ x: number; y: number; itemId: string } | null>(null);
   const [quickViewItem, setQuickViewItem] = useState<LineItem | null>(null);
+  const [editPriceItem, setEditPriceItem] = useState<LineItem | null>(null);
+  const [editPriceValue, setEditPriceValue] = useState("");
   const cartListRef = useRef<HTMLDivElement>(null);
   const qtyBuffer = useRef("");
   const qtyBufferTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -753,6 +755,15 @@ export default function VentasPage() {
         subtotal: pres.precio * i.qty * (1 - newDiscount / 100),
         costo_unitario: newCosto,
       };
+    }));
+  };
+
+  const updateItemPrice = (id: string, newPrice: number) => {
+    setItems((prev) => prev.map((i) => {
+      if (i.id !== id) return i;
+      const p = Math.max(0, newPrice);
+      // Editar precio = override manual: descuento se borra para no acumular dos rebajas.
+      return { ...i, price: p, discount: 0, subtotal: p * i.qty };
     }));
   };
 
@@ -4373,6 +4384,18 @@ export default function VentasPage() {
                 <div className="border-t" />
               </>
             )}
+            <div className="px-3 pt-2 pb-1 text-[10px] font-semibold text-muted-foreground uppercase">Precio</div>
+            <div className="py-1">
+              <button
+                className="flex items-center gap-2.5 w-full px-3 py-1.5 text-sm hover:bg-muted/60 transition-colors text-left"
+                onClick={() => { setEditPriceItem(item); setEditPriceValue(String(item.price)); setCartContextMenu(null); }}
+              >
+                <Tag className="w-4 h-4 text-muted-foreground" />
+                <span>Editar precio</span>
+                <span className="ml-auto text-xs text-muted-foreground font-mono">{formatCurrency(item.price)}</span>
+              </button>
+            </div>
+            <div className="border-t" />
             <div className="px-3 pt-2 pb-1 text-[10px] font-semibold text-muted-foreground uppercase">Descuento</div>
             <div className="py-1">
               {[5, 10, 15].map((pct) => (
@@ -4425,6 +4448,50 @@ export default function VentasPage() {
           </div>
         );
       })()}
+
+      {/* Edit price dialog */}
+      <Dialog open={!!editPriceItem} onOpenChange={(o) => { if (!o) { setEditPriceItem(null); setEditPriceValue(""); } }}>
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Editar precio</DialogTitle>
+          </DialogHeader>
+          {editPriceItem && (
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                const n = Number(editPriceValue);
+                if (!Number.isFinite(n) || n < 0) return;
+                updateItemPrice(editPriceItem.id, n);
+                setEditPriceItem(null);
+                setEditPriceValue("");
+              }}
+              className="space-y-3"
+            >
+              <p className="text-sm text-muted-foreground truncate">{editPriceItem.description}</p>
+              <div className="space-y-1.5">
+                <Label className="text-xs">Precio unitario</Label>
+                <Input
+                  type="number"
+                  step="0.01"
+                  min={0}
+                  autoFocus
+                  value={editPriceValue}
+                  onChange={(e) => setEditPriceValue(e.target.value)}
+                  onFocus={(e) => e.target.select()}
+                />
+                <p className="text-[11px] text-muted-foreground">
+                  Original: {formatCurrency(products.find((p) => p.id === editPriceItem.producto_id)?.precio || editPriceItem.price)}
+                  {editPriceItem.discount > 0 && <> · Al guardar se quitará el descuento {editPriceItem.discount}%</>}
+                </p>
+              </div>
+              <div className="flex justify-end gap-2 pt-2">
+                <Button type="button" variant="outline" onClick={() => { setEditPriceItem(null); setEditPriceValue(""); }}>Cancelar</Button>
+                <Button type="submit">Guardar</Button>
+              </div>
+            </form>
+          )}
+        </DialogContent>
+      </Dialog>
 
       {/* Quick view dialog */}
       <Dialog open={!!quickViewItem} onOpenChange={(o) => { if (!o) setQuickViewItem(null); }}>
