@@ -264,6 +264,8 @@ export default function VentasPage() {
   const cartMenuRef = useRef<HTMLDivElement>(null);
   const [clientContextMenu, setClientContextMenu] = useState<{ x: number; y: number } | null>(null);
   const clientMenuRef = useRef<HTMLDivElement>(null);
+  const [cartGeneralMenu, setCartGeneralMenu] = useState<{ x: number; y: number } | null>(null);
+  const cartGeneralMenuRef = useRef<HTMLDivElement>(null);
   const [quickViewItem, setQuickViewItem] = useState<LineItem | null>(null);
   const [editPriceItem, setEditPriceItem] = useState<LineItem | null>(null);
   const [editPriceValue, setEditPriceValue] = useState("");
@@ -752,6 +754,42 @@ export default function VentasPage() {
     e.stopPropagation();
     setClientContextMenu({ x: e.clientX, y: e.clientY });
   };
+
+  const handleCartGeneralContextMenu = (e: React.MouseEvent) => {
+    e.preventDefault();
+    setCartGeneralMenu({ x: e.clientX, y: e.clientY });
+  };
+
+  useEffect(() => {
+    if (!cartGeneralMenu) return;
+    const close = () => setCartGeneralMenu(null);
+    const handleKey = (e: KeyboardEvent) => { if (e.key === "Escape") close(); };
+    document.addEventListener("click", close);
+    document.addEventListener("keydown", handleKey);
+    window.addEventListener("scroll", close, true);
+    return () => {
+      document.removeEventListener("click", close);
+      document.removeEventListener("keydown", handleKey);
+      window.removeEventListener("scroll", close, true);
+    };
+  }, [cartGeneralMenu]);
+
+  useLayoutEffect(() => {
+    if (!cartGeneralMenu) return;
+    const el = cartGeneralMenuRef.current;
+    if (!el) return;
+    const rect = el.getBoundingClientRect();
+    const vh = window.innerHeight;
+    const vw = window.innerWidth;
+    let nx = cartGeneralMenu.x;
+    let ny = cartGeneralMenu.y;
+    let needs = false;
+    if (rect.bottom > vh - 8) { ny = Math.max(8, vh - rect.height - 8); needs = true; }
+    if (rect.right > vw - 8) { nx = Math.max(8, vw - rect.width - 8); needs = true; }
+    if (needs && (nx !== cartGeneralMenu.x || ny !== cartGeneralMenu.y)) {
+      setCartGeneralMenu({ x: nx, y: ny });
+    }
+  }, [cartGeneralMenu]);
 
   const clearSelectedClient = () => {
     if (items.length > 0 && (formaPago === "Cuenta Corriente" || (formaPago === "Mixto" && mixtoCuentaCorriente > 0))) {
@@ -2515,7 +2553,7 @@ export default function VentasPage() {
               </div>
             </div>
 
-            <div className="flex-1 overflow-y-auto" ref={cartListRef}>
+            <div className="flex-1 overflow-y-auto" ref={cartListRef} onContextMenu={handleCartGeneralContextMenu}>
               {items.length === 0 ? (
                 <div className="flex flex-col items-center justify-center h-full text-muted-foreground">
                   <Banknote className="w-12 h-12 mb-3 opacity-20" />
@@ -4644,6 +4682,80 @@ export default function VentasPage() {
               </>
             )}
           </div>
+        </div>
+      )}
+
+      {/* Cart general context menu (empty area) */}
+      {cartGeneralMenu && (
+        <div
+          ref={cartGeneralMenuRef}
+          className="fixed z-50 bg-background border border-border rounded-xl shadow-lg py-1 min-w-[220px]"
+          style={{ left: cartGeneralMenu.x, top: cartGeneralMenu.y, maxHeight: "calc(100vh - 16px)", overflowY: "auto" }}
+          onClick={(e) => e.stopPropagation()}
+          onContextMenu={(e) => e.preventDefault()}
+        >
+          <div className="px-3 py-2 border-b">
+            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Carrito</p>
+          </div>
+          <div className="px-3 pt-2 pb-1 text-[10px] font-semibold text-muted-foreground uppercase">Descuento general</div>
+          <div className="py-1">
+            {[5, 10, 15, 20].map((pct) => (
+              <button
+                key={`d${pct}`}
+                className="flex items-center gap-2.5 w-full px-3 py-1.5 text-sm hover:bg-muted/60 transition-colors text-left"
+                onClick={() => { setDescuento(pct); setCartGeneralMenu(null); }}
+              >
+                <Percent className="w-4 h-4 text-muted-foreground" /> {pct}%
+              </button>
+            ))}
+            {descuento > 0 && (
+              <button
+                className="flex items-center gap-2.5 w-full px-3 py-1.5 text-sm hover:bg-muted/60 transition-colors text-left"
+                onClick={() => { setDescuento(0); setCartGeneralMenu(null); }}
+              >
+                <X className="w-4 h-4 text-muted-foreground" /> Quitar descuento
+              </button>
+            )}
+          </div>
+          <div className="border-t" />
+          <div className="px-3 pt-2 pb-1 text-[10px] font-semibold text-muted-foreground uppercase">Recargo general</div>
+          <div className="py-1">
+            {[5, 10].map((pct) => (
+              <button
+                key={`r${pct}`}
+                className="flex items-center gap-2.5 w-full px-3 py-1.5 text-sm hover:bg-muted/60 transition-colors text-left"
+                onClick={() => { setRecargo(pct); setCartGeneralMenu(null); }}
+              >
+                <Percent className="w-4 h-4 text-muted-foreground" /> {pct}%
+              </button>
+            ))}
+            {recargo > 0 && (
+              <button
+                className="flex items-center gap-2.5 w-full px-3 py-1.5 text-sm hover:bg-muted/60 transition-colors text-left"
+                onClick={() => { setRecargo(0); setCartGeneralMenu(null); }}
+              >
+                <X className="w-4 h-4 text-muted-foreground" /> Quitar recargo
+              </button>
+            )}
+          </div>
+          {items.length > 0 && (
+            <div className="border-t py-1">
+              <button
+                className="flex items-center gap-2.5 w-full px-3 py-2 text-sm hover:bg-muted/60 transition-colors text-left text-destructive"
+                onClick={() => {
+                  setCartGeneralMenu(null);
+                  setConfirmDialog({
+                    open: true,
+                    title: "Limpiar carrito",
+                    message: `¿Quitar los ${items.length} producto${items.length === 1 ? "" : "s"} del carrito?`,
+                    onConfirm: () => { setItems([]); setSelectedItemIdx(-1); },
+                  });
+                }}
+              >
+                <Trash2 className="w-4 h-4" /> Limpiar carrito
+              </button>
+            </div>
+          )}
         </div>
       )}
 
