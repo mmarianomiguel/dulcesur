@@ -266,6 +266,11 @@ export default function VentasPage() {
   const clientMenuRef = useRef<HTMLDivElement>(null);
   const [cartGeneralMenu, setCartGeneralMenu] = useState<{ x: number; y: number } | null>(null);
   const cartGeneralMenuRef = useRef<HTMLDivElement>(null);
+  const [ccDialogOpen, setCcDialogOpen] = useState(false);
+  const [ccData, setCcData] = useState<{ saldo: number; movimientos: any[] } | null>(null);
+  const [recentVentasOpen, setRecentVentasOpen] = useState(false);
+  const [recentVentas, setRecentVentas] = useState<any[]>([]);
+  const [historialLoading, setHistorialLoading] = useState(false);
   const [quickViewItem, setQuickViewItem] = useState<LineItem | null>(null);
   const [editPriceItem, setEditPriceItem] = useState<LineItem | null>(null);
   const [editPriceValue, setEditPriceValue] = useState("");
@@ -753,6 +758,87 @@ export default function VentasPage() {
     e.preventDefault();
     e.stopPropagation();
     setClientContextMenu({ x: e.clientX, y: e.clientY });
+  };
+
+  const openCCDialog = async () => {
+    if (!selectedClient) return;
+    setCcDialogOpen(true);
+    setHistorialLoading(true);
+    setCcData(null);
+    const [{ data: cli }, { data: movs }] = await Promise.all([
+      supabase.from("clientes").select("saldo").eq("id", selectedClient.id).single(),
+      supabase.from("cuenta_corriente").select("fecha, comprobante, descripcion, debe, haber, saldo, forma_pago").eq("cliente_id", selectedClient.id).order("fecha", { ascending: false }).order("created_at", { ascending: false }).limit(50),
+    ]);
+    setCcData({ saldo: (cli as any)?.saldo ?? 0, movimientos: movs ?? [] });
+    setHistorialLoading(false);
+  };
+
+  const openRecentVentasDialog = async () => {
+    if (!selectedClient) return;
+    setRecentVentasOpen(true);
+    setHistorialLoading(true);
+    setRecentVentas([]);
+    const { data: vts } = await supabase
+      .from("ventas")
+      .select("id, numero, fecha, total, tipo_comprobante, forma_pago, estado, entregado, monto_pagado")
+      .eq("cliente_id", selectedClient.id)
+      .order("fecha", { ascending: false })
+      .order("created_at", { ascending: false })
+      .limit(20);
+    setRecentVentas(vts ?? []);
+    setHistorialLoading(false);
+  };
+
+  const printHistoricVenta = async (ventaId: string) => {
+    // Cargar la venta completa + items + cliente + caja_movimientos para reconstruir el ticket.
+    const [{ data: v }, { data: vis }, { data: cajaMovs }] = await Promise.all([
+      supabase.from("ventas").select("*, clientes(nombre, domicilio, telefono, situacion_iva)").eq("id", ventaId).single(),
+      supabase.from("venta_items").select("*").eq("venta_id", ventaId).order("created_at"),
+      supabase.from("caja_movimientos").select("metodo_pago, monto, descripcion, cuenta_bancaria").eq("referencia_id", ventaId).eq("referencia_tipo", "venta").eq("tipo", "ingreso"),
+    ]);
+    if (!v) { showAdminToast("No se pudo cargar el comprobante", "error"); return; }
+    const items: LineItem[] = (vis ?? []).map((it: any, idx: number) => ({
+      id: it.id || String(idx),
+      producto_id: it.producto_id || "",
+      code: it.codigo || "",
+      description: it.descripcion || "",
+      qty: it.cantidad,
+      unit: it.unidad_medida || "Un",
+      price: it.precio_unitario,
+      discount: it.descuento || 0,
+      subtotal: it.subtotal,
+      presentacion: it.presentacion || "Unidad",
+      unidades_por_presentacion: it.unidades_por_presentacion || 1,
+      costo_unitario: it.costo_unitario || 0,
+      stock: 0,
+    }));
+    let formaPagoLabel = (v as any).forma_pago || "—";
+    if ((cajaMovs || []).length > 0) {
+      formaPagoLabel = (cajaMovs as any[]).map((m) => m.metodo_pago).join(" + ");
+    }
+    setLastPrintData({
+      open: false,
+      numero: (v as any).numero,
+      total: (v as any).total,
+      subtotal: (v as any).subtotal,
+      descuento: (v as any).descuento_porcentaje || 0,
+      recargo: (v as any).recargo_porcentaje || 0,
+      transferSurcharge: 0,
+      tipoComprobante: (v as any).tipo_comprobante || "Comprobante",
+      formaPago: formaPagoLabel,
+      moneda: "ARS",
+      cliente: (v as any).clientes?.nombre || "Consumidor Final",
+      clienteDireccion: (v as any).clientes?.domicilio || null,
+      clienteTelefono: (v as any).clientes?.telefono || null,
+      clienteCondicionIva: (v as any).clientes?.situacion_iva || null,
+      vendedor: "",
+      items,
+      fecha: (v as any).fecha,
+      saldoAnterior: 0,
+      saldoNuevo: 0,
+      pdfUrl: null,
+    });
+    setReprintOpen(true);
   };
 
   const handleCartGeneralContextMenu = (e: React.MouseEvent) => {
@@ -4662,13 +4748,13 @@ export default function VentasPage() {
               <>
                 <button
                   className="flex items-center gap-2.5 w-full px-3 py-2 text-sm hover:bg-muted/60 transition-colors text-left"
-                  onClick={() => { setClientContextMenu(null); router.push(`/admin/clientes?buscar=${encodeURIComponent(selectedClient.nombre)}`); }}
+                  onClick={() => { setClientContextMenu(null); openCCDialog(); }}
                 >
                   <Eye className="w-4 h-4 text-muted-foreground" /> Ver cuenta corriente
                 </button>
                 <button
                   className="flex items-center gap-2.5 w-full px-3 py-2 text-sm hover:bg-muted/60 transition-colors text-left"
-                  onClick={() => { setClientContextMenu(null); router.push(`/admin/ventas/listado?buscar=${encodeURIComponent(selectedClient.nombre)}`); }}
+                  onClick={() => { setClientContextMenu(null); openRecentVentasDialog(); }}
                 >
                   <FileText className="w-4 h-4 text-muted-foreground" /> Ver últimas ventas
                 </button>
@@ -4758,6 +4844,119 @@ export default function VentasPage() {
           )}
         </div>
       )}
+
+      {/* Ver cuenta corriente dialog */}
+      <Dialog open={ccDialogOpen} onOpenChange={setCcDialogOpen}>
+        <DialogContent className="sm:max-w-2xl max-h-[85vh] overflow-hidden flex flex-col">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Eye className="w-5 h-5" /> Cuenta corriente — {selectedClient?.nombre}
+            </DialogTitle>
+          </DialogHeader>
+          {historialLoading ? (
+            <div className="flex items-center justify-center py-12"><Loader2 className="w-6 h-6 animate-spin text-muted-foreground" /></div>
+          ) : ccData ? (
+            <div className="flex-1 overflow-y-auto space-y-4">
+              <div className="rounded-lg border p-4 flex items-center justify-between">
+                <div>
+                  <p className="text-xs text-muted-foreground uppercase">Saldo actual</p>
+                  <p className={`text-2xl font-bold ${ccData.saldo > 0 ? "text-orange-600" : ccData.saldo < 0 ? "text-emerald-600" : "text-muted-foreground"}`}>
+                    {ccData.saldo > 0 ? "Debe " : ccData.saldo < 0 ? "A favor " : ""}{formatCurrency(Math.abs(ccData.saldo))}
+                  </p>
+                </div>
+              </div>
+              {ccData.movimientos.length === 0 ? (
+                <p className="text-sm text-muted-foreground text-center py-8">Sin movimientos registrados</p>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b text-muted-foreground text-xs">
+                        <th className="text-left py-2 px-2 font-medium">Fecha</th>
+                        <th className="text-left py-2 px-2 font-medium">Comprobante</th>
+                        <th className="text-left py-2 px-2 font-medium">Descripción</th>
+                        <th className="text-right py-2 px-2 font-medium">Debe</th>
+                        <th className="text-right py-2 px-2 font-medium">Haber</th>
+                        <th className="text-right py-2 px-2 font-medium">Saldo</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {ccData.movimientos.map((m, idx) => (
+                        <tr key={idx} className="border-b last:border-0">
+                          <td className="py-1.5 px-2 text-xs tabular-nums">{m.fecha ? new Date(m.fecha + "T12:00:00").toLocaleDateString("es-AR", { day: "2-digit", month: "2-digit", year: "2-digit" }) : "—"}</td>
+                          <td className="py-1.5 px-2 text-xs font-mono">{m.comprobante || "—"}</td>
+                          <td className="py-1.5 px-2 text-xs truncate max-w-[200px]">{m.descripcion || "—"}</td>
+                          <td className="py-1.5 px-2 text-xs text-right tabular-nums text-orange-600">{m.debe ? formatCurrency(m.debe) : "—"}</td>
+                          <td className="py-1.5 px-2 text-xs text-right tabular-nums text-emerald-600">{m.haber ? formatCurrency(m.haber) : "—"}</td>
+                          <td className="py-1.5 px-2 text-xs text-right tabular-nums font-semibold">{formatCurrency(m.saldo || 0)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          ) : null}
+          <div className="flex justify-end pt-2 border-t">
+            <Button variant="outline" onClick={() => setCcDialogOpen(false)}>Cerrar</Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Ver últimas ventas dialog */}
+      <Dialog open={recentVentasOpen} onOpenChange={setRecentVentasOpen}>
+        <DialogContent className="sm:max-w-2xl max-h-[85vh] overflow-hidden flex flex-col">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <FileText className="w-5 h-5" /> Últimas ventas — {selectedClient?.nombre}
+            </DialogTitle>
+          </DialogHeader>
+          {historialLoading ? (
+            <div className="flex items-center justify-center py-12"><Loader2 className="w-6 h-6 animate-spin text-muted-foreground" /></div>
+          ) : recentVentas.length === 0 ? (
+            <p className="text-sm text-muted-foreground text-center py-8">Sin ventas registradas</p>
+          ) : (
+            <div className="flex-1 overflow-y-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b text-muted-foreground text-xs">
+                    <th className="text-left py-2 px-2 font-medium">Fecha</th>
+                    <th className="text-left py-2 px-2 font-medium">Comprobante</th>
+                    <th className="text-left py-2 px-2 font-medium">Forma pago</th>
+                    <th className="text-right py-2 px-2 font-medium">Total</th>
+                    <th className="text-center py-2 px-2 font-medium">Estado</th>
+                    <th className="text-right py-2 px-2 font-medium"></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {recentVentas.map((v) => (
+                    <tr key={v.id} className="border-b last:border-0 hover:bg-muted/40">
+                      <td className="py-1.5 px-2 text-xs tabular-nums">{v.fecha ? new Date(v.fecha + "T12:00:00").toLocaleDateString("es-AR", { day: "2-digit", month: "2-digit", year: "2-digit" }) : "—"}</td>
+                      <td className="py-1.5 px-2 text-xs">
+                        <span className="font-mono">{v.numero}</span>
+                        {v.tipo_comprobante && <span className="block text-[10px] text-muted-foreground">{v.tipo_comprobante}</span>}
+                      </td>
+                      <td className="py-1.5 px-2 text-xs">{v.forma_pago || "—"}</td>
+                      <td className="py-1.5 px-2 text-xs text-right tabular-nums font-semibold">{formatCurrency(v.total)}</td>
+                      <td className="py-1.5 px-2 text-center">
+                        <Badge variant="outline" className="text-[10px]">{v.estado || "—"}</Badge>
+                      </td>
+                      <td className="py-1.5 px-2 text-right">
+                        <Button variant="ghost" size="sm" onClick={() => printHistoricVenta(v.id)} title="Imprimir comprobante">
+                          <Printer className="w-3.5 h-3.5" />
+                        </Button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+          <div className="flex justify-end pt-2 border-t">
+            <Button variant="outline" onClick={() => setRecentVentasOpen(false)}>Cerrar</Button>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* Edit price dialog */}
       <Dialog open={!!editPriceItem} onOpenChange={(o) => { if (!o) { setEditPriceItem(null); setEditPriceValue(""); } }}>
