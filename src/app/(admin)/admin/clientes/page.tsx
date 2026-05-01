@@ -60,6 +60,7 @@ import {
   MessageSquare,
   TrendingUp,
   ShoppingBag,
+  Copy,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { CobroAllocationDialog, CobroResult } from "@/components/cobro-allocation-dialog";
@@ -182,6 +183,7 @@ export default function ClientesPage() {
     comprobantes: { comprobante: string; debe: number; haber: number }[];
   } | null>(null);
   const [cobroClient, setCobroClient] = useState<Cliente | null>(null);
+  const [contextMenu, setContextMenu] = useState<{ x: number; y: number; client: Cliente } | null>(null);
   const [cuentasBancarias, setCuentasBancarias] = useState<any[]>([]);
   const [saving, setSaving] = useState(false);
   const [empresa, setEmpresa] = useState<any>(null);
@@ -273,6 +275,42 @@ export default function ClientesPage() {
     setForm((prev) => ({ ...prev, vendedor_id: defaultVendedor, zona_entrega: defaultZona?.id || "" }));
     setDialogOpen(true);
   };
+
+  const handleContextMenu = (e: React.MouseEvent, client: Cliente) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const menuWidth = 220;
+    const menuHeight = 360;
+    const vw = window.innerWidth;
+    const vh = window.innerHeight;
+    let x = e.clientX;
+    let y = e.clientY;
+    if (x + menuWidth > vw - 8) x = vw - menuWidth - 8;
+    if (y + menuHeight > vh - 8) y = vh - menuHeight - 8;
+    if (y < 8) y = 8;
+    setContextMenu({ x, y, client });
+  };
+
+  const waUrl = (telefono: string | null | undefined, nombre: string) => {
+    if (!telefono) return null;
+    const digits = telefono.replace(/\D/g, "");
+    const wa = digits.startsWith("54") ? digits : `54${digits.startsWith("0") ? digits.slice(1) : digits}`;
+    return `https://wa.me/${wa}?text=${encodeURIComponent(`Hola ${nombre}!`)}`;
+  };
+
+  useEffect(() => {
+    if (!contextMenu) return;
+    const close = () => setContextMenu(null);
+    const handleKey = (e: KeyboardEvent) => { if (e.key === "Escape") close(); };
+    document.addEventListener("click", close);
+    document.addEventListener("keydown", handleKey);
+    window.addEventListener("scroll", close, true);
+    return () => {
+      document.removeEventListener("click", close);
+      document.removeEventListener("keydown", handleKey);
+      window.removeEventListener("scroll", close, true);
+    };
+  }, [contextMenu]);
 
   const openEdit = async (c: Cliente) => {
     setEditingClient(c);
@@ -1478,7 +1516,7 @@ export default function ClientesPage() {
                   {filtered.map((client) => {
                     const zona = zonas.find((z) => z.id === client.zona_entrega);
                     return (
-                      <div key={client.id} className="py-3 px-4 flex items-center gap-3 hover:bg-muted/30 transition-colors">
+                      <div key={client.id} className="py-3 px-4 flex items-center gap-3 hover:bg-muted/30 transition-colors" onContextMenu={(e) => handleContextMenu(e, client)}>
                         <div className="flex-1 min-w-0" onClick={() => openMovimientos(client)}>
                           <div className="flex items-center gap-1.5 flex-wrap">
                             <span className="font-medium text-sm">{client.nombre}</span>
@@ -1526,7 +1564,7 @@ export default function ClientesPage() {
                       {filtered.map((client) => {
                         const zona = zonas.find((z) => z.id === client.zona_entrega);
                         return (
-                          <tr key={client.id} className="border-b last:border-0 hover:bg-muted/50 transition-colors">
+                          <tr key={client.id} className="border-b last:border-0 hover:bg-muted/50 transition-colors" onContextMenu={(e) => handleContextMenu(e, client)}>
                             <td className="py-3 px-4 font-mono text-xs text-muted-foreground">{(client as any).codigo_cliente || "—"}</td>
                             <td className="py-3 px-4 font-medium">
                               <div className="flex items-center gap-2">
@@ -1743,7 +1781,7 @@ export default function ClientesPage() {
                     </thead>
                     <tbody>
                       {filteredCobranzas.map((c) => (
-                        <tr key={c.id} className="border-b last:border-0 hover:bg-muted/50 transition-colors">
+                        <tr key={c.id} className="border-b last:border-0 hover:bg-muted/50 transition-colors" onContextMenu={(e) => handleContextMenu(e, c)}>
                           <td className="py-3 px-4">
                             <p className="font-medium">{c.nombre}</p>
                             {(() => {
@@ -3384,6 +3422,83 @@ export default function ClientesPage() {
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* Context menu */}
+      {contextMenu && (
+        <div
+          className="fixed z-50 bg-background border border-border rounded-xl shadow-lg py-1 min-w-[220px]"
+          style={{ left: contextMenu.x, top: contextMenu.y, maxHeight: "calc(100vh - 16px)", overflowY: "auto" }}
+          onClick={(e) => e.stopPropagation()}
+          onContextMenu={(e) => e.preventDefault()}
+        >
+          <div className="px-3 py-2 border-b">
+            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide truncate">
+              {contextMenu.client.nombre.length > 30
+                ? contextMenu.client.nombre.slice(0, 28) + "..."
+                : contextMenu.client.nombre}
+            </p>
+          </div>
+          <div className="py-1">
+            <button
+              className="flex items-center gap-2.5 w-full px-3 py-2 text-sm hover:bg-muted/60 transition-colors text-left"
+              onClick={() => { const c = contextMenu.client; setContextMenu(null); openEdit(c); }}
+            >
+              <Edit className="w-4 h-4 text-muted-foreground" /> Editar cliente
+            </button>
+            <button
+              className="flex items-center gap-2.5 w-full px-3 py-2 text-sm hover:bg-muted/60 transition-colors text-left"
+              onClick={() => { const c = contextMenu.client; setContextMenu(null); openMovimientos(c); }}
+            >
+              <Eye className="w-4 h-4 text-muted-foreground" /> Ver cuenta corriente
+            </button>
+            <button
+              className="flex items-center gap-2.5 w-full px-3 py-2 text-sm hover:bg-muted/60 transition-colors text-left"
+              onClick={() => { const c = contextMenu.client; setContextMenu(null); setCobroClient(c); setCobroOpen(true); }}
+            >
+              <DollarSign className="w-4 h-4 text-muted-foreground" /> Registrar cobro
+            </button>
+            <button
+              className="flex items-center gap-2.5 w-full px-3 py-2 text-sm hover:bg-muted/60 transition-colors text-left"
+              onClick={() => { const c = contextMenu.client; setContextMenu(null); setMovTab("compras"); openMovimientos(c); }}
+            >
+              <ShoppingBag className="w-4 h-4 text-muted-foreground" /> Ver ventas del cliente
+            </button>
+          </div>
+          <div className="border-t py-1">
+            <button
+              className="flex items-center gap-2.5 w-full px-3 py-2 text-sm hover:bg-muted/60 transition-colors text-left disabled:opacity-50 disabled:cursor-not-allowed"
+              disabled={!contextMenu.client.telefono}
+              onClick={() => {
+                const c = contextMenu.client;
+                setContextMenu(null);
+                if (c.telefono) navigator.clipboard.writeText(c.telefono).catch(() => {});
+              }}
+            >
+              <Copy className="w-4 h-4 text-muted-foreground" /> Copiar teléfono
+            </button>
+            <button
+              className="flex items-center gap-2.5 w-full px-3 py-2 text-sm hover:bg-muted/60 transition-colors text-left disabled:opacity-50 disabled:cursor-not-allowed"
+              disabled={!contextMenu.client.telefono}
+              onClick={() => {
+                const c = contextMenu.client;
+                setContextMenu(null);
+                const url = waUrl(c.telefono, c.nombre);
+                if (url) window.open(url, "_blank", "noopener,noreferrer");
+              }}
+            >
+              <MessageSquare className="w-4 h-4 text-muted-foreground" /> Enviar WhatsApp
+            </button>
+          </div>
+          <div className="border-t py-1">
+            <button
+              className="flex items-center gap-2.5 w-full px-3 py-2 text-sm hover:bg-muted/60 transition-colors text-left text-destructive"
+              onClick={() => { const c = contextMenu.client; setContextMenu(null); handleDelete(c.id); }}
+            >
+              <Trash2 className="w-4 h-4" /> Eliminar cliente
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Confirm Dialog */}
       <Dialog open={confirmDialog.open} onOpenChange={(o) => setConfirmDialog(prev => ({ ...prev, open: o }))}>

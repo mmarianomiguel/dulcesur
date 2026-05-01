@@ -240,6 +240,7 @@ export default function ProductosPage() {
 
   // Mass selection state
   const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [lastSelectedId, setLastSelectedId] = useState<string | null>(null);
   // Mass edit modal state
   const [massEditOpen, setMassEditOpen] = useState(false);
   const [massTarget, setMassTarget] = useState<"venta"|"costo"|"margen"|"fijar_venta"|"fijar_costo">("costo");
@@ -568,9 +569,11 @@ export default function ProductosPage() {
     const handleKey = (e: KeyboardEvent) => { if (e.key === "Escape") close(); };
     document.addEventListener("click", close);
     document.addEventListener("keydown", handleKey);
+    window.addEventListener("scroll", close, true);
     return () => {
       document.removeEventListener("click", close);
       document.removeEventListener("keydown", handleKey);
+      window.removeEventListener("scroll", close, true);
     };
   }, [contextMenu]);
 
@@ -1766,13 +1769,14 @@ export default function ProductosPage() {
     e.preventDefault();
     e.stopPropagation();
     const menuWidth = 200;
-    const menuHeight = 340;
+    const menuHeight = 560;
     const viewportWidth = window.innerWidth;
     const viewportHeight = window.innerHeight;
     let x = e.clientX;
     let y = e.clientY;
     if (x + menuWidth > viewportWidth - 8) x = viewportWidth - menuWidth - 8;
     if (y + menuHeight > viewportHeight - 8) y = viewportHeight - menuHeight - 8;
+    if (y < 8) y = 8;
     setContextMenu({ x, y, product });
   };
 
@@ -1787,6 +1791,26 @@ export default function ProductosPage() {
       next.has(id) ? next.delete(id) : next.add(id);
       return next;
     });
+    setLastSelectedId(id);
+  };
+
+  const handleRowSelect = (e: React.MouseEvent, id: string) => {
+    if (e.shiftKey && lastSelectedId) {
+      const ids = paginatedProducts.map((p) => p.id);
+      const startIdx = ids.indexOf(lastSelectedId);
+      const endIdx = ids.indexOf(id);
+      if (startIdx !== -1 && endIdx !== -1) {
+        const [from, to] = startIdx < endIdx ? [startIdx, endIdx] : [endIdx, startIdx];
+        setSelected((prev) => {
+          const next = new Set(prev);
+          for (let i = from; i <= to; i++) next.add(ids[i]);
+          return next;
+        });
+        setLastSelectedId(id);
+        return;
+      }
+    }
+    toggleSelect(id);
   };
 
   const selectAllFiltered = () => setSelected(new Set(filtered.map((p) => p.id)));
@@ -1986,6 +2010,28 @@ export default function ProductosPage() {
       showAdminToast("No se pudieron aplicar los cambios", "error");
     } finally {
       setMassEditSaving(false);
+    }
+  };
+
+  const handleMassVisibility = async (newValue: "visible" | "oculto") => {
+    if (selected.size === 0) return;
+    const ids = Array.from(selected);
+    try {
+      for (let i = 0; i < ids.length; i += 200) {
+        const batch = ids.slice(i, i + 200);
+        const { error } = await supabase.from("productos").update({ visibilidad: newValue }).in("id", batch);
+        if (error) throw error;
+      }
+      const idSet = new Set(ids);
+      setProducts((prev) => prev.map((p) => (idSet.has(p.id) ? ({ ...p, visibilidad: newValue } as any) : p)));
+      showAdminToast(
+        newValue === "visible"
+          ? `${selected.size} producto${selected.size > 1 ? "s" : ""} visible${selected.size > 1 ? "s" : ""} en la tienda`
+          : `${selected.size} producto${selected.size > 1 ? "s" : ""} oculto${selected.size > 1 ? "s" : ""} de la tienda`,
+        "success"
+      );
+    } catch (err: any) {
+      showAdminToast(err.message || "Error al actualizar visibilidad", "error");
     }
   };
 
@@ -2891,6 +2937,14 @@ export default function ProductosPage() {
                 <Printer className="w-4 h-4 sm:mr-2" />
                 <span className="hidden sm:inline">Imprimir carteles ({selected.size})</span>
               </Button>
+              <Button variant="outline" size="sm" onClick={() => handleMassVisibility("visible")}>
+                <Eye className="w-4 h-4 sm:mr-2" />
+                <span className="hidden sm:inline">Mostrar ({selected.size})</span>
+              </Button>
+              <Button variant="outline" size="sm" onClick={() => handleMassVisibility("oculto")}>
+                <EyeOff className="w-4 h-4 sm:mr-2" />
+                <span className="hidden sm:inline">Ocultar ({selected.size})</span>
+              </Button>
               <Button variant="destructive" size="sm" onClick={handleMassDelete} disabled={deleting}>
                 {deleting ? <Loader2 className="w-4 h-4 sm:mr-2 animate-spin" /> : <Trash2 className="w-4 h-4 sm:mr-2" />}
                 <span className="hidden sm:inline">Eliminar ({selected.size})</span>
@@ -2994,7 +3048,7 @@ export default function ProductosPage() {
                     >
                       <td
                         className="py-3 px-2 cursor-pointer hover:bg-muted/50 transition-colors"
-                        onClick={() => toggleSelect(product.id)}
+                        onClick={(e) => handleRowSelect(e, product.id)}
                         title="Seleccionar"
                       >
                         <div className={`w-4 h-4 rounded border-2 flex items-center justify-center transition-all ${isSelected ? "bg-primary border-primary" : "border-muted-foreground/30"}`}>
@@ -3003,7 +3057,7 @@ export default function ProductosPage() {
                       </td>
                       <td
                         className="py-3 px-2 cursor-pointer hover:bg-muted/50 transition-colors"
-                        onClick={() => toggleSelect(product.id)}
+                        onClick={(e) => handleRowSelect(e, product.id)}
                         title="Seleccionar"
                       >
                         {product.imagen_url ? (
@@ -3019,7 +3073,7 @@ export default function ProductosPage() {
                       </td>
                       <td
                         className="py-3 px-4 cursor-pointer hover:bg-muted/50 transition-colors"
-                        onClick={() => toggleSelect(product.id)}
+                        onClick={(e) => handleRowSelect(e, product.id)}
                         title="Seleccionar"
                       >
                         <span className="font-mono text-xs text-muted-foreground select-none">
@@ -5205,7 +5259,7 @@ export default function ProductosPage() {
       {contextMenu && (
         <div
           className="fixed z-50 bg-background border border-border rounded-xl shadow-lg py-1 min-w-[200px]"
-          style={{ left: contextMenu.x, top: contextMenu.y }}
+          style={{ left: contextMenu.x, top: contextMenu.y, maxHeight: "calc(100vh - 16px)", overflowY: "auto" }}
           onClick={(e) => e.stopPropagation()}
           onContextMenu={(e) => e.preventDefault()}
         >
