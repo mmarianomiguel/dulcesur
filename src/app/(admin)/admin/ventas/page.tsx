@@ -228,7 +228,7 @@ export default function VentasPage() {
     pdfUrl: string | null;
   }>({ open: false, numero: "", total: 0, subtotal: 0, descuento: 0, recargo: 0, transferSurcharge: 0, tipoComprobante: "", formaPago: "", moneda: "ARS", cliente: "", clienteDireccion: null, clienteTelefono: null, clienteCondicionIva: null, vendedor: "", items: [], fecha: "", saldoAnterior: 0, saldoNuevo: 0, pdfUrl: null });
   const [errorModal, setErrorModal] = useState<{ open: boolean; message: string }>({ open: false, message: "" });
-  const [stockExceedDialog, setStockExceedDialog] = useState<{ open: boolean; issues: { item: LineItem; stockDisponible: number; unidadesFacturadas: number }[]; adjustSet: Set<string> }>({ open: false, issues: [], adjustSet: new Set() });
+  const [stockExceedDialog, setStockExceedDialog] = useState<{ open: boolean; issues: { item: LineItem; stockDisponible: number; unidadesFacturadas: number; lineIds: string[] }[]; adjustSet: Set<string> }>({ open: false, issues: [], adjustSet: new Set() });
   const [receiptConfig, setReceiptConfig] = useState<ReceiptConfig>(defaultReceiptConfig);
   const receiptRef = useRef<HTMLDivElement>(null);
   const [lastPrintData, setLastPrintData] = useState<typeof successModal | null>(null);
@@ -1361,7 +1361,7 @@ export default function VentasPage() {
   // ---------- finalize flow ----------
   const initiateFinalize = () => {
     // Check stock for all items
-    const issues: { item: LineItem; stockDisponible: number; unidadesFacturadas: number }[] = [];
+    const issues: { item: LineItem; stockDisponible: number; unidadesFacturadas: number; lineIds: string[] }[] = [];
     for (const item of items) {
       if (item.es_combo) {
         if (item.comboItems && item.comboItems.length > 0) {
@@ -1372,7 +1372,7 @@ export default function VentasPage() {
             const needed = item.qty * ci.cantidad;
             if (needed > compStock) {
               const comboStockAvail = Math.floor(compStock / ci.cantidad);
-              issues.push({ item, stockDisponible: comboStockAvail, unidadesFacturadas: item.qty });
+              issues.push({ item, stockDisponible: comboStockAvail, unidadesFacturadas: item.qty, lineIds: [item.id] });
               break;
             }
           }
@@ -1385,7 +1385,7 @@ export default function VentasPage() {
             for (const ci of cData) {
               const needed = item.qty * ci.cantidad;
               if (needed > ci.stock) {
-                issues.push({ item, stockDisponible: Math.floor(ci.stock / ci.cantidad), unidadesFacturadas: item.qty });
+                issues.push({ item, stockDisponible: Math.floor(ci.stock / ci.cantidad), unidadesFacturadas: item.qty, lineIds: [item.id] });
                 break;
               }
             }
@@ -1393,18 +1393,30 @@ export default function VentasPage() {
         }
         continue;
       }
-      const prod = products.find((p) => p.id === item.producto_id);
+    }
+    // Items NO-combo: agrupar por producto_id antes de chequear. Sin esto, dos lineas
+    // del mismo producto pasan el check individual y rompen el stock al sumarse.
+    const productLineGroups: Record<string, LineItem[]> = {};
+    for (const it of items) {
+      if (it.es_combo) continue;
+      if (!productLineGroups[it.producto_id]) productLineGroups[it.producto_id] = [];
+      productLineGroups[it.producto_id].push(it);
+    }
+    for (const [pid, lines] of Object.entries(productLineGroups)) {
+      const prod = products.find((p) => p.id === pid);
       if (!prod) continue;
-      const unitsToDeduct = item.qty * (item.unidades_por_presentacion || 1);
-      if (unitsToDeduct > prod.stock) {
-        const stockEnPres = item.unidades_por_presentacion > 1
-          ? Math.floor((prod.stock / item.unidades_por_presentacion) * 10) / 10
-          : prod.stock;
-        issues.push({ item, stockDisponible: stockEnPres, unidadesFacturadas: item.qty });
+      const totalUnits = lines.reduce((s, l) => s + l.qty * (l.unidades_por_presentacion || 1), 0);
+      if (totalUnits > prod.stock) {
+        const repItem = lines[0];
+        const presUnit = repItem.unidades_por_presentacion || 1;
+        const stockEnPres = presUnit > 1 ? Math.floor((prod.stock / presUnit) * 10) / 10 : prod.stock;
+        const totalInPres = presUnit > 1 ? Math.round((totalUnits / presUnit) * 10) / 10 : totalUnits;
+        issues.push({ item: repItem, stockDisponible: stockEnPres, unidadesFacturadas: totalInPres, lineIds: lines.map((l) => l.id) });
       }
     }
     if (issues.length > 0) {
-      setStockExceedDialog({ open: true, issues, adjustSet: new Set(issues.map((i) => i.item.id)) });
+      const allIds = new Set<string>(issues.flatMap((i) => i.lineIds));
+      setStockExceedDialog({ open: true, issues, adjustSet: allIds });
       return;
     }
     if (cobrarEnEntrega) {
@@ -1425,35 +1437,55 @@ export default function VentasPage() {
       handleStockContinue();
       return;
     }
-    setItems((prev) => prev.map((item) => {
-      if (!toAdjust.has(item.id)) return item;
-      const prod = products.find((p) => p.id === item.producto_id);
-      if (!prod) return item;
-      const presUnit = item.unidades_por_presentacion || 1;
-      const maxQty = Math.floor(prod.stock / presUnit);
-      if (maxQty > 0) {
-        // Can fit at least 1 of this presentation
-        return { ...item, qty: maxQty, subtotal: item.price * maxQty * (1 - item.discount / 100) };
+    setItems((prev) => {
+      // Stock disponible por producto. Para productos donde algunas lineas se ajustan
+      // y otras no, restamos primero las cantidades de las lineas que NO se ajustan.
+      const remaining: Record<string, number> = {};
+      for (const item of prev) {
+        if (item.es_combo) continue;
+        if (!toAdjust.has(item.id)) continue;
+        const prod = products.find((p) => p.id === item.producto_id);
+        if (!prod) continue;
+        if (remaining[item.producto_id] === undefined) remaining[item.producto_id] = prod.stock;
       }
-      // Can't fit even 1 of this presentation - convert to units if box
-      if (presUnit > 1 && prod.stock > 0) {
-        const unitPres = presentacionesMap[item.producto_id]?.find((p) => Number(p.cantidad) === 1);
-        const unitPrice = unitPres?.precio ?? (item.price / presUnit);
-        const prodData = products.find((p) => p.id === item.producto_id);
-        const baseName = prodData?.nombre || item.description.replace(/\s*\(.*\)$/, "");
-        return {
-          ...item,
-          qty: prod.stock,
-          price: unitPrice,
-          presentacion: "Unidad",
-          unidades_por_presentacion: 1,
-          description: baseName,
-          subtotal: unitPrice * prod.stock * (1 - item.discount / 100),
-        };
+      for (const item of prev) {
+        if (item.es_combo) continue;
+        if (toAdjust.has(item.id)) continue;
+        if (remaining[item.producto_id] === undefined) continue;
+        remaining[item.producto_id] -= item.qty * (item.unidades_por_presentacion || 1);
       }
-      // No stock at all
-      return { ...item, qty: 0 };
-    }).filter((item) => item.qty > 0));
+
+      return prev.map((item) => {
+        if (!toAdjust.has(item.id)) return item;
+        const prod = products.find((p) => p.id === item.producto_id);
+        if (!prod) return item;
+        const presUnit = item.unidades_por_presentacion || 1;
+        const budget = Math.max(0, remaining[item.producto_id] ?? 0);
+        const maxQty = Math.floor(budget / presUnit);
+        if (maxQty > 0) {
+          remaining[item.producto_id] = budget - maxQty * presUnit;
+          return { ...item, qty: maxQty, subtotal: item.price * maxQty * (1 - item.discount / 100) };
+        }
+        // No entra ni 1 de la presentacion actual — convertir a Unidad si es caja
+        if (presUnit > 1 && budget > 0) {
+          const unitPres = presentacionesMap[item.producto_id]?.find((p) => Number(p.cantidad) === 1);
+          const unitPrice = unitPres?.precio ?? (item.price / presUnit);
+          const prodData = products.find((p) => p.id === item.producto_id);
+          const baseName = prodData?.nombre || item.description.replace(/\s*\(.*\)$/, "");
+          remaining[item.producto_id] = 0;
+          return {
+            ...item,
+            qty: budget,
+            price: unitPrice,
+            presentacion: "Unidad",
+            unidades_por_presentacion: 1,
+            description: baseName,
+            subtotal: unitPrice * budget * (1 - item.discount / 100),
+          };
+        }
+        return { ...item, qty: 0 };
+      }).filter((item) => item.qty > 0);
+    });
     setStockExceedDialog({ open: false, issues: [], adjustSet: new Set() });
 
     // Reset mixto amounts since total changed — user needs to re-enter payment
@@ -1777,9 +1809,16 @@ export default function VentasPage() {
             const freshMap: Record<string, number> = {};
             for (const fp of freshProds || []) freshMap[fp.id] = fp.stock;
             const stockIssues: string[] = [];
+            // Agrupar cantidades por producto_id antes de comparar — sino dos lineas
+            // del mismo producto pasan el check individual y rompen el stock al sumarse.
+            const aggByProd: Record<string, { cantidad: number; descripcion: string }> = {};
             for (const si of stockItems) {
-              const available = freshMap[si.producto_id] ?? 0;
-              if (si.cantidad > available) stockIssues.push(`${si.descripcion}: necesita ${si.cantidad}, hay ${available}`);
+              if (!aggByProd[si.producto_id]) aggByProd[si.producto_id] = { cantidad: 0, descripcion: si.descripcion };
+              aggByProd[si.producto_id].cantidad += si.cantidad;
+            }
+            for (const [pid, agg] of Object.entries(aggByProd)) {
+              const available = freshMap[pid] ?? 0;
+              if (agg.cantidad > available) stockIssues.push(`${agg.descripcion}: necesita ${agg.cantidad}, hay ${available}`);
             }
             if (stockIssues.length > 0) {
               setErrorModal({ open: true, message: `Stock insuficiente:\n${stockIssues.join("\n")}` });
@@ -2549,10 +2588,17 @@ export default function VentasPage() {
                         </Button>
                       </div>
                       {(() => {
+                        // Sumar unidades base (qty * unidades_por_presentacion) de TODAS las lineas del mismo producto
+                        // — sino al duplicar la linea cada una se valida sola y el stock total se desborda.
+                        const totalUnitsForProduct = items.reduce((sum, j) => {
+                          if (j.producto_id !== item.producto_id) return sum;
+                          if (j.es_combo) return sum;
+                          return sum + j.qty * (j.unidades_por_presentacion || 1);
+                        }, 0);
                         const stockEnPres = item.unidades_por_presentacion > 1
                           ? Math.floor((item.stock / item.unidades_por_presentacion) * 10) / 10
                           : item.stock;
-                        return item.qty > stockEnPres ? (
+                        return totalUnitsForProduct > item.stock ? (
                           <div className="flex items-center gap-1 px-3 lg:px-5 pb-1 text-amber-600">
                             <AlertTriangle className="w-3 h-3 shrink-0" />
                             <span className="text-[10px] lg:text-xs">Stock disponible: {stockEnPres}{item.unidades_por_presentacion > 1 ? ` ${item.presentacion}` : " Un."}</span>
@@ -4162,7 +4208,7 @@ export default function VentasPage() {
 
             <div className="space-y-2 max-h-60 overflow-y-auto">
               {stockExceedDialog.issues.map((issue, idx) => {
-                const checked = stockExceedDialog.adjustSet.has(issue.item.id);
+                const checked = issue.lineIds.every((lid) => stockExceedDialog.adjustSet.has(lid));
                 const prod = products.find((p) => p.id === issue.item.producto_id);
                 const stockUnits = prod?.stock ?? 0;
                 const presUnit = issue.item.unidades_por_presentacion || 1;
@@ -4173,7 +4219,10 @@ export default function VentasPage() {
                   onClick={() => {
                     setStockExceedDialog((prev) => {
                       const next = new Set(prev.adjustSet);
-                      if (next.has(issue.item.id)) next.delete(issue.item.id); else next.add(issue.item.id);
+                      const allIn = issue.lineIds.every((lid) => next.has(lid));
+                      for (const lid of issue.lineIds) {
+                        if (allIn) next.delete(lid); else next.add(lid);
+                      }
                       return { ...prev, adjustSet: next };
                     });
                   }}
