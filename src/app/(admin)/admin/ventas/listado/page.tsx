@@ -1491,6 +1491,19 @@ export default function ListadoVentasPage() {
     let items = pedido.items;
     const cId = (pedido as any)._clienteId || (pedido as any).cliente_id;
 
+    // Optimistic UI: abrir el dialog YA con la data que tenemos.
+    // Limpiar estado anterior asi no muestra datos stale, y completar abajo cuando lleguen las queries.
+    setDetailPagos([]);
+    setDetailNCs([]);
+    setDetailCobroSaldo([]);
+    setClienteSaldo(0);
+    setCobroPreview(null);
+    setPoEditItems(items.map((i) => ({ ...i })));
+    setPoHasChanges(false);
+    setEditandoPago(false);
+    setPoSelectedPedido({ ...pedido, items, _source: pedido._source || "pedidos" } as any);
+    setPoDetailOpen(true);
+
     // Find linked venta if not already known (serial — unavoidable when missing)
     if (!ventaId && pedido.numero) {
       const { data: linkedVenta } = await supabase.from("ventas").select("id").eq("numero", pedido.numero).single();
