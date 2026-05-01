@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback, useRef, useMemo } from "react";
+import { useEffect, useLayoutEffect, useState, useCallback, useRef, useMemo } from "react";
 import { todayARG, nowTimeARG, formatCurrency } from "@/lib/formatters";
 import { supabase } from "@/lib/supabase";
 import { showAdminToast } from "@/components/admin-toast";
@@ -259,6 +259,7 @@ export default function VentasPage() {
   // selected cart item for arrow key navigation
   const [selectedItemIdx, setSelectedItemIdx] = useState(-1);
   const [cartContextMenu, setCartContextMenu] = useState<{ x: number; y: number; itemId: string } | null>(null);
+  const cartMenuRef = useRef<HTMLDivElement>(null);
   const [quickViewItem, setQuickViewItem] = useState<LineItem | null>(null);
   const [editPriceItem, setEditPriceItem] = useState<LineItem | null>(null);
   const [editPriceValue, setEditPriceValue] = useState("");
@@ -673,6 +674,29 @@ export default function VentasPage() {
     setSearchOpen(false);
     setProductSearch("");
   };
+
+  useLayoutEffect(() => {
+    if (!cartContextMenu) return;
+    const el = cartMenuRef.current;
+    if (!el) return;
+    const rect = el.getBoundingClientRect();
+    const vh = window.innerHeight;
+    const vw = window.innerWidth;
+    let needsUpdate = false;
+    let nx = cartContextMenu.x;
+    let ny = cartContextMenu.y;
+    if (rect.bottom > vh - 8) {
+      ny = Math.max(8, vh - rect.height - 8);
+      needsUpdate = true;
+    }
+    if (rect.right > vw - 8) {
+      nx = Math.max(8, vw - rect.width - 8);
+      needsUpdate = true;
+    }
+    if (needsUpdate && (nx !== cartContextMenu.x || ny !== cartContextMenu.y)) {
+      setCartContextMenu({ ...cartContextMenu, x: nx, y: ny });
+    }
+  }, [cartContextMenu]);
 
   useEffect(() => {
     if (!cartContextMenu) return;
@@ -4408,6 +4432,7 @@ export default function VentasPage() {
         if (!seen.has("Unidad")) allPres.unshift({ nombre: "Unidad" });
         return (
           <div
+            ref={cartMenuRef}
             className="fixed z-50 bg-background border border-border rounded-xl shadow-lg py-1 min-w-[240px]"
             style={{ left: cartContextMenu.x, top: cartContextMenu.y, maxHeight: "calc(100vh - 16px)", overflowY: "auto" }}
             onClick={(e) => e.stopPropagation()}
