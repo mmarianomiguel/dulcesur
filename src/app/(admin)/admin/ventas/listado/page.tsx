@@ -2958,7 +2958,7 @@ export default function ListadoVentasPage() {
             const currentStep = order.estado === "cancelado" ? -1 : estadoSteps.indexOf(order.estado);
 
             return (
-              <Card key={`${order._source}-${order._ventaId || order.id}-${idx}`} onContextMenu={(e) => handleContextMenu(e, order)} className={`transition-all ${order.estado === "cancelado" ? "opacity-50" : "hover:shadow-md"}`}>
+              <Card key={`${order._source}-${order._ventaId || order.id}-${idx}`} onContextMenu={(e) => handleContextMenu(e, order)} onDoubleClick={() => poOpenDetail(order)} className={`transition-all cursor-pointer select-none ${order.estado === "cancelado" ? "opacity-50" : "hover:shadow-md"}`}>
                 <CardContent className="p-4 sm:p-5">
                   <div className="flex flex-col sm:flex-row sm:items-start gap-4">
                     {/* Left: Customer & order info */}
@@ -3082,7 +3082,7 @@ export default function ListadoVentasPage() {
                     </div>
 
                     {/* Right: Actions */}
-                    <div className="flex sm:flex-col items-center gap-1.5 shrink-0">
+                    <div className="flex sm:flex-col items-center gap-1.5 shrink-0" onDoubleClick={(e) => e.stopPropagation()}>
                       <Button variant="ghost" size="sm" className="h-8 w-8 p-0" onClick={() => poOpenDetail(order)} title="Ver detalle">
                         <Eye className="w-4 h-4" />
                       </Button>
