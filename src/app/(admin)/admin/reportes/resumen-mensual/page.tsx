@@ -209,14 +209,48 @@ export default function ResumenMensualPage() {
     setEgresosDetalle(egresoDetailList.sort((a, b) => b.monto - a.monto));
 
     // Transferencias por cuenta bancaria (from caja_movimientos with cuenta_bancaria)
-    const { data: transfs } = await supabase.from("caja_movimientos")
-      .select("cuenta_bancaria, monto")
-      .eq("tipo", "ingreso")
-      .eq("metodo_pago", "Transferencia")
-      .gte("fecha", start).lt("fecha", end);
+    const [{ data: transfs }, { data: cbActivas }] = await Promise.all([
+      supabase.from("caja_movimientos")
+        .select("cuenta_bancaria, monto")
+        .eq("tipo", "ingreso")
+        .eq("metodo_pago", "Transferencia")
+        .gte("fecha", start).lt("fecha", end),
+      supabase.from("cuentas_bancarias")
+        .select("nombre, alias")
+        .eq("activo", true),
+    ]);
+    // El campo cuenta_bancaria de caja_movimientos guarda data inconsistente:
+    // a veces "Banco", otras "Banco — alias", otras solo "alias", o null.
+    // Normalizamos contra el master (cuentas_bancarias) para que aparezcan unificadas.
+    const cuentasMaster = (cbActivas || []) as { nombre: string; alias: string }[];
+    const normalizeCuenta = (raw: string | null) => {
+      if (!raw) return "Sin especificar";
+      const trimmed = raw.trim();
+      const partes = trimmed.split(/\s+—\s+|\s+-\s+/);
+      const banco = (partes[0] || "").trim();
+      const alias = (partes[1] || "").trim();
+      // 1) Exacto: nombre y alias.
+      if (banco && alias) {
+        const exact = cuentasMaster.find((c) => c.nombre === banco && c.alias === alias);
+        if (exact) return `${exact.nombre} — ${exact.alias}`;
+      }
+      // 2) Solo el nombre (asumimos la unica cuenta de ese banco).
+      if (banco && !alias) {
+        const matches = cuentasMaster.filter((c) => c.nombre === banco);
+        if (matches.length === 1) return `${matches[0].nombre} — ${matches[0].alias}`;
+        if (matches.length > 1) return banco; // ambiguo, dejamos solo el nombre del banco
+      }
+      // 3) El "banco" en realidad es un alias suelto.
+      if (banco) {
+        const aliasMatch = cuentasMaster.find((c) => c.alias === banco);
+        if (aliasMatch) return `${aliasMatch.nombre} — ${aliasMatch.alias}`;
+      }
+      // 4) Fallback: mostramos lo que vino.
+      return trimmed;
+    };
     const cuentaMap: Record<string, number> = {};
     (transfs || []).forEach((t: any) => {
-      const cuenta = t.cuenta_bancaria || "Sin especificar";
+      const cuenta = normalizeCuenta(t.cuenta_bancaria);
       cuentaMap[cuenta] = (cuentaMap[cuenta] || 0) + Math.abs(t.monto);
     });
     setTransferPorCuenta(Object.entries(cuentaMap).map(([cuenta, total]) => ({ cuenta, total })).sort((a, b) => b.total - a.total));
