@@ -899,6 +899,11 @@ export default function ClientesPage() {
   const handlePayMov = async () => {
     if (payMovSaving) return; // Guard against double-click
     if (!payMovVenta || payMovMonto <= 0 || !movClient?.id) return;
+    // Validacion: si paga por transferencia, debe seleccionar la cuenta destino.
+    if (payMovMetodo === "Transferencia" && !payMovCuentaBancariaId) {
+      showAdminToast("Seleccioná la cuenta bancaria de destino para registrar la transferencia", "error");
+      return;
+    }
     setPayMovSaving(true);
     const hoy = new Date().toLocaleDateString("en-CA", { timeZone: "America/Argentina/Buenos_Aires" });
     const hora = nowTimeARG();
@@ -907,14 +912,15 @@ export default function ClientesPage() {
     const restante = saldoPend - montoReal;
 
     const payMovCuentaSel = payMovCuentaBancariaId ? cuentasBancarias.find((c) => c.id === payMovCuentaBancariaId) : null;
+    const cuentaCanonica = payMovCuentaSel ? `${payMovCuentaSel.nombre}${payMovCuentaSel.alias ? ` — ${payMovCuentaSel.alias}` : ""}` : null;
     await supabase.from("caja_movimientos").insert({
       fecha: hoy, hora, tipo: "ingreso",
-      descripcion: `Cobro deuda ${payMovVenta.descripcion} — ${clients.find((c) => c.id === movClient?.id)?.nombre || ""}${payMovMetodo === "Transferencia" && payMovCuentaSel ? ` → ${payMovCuentaSel.nombre}` : ""}`,
+      descripcion: `Cobro deuda ${payMovVenta.descripcion} — ${clients.find((c) => c.id === movClient?.id)?.nombre || ""}${payMovMetodo === "Transferencia" && cuentaCanonica ? ` → ${cuentaCanonica}` : ""}`,
       metodo_pago: payMovMetodo,
       monto: montoReal,
       referencia_id: payMovVenta.id,
       referencia_tipo: "venta",
-      ...(payMovMetodo === "Transferencia" && payMovCuentaSel ? { cuenta_bancaria: payMovCuentaSel.nombre } : {}),
+      ...(payMovMetodo === "Transferencia" && cuentaCanonica ? { cuenta_bancaria: cuentaCanonica } : {}),
     });
 
     // Atomic saldo update via RPC

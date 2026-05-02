@@ -4,6 +4,7 @@ import { nowTimeARG, formatCurrency } from "@/lib/formatters";
 import { norm } from "@/lib/utils";
 import { useEffect, useState, useCallback, useRef, useMemo } from "react";
 import { supabase } from "@/lib/supabase";
+import { formatCuentaCanonica } from "@/lib/cuenta-bancaria";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -2888,7 +2889,7 @@ export default function HojaDeRutaPage() {
                     const hoy = getArgentinaToday();
                     const hora = nowTimeARG();
                     const clienteNombre = payVenta.clientes?.nombre || "";
-                    const cuentaNombre = result.cuentaBancaria;
+                    const cuentaNombre = formatCuentaCanonica(result.cuentaBancaria, cuentasBancariasMapped);
 
                     // Guard: check venta is not anulada
                     const { data: ventaEstadoCheck } = await supabase.from("ventas").select("estado").eq("id", payVenta.id).single();

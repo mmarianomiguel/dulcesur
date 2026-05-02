@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { formatCuentaCanonica } from "@/lib/cuenta-bancaria";
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -168,6 +169,14 @@ export async function POST(
 
       if (pendiente <= 0) continue;
 
+      // Normalizar cuenta bancaria contra el master para que se guarde como
+      // "Nombre — alias" (canonico) y los reportes la agrupen consistentemente.
+      let cuentaBancariaCanonica: string | null = null;
+      if (cobro.cuentaBancaria) {
+        const { data: cbMaster } = await supabaseAdmin.from("cuentas_bancarias").select("nombre, alias").eq("activo", true);
+        cuentaBancariaCanonica = formatCuentaCanonica(cobro.cuentaBancaria, (cbMaster || []) as any);
+      }
+
       // Build caja entries
       const entries: any[] = [];
       if (cobro.metodo === "Mixto") {
@@ -175,12 +184,12 @@ export async function POST(
           entries.push({ fecha, hora, tipo: "ingreso", descripcion: `Cobro entrega #${venta.numero} (Efectivo)`, metodo_pago: "Efectivo", monto: cobro.efectivo, referencia_id: ventaId, referencia_tipo: "venta" });
         }
         if ((cobro.transferencia || 0) > 0) {
-          entries.push({ fecha, hora, tipo: "ingreso", descripcion: `Cobro entrega #${venta.numero} (Transferencia)`, metodo_pago: "Transferencia", monto: (cobro.transferencia || 0) + (cobro.surcharge || 0), referencia_id: ventaId, referencia_tipo: "venta", ...(cobro.cuentaBancaria ? { cuenta_bancaria: cobro.cuentaBancaria } : {}) });
+          entries.push({ fecha, hora, tipo: "ingreso", descripcion: `Cobro entrega #${venta.numero} (Transferencia)`, metodo_pago: "Transferencia", monto: (cobro.transferencia || 0) + (cobro.surcharge || 0), referencia_id: ventaId, referencia_tipo: "venta", ...(cuentaBancariaCanonica ? { cuenta_bancaria: cuentaBancariaCanonica } : {}) });
         }
       } else if (cobro.metodo === "Cuenta Corriente") {
         // No caja entry — goes to cuenta_corriente
       } else {
-        entries.push({ fecha, hora, tipo: "ingreso", descripcion: `Cobro entrega #${venta.numero}${(cobro.surcharge || 0) > 0 ? " (Transf)" : ""}`, metodo_pago: cobro.metodo, monto: pendiente + (cobro.surcharge || 0), referencia_id: ventaId, referencia_tipo: "venta", ...(cobro.cuentaBancaria ? { cuenta_bancaria: cobro.cuentaBancaria } : {}) });
+        entries.push({ fecha, hora, tipo: "ingreso", descripcion: `Cobro entrega #${venta.numero}${(cobro.surcharge || 0) > 0 ? " (Transf)" : ""}`, metodo_pago: cobro.metodo, monto: pendiente + (cobro.surcharge || 0), referencia_id: ventaId, referencia_tipo: "venta", ...(cuentaBancariaCanonica ? { cuenta_bancaria: cuentaBancariaCanonica } : {}) });
       }
       if (entries.length > 0) await supabaseAdmin.from("caja_movimientos").insert(entries);
 

@@ -533,12 +533,18 @@ export default function DashboardPage() {
     const [
       { data: allClients },
       { data: provs },
-      { data: ccSums },
+      { data: ventasParaSaldo },
       { data: ventasCat },
     ] = await Promise.all([
       supabase.from("clientes").select("id, nombre, saldo").eq("activo", true).range(0, 49999),
       supabase.from("proveedores").select("saldo").eq("activo", true).range(0, 9999),
-      supabase.from("cuenta_corriente").select("cliente_id, debe, haber").range(0, 199999),
+      // Detección de saldos descuadrados: usamos la misma fuente que "Recalcular"
+      // (ventas + monto_pagado), no la tabla cuenta_corriente que tiene huecos historicos.
+      supabase.from("ventas")
+        .select("id, cliente_id, total, monto_pagado, tipo_comprobante, remito_origen_id, subtotal")
+        .neq("estado", "anulada")
+        .not("cliente_id", "is", null)
+        .range(0, 49999),
       // Paginar venta_items con join inner — el cap default de 1000 también afecta queries con join sin .in().
       (async () => {
         const PAGE = 1000;
@@ -600,14 +606,57 @@ export default function DashboardPage() {
     setCuentasCobrar((allClients || []).reduce((a, c) => a + ((c.saldo || 0) > 0 ? c.saldo : 0), 0));
     setCuentasPagar((provs || []).reduce((a, p) => a + (p.saldo > 0 ? p.saldo : 0), 0));
 
-    // Saldo mismatch detection (reuses allClients and ccSums from group 1)
-    if (allClients && allClients.length > 0) {
-      const ccMap: Record<string, number> = {};
-      for (const row of ccSums || []) {
-        ccMap[row.cliente_id] = (ccMap[row.cliente_id] || 0) + (row.debe || 0) - (row.haber || 0);
+    // Saldo mismatch detection — mismo calculo que el boton Recalcular del cliente.
+    // Saldo esperado = SUM(total ventas regulares) - SUM(monto_pagado, capeado al total)
+    //                  - NCs standalone (sin padre)
+    //                  - NCs vinculadas no "baked" (no descontadas del total padre).
+    if (allClients && allClients.length > 0 && ventasParaSaldo) {
+      // Agrupar ventas por cliente
+      const ventasByClient: Record<string, any[]> = {};
+      for (const v of ventasParaSaldo as any[]) {
+        if (!ventasByClient[v.cliente_id]) ventasByClient[v.cliente_id] = [];
+        ventasByClient[v.cliente_id].push(v);
       }
+      const calcSaldo = (vts: any[]) => {
+        const ncs = vts.filter((v) => v.tipo_comprobante?.includes("Nota de Crédito"));
+        const regulares = vts.filter((v) => !v.tipo_comprobante?.includes("Nota de Crédito") && !v.tipo_comprobante?.includes("Nota de Débito"));
+        const ncByParent = new Map<string, { total: number; baked: boolean }>();
+        for (const nc of ncs) {
+          if (nc.remito_origen_id) {
+            const parent = regulares.find((rv) => rv.id === nc.remito_origen_id);
+            const baked = parent ? parent.total < (parent.subtotal || parent.total) : false;
+            const existing = ncByParent.get(nc.remito_origen_id);
+            ncByParent.set(nc.remito_origen_id, { total: (existing?.total || 0) + nc.total, baked });
+          }
+        }
+        let totalDebe = 0;
+        let totalHaber = 0;
+        for (const v of vts) {
+          const isNC = v.tipo_comprobante?.includes("Nota de Crédito");
+          const isND = v.tipo_comprobante?.includes("Nota de Débito");
+          if (isNC) {
+            if (!v.remito_origen_id) totalDebe -= v.total; // standalone NC
+            continue;
+          }
+          totalDebe += v.total;
+          if (!isND) {
+            const ncInfo = ncByParent.get(v.id);
+            if (ncInfo && !ncInfo.baked) {
+              totalDebe -= ncInfo.total;
+              totalHaber += Math.min(v.monto_pagado || 0, Math.max(0, v.total - ncInfo.total));
+            } else {
+              totalHaber += Math.min(v.monto_pagado || 0, v.total);
+            }
+          }
+        }
+        return Math.round((totalDebe - totalHaber) * 100) / 100;
+      };
       const mismatches = allClients
-        .map((c) => ({ id: c.id, nombre: c.nombre, saldo: c.saldo || 0, calculado: ccMap[c.id] || 0, diff: Math.round(((c.saldo || 0) - (ccMap[c.id] || 0)) * 100) / 100 }))
+        .map((c) => {
+          const calculado = calcSaldo(ventasByClient[c.id] || []);
+          const saldo = Math.round((c.saldo || 0) * 100) / 100;
+          return { id: c.id, nombre: c.nombre, saldo, calculado, diff: Math.round((saldo - calculado) * 100) / 100 };
+        })
         .filter((c) => Math.abs(c.diff) > 0.5)
         .sort((a, b) => Math.abs(b.diff) - Math.abs(a.diff));
       setSaldoMismatches(mismatches);
@@ -1894,13 +1943,16 @@ export default function DashboardPage() {
                     <div className="space-y-1.5">
                       <p className="text-xs font-medium text-muted-foreground">Cuenta bancaria</p>
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
-                        {deliveryCuentasBancarias.map((cb) => (
-                          <button key={cb.id} onClick={() => setField("cobroCuentaBancaria", cb.nombre)}
-                            className={`flex items-center gap-1.5 rounded-lg border-2 px-2 py-1.5 text-xs transition-all text-left ${deliveryConfirm.cobroCuentaBancaria === cb.nombre ? "border-emerald-500 bg-emerald-500/10 text-emerald-700" : "border-gray-200 bg-white hover:bg-gray-50 text-gray-500"}`}>
+                        {deliveryCuentasBancarias.map((cb) => {
+                          const canonica = cb.alias ? `${cb.nombre} — ${cb.alias}` : cb.nombre;
+                          return (
+                          <button key={cb.id} onClick={() => setField("cobroCuentaBancaria", canonica)}
+                            className={`flex items-center gap-1.5 rounded-lg border-2 px-2 py-1.5 text-xs transition-all text-left ${deliveryConfirm.cobroCuentaBancaria === canonica ? "border-emerald-500 bg-emerald-500/10 text-emerald-700" : "border-gray-200 bg-white hover:bg-gray-50 text-gray-500"}`}>
                             <Landmark className="w-3 h-3 shrink-0" />
                             <span className="truncate">{cb.alias || cb.nombre}</span>
                           </button>
-                        ))}
+                          );
+                        })}
                       </div>
                     </div>
                   )}
