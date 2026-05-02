@@ -2411,14 +2411,18 @@ export default function ClientesPage() {
                                       // Detect surcharge: use stored % or derive from total > subtotal when transfer exists
                                       let recPct = info.recargo_porcentaje || 0;
                                       if (recPct === 0 && transferTotal > 0 && info.total > info.subtotal) {
-                                        // Surcharge is baked in total but recargo_porcentaje wasn't stored
-                                        // Derive: surcharge = total - subtotal_after_discounts, pct = surcharge / transferBase * 100
+                                        // Surcharge is baked in total but recargo_porcentaje wasn't stored.
+                                        // El recargo se calcula sobre la PORCION de transferencia, no el total/subtotal.
+                                        // Por eso derivamos % = surcharge / (transferencia neta) * 100.
                                         const descAmt = info.descuento_porcentaje > 0 ? Math.round(info.subtotal * info.descuento_porcentaje / 100) : 0;
                                         const ncAmt = info.linkedNCs.reduce((s: number, nc: any) => s + (nc.baked ? nc.total : 0), 0);
                                         const expectedBase = info.subtotal - descAmt - ncAmt;
                                         const impliedSurcharge = Math.max(0, info.total - expectedBase);
-                                        if (impliedSurcharge > 0 && expectedBase > 0) {
-                                          recPct = Math.round(impliedSurcharge / expectedBase * 10000) / 100;
+                                        // transferTotal viene de caja_movimientos (ya incluye el surcharge),
+                                        // por eso restamos para obtener la base real.
+                                        const transferBaseReal = Math.max(1, transferTotal - impliedSurcharge);
+                                        if (impliedSurcharge > 0) {
+                                          recPct = Math.round(impliedSurcharge / transferBaseReal * 10000) / 100;
                                         }
                                       }
                                       const descAmt2 = info.descuento_porcentaje > 0 ? Math.round(info.subtotal * info.descuento_porcentaje / 100) : 0;

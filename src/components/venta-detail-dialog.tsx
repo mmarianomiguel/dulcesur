@@ -1025,12 +1025,27 @@ export function VentaDetailDialog({
                   })()}
                   {/* Recargo transferencia — modo lectura */}
                   {(!editable || !editItems) && transferSurchargeCorregido > 0 && (() => {
-                    const pctMostrar = recPct > 0
-                      ? recPct
-                      : Math.round(((data.total - itemsSubtotal) / itemsSubtotal) * 10000) / 100;
+                    // Mostrar el % real configurado (ej. 2%) y la base sobre la que se aplica.
+                    // Si forma_pago es Mixto, la base es la porcion de transferencia (no el total).
+                    let pctMostrar = recPct;
+                    let baseLeyenda = "";
+                    if (pctMostrar === 0 && configRecargoPct > 0) {
+                      pctMostrar = configRecargoPct;
+                    }
+                    if (pctMostrar === 0) {
+                      // Fallback: derivar del calculo sobre el total.
+                      pctMostrar = Math.round(((data.total - itemsSubtotal) / itemsSubtotal) * 10000) / 100;
+                    } else if (isMixto) {
+                      // Calcular la base de transferencia (subtotal - efectivo - CC).
+                      const efectivoBase = Number(data.monto_efectivo) || 0;
+                      const transferBase = Math.max(0, itemsSubtotal - efectivoBase);
+                      if (transferBase > 0 && transferBase < itemsSubtotal) {
+                        baseLeyenda = ` s/ ${formatCurrency(transferBase)}`;
+                      }
+                    }
                     return (
                       <p className="text-muted-foreground">
-                        Recargo transferencia ({pctMostrar > 0 ? `${pctMostrar}%` : ""}):
+                        Recargo transferencia ({pctMostrar > 0 ? `${pctMostrar}%${baseLeyenda}` : ""}):
                         <span className="font-medium text-violet-600 ml-1">+{formatCurrency(transferSurchargeCorregido)}</span>
                       </p>
                     );

@@ -48,6 +48,7 @@ import {
   Ban,
   AlertTriangle,
   Store,
+  Landmark,
   ShoppingCart,
   Package,
   User,
@@ -3079,13 +3080,19 @@ export default function ListadoVentasPage() {
                             <DollarSign className="w-3 h-3 mr-1" />{pago}
                           </Badge>
                         )}
-                        {/* Warning: transfer without bank account — only for actual transfers, not Mixto without transfer */}
-                        {(order.forma_pago || order.metodo_pago || "").toLowerCase().includes("transferencia") &&
-                          !(order as any).cuenta_transferencia_alias && order.estado !== "cancelado" && (
-                          <span className="inline-flex items-center gap-1 text-[10px] text-amber-600 font-medium bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded-full">
-                            <AlertTriangle className="w-3 h-3" />
-                            Sin cuenta
-                          </span>
+                        {/* Cuenta bancaria — verde si esta asignada, ambar si falta */}
+                        {(order.forma_pago || order.metodo_pago || "").toLowerCase().includes("transferencia") && order.estado !== "cancelado" && (
+                          (order as any).cuenta_transferencia_alias ? (
+                            <span className="inline-flex items-center gap-1 text-[10px] text-emerald-700 font-medium bg-emerald-50 border border-emerald-200 px-1.5 py-0.5 rounded-full">
+                              <Landmark className="w-3 h-3" />
+                              {(order as any).cuenta_transferencia_alias}
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1 text-[10px] text-amber-600 font-medium bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded-full">
+                              <AlertTriangle className="w-3 h-3" />
+                              Sin cuenta
+                            </span>
+                          )
                         )}
                         {isHistorial && order._tipo_comprobante && (
                           <Badge variant="secondary" className="text-[10px] font-normal">{order._tipo_comprobante}</Badge>
