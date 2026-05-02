@@ -188,22 +188,19 @@ export default function NotaCreditoPage() {
   }, [fetchNotas, fetchFormData]);
 
 
-  // When client changes, fetch their ventas for origen
+  // When client changes (or CF is selected), fetch matching ventas for origen
   useEffect(() => {
-    if (!clientId) {
-      setClientVentas([]);
-      setOrigenId("");
-      return;
-    }
+    setOrigenId("");
     (async () => {
-      const { data } = await supabase
+      let q = supabase
         .from("ventas")
         .select("*")
-        .eq("cliente_id", clientId)
         .not("tipo_comprobante", "ilike", "Nota de Crédito%")
         .not("tipo_comprobante", "ilike", "Nota de Débito%")
         .order("fecha", { ascending: false })
         .limit(50);
+      q = clientId ? q.eq("cliente_id", clientId) : q.is("cliente_id", null);
+      const { data } = await q;
       setClientVentas(data || []);
     })();
   }, [clientId]);
@@ -267,7 +264,7 @@ export default function NotaCreditoPage() {
 
       // Suggest payment method from origin sale
       const origenVenta = clientVentas.find((v) => v.id === origenId);
-      if (origenVenta && origenVenta.cliente_id !== clientId) {
+      if (origenVenta && (origenVenta.cliente_id || "") !== clientId) {
         showAdminToast("El comprobante seleccionado pertenece a otro cliente", "error");
         return;
       }
@@ -378,7 +375,7 @@ export default function NotaCreditoPage() {
 
   const handleSave = async () => {
     const validItems = items.filter((i) => i.qty > 0 && i.subtotal > 0);
-    if (!clientId || validItems.length === 0) { showAdminToast("Agregá al menos un item con cantidad mayor a 0", "error"); setSaving(false); return; }
+    if (validItems.length === 0) { showAdminToast("Agregá al menos un item con cantidad mayor a 0", "error"); setSaving(false); return; }
     setSaving(true);
 
     const letra = getTipoFactura(selectedClient);
@@ -396,7 +393,7 @@ export default function NotaCreditoPage() {
         numero,
         tipo_comprobante: tipoComprobante,
         fecha: hoy,
-        cliente_id: clientId,
+        cliente_id: clientId || null,
         vendedor_id: origenId ? (clientVentas.find((v) => v.id === origenId)?.vendedor_id || null) : null,
         forma_pago: metodoDev,
         subtotal: total,
@@ -1007,7 +1004,7 @@ export default function NotaCreditoPage() {
                   <div className="space-y-2 pt-2 border-t">
                     <Label className="text-xs font-semibold">Método de devolución</Label>
                     <div className="space-y-2">
-                      {METODOS_DEV.map(({ value, label, icon: Icon }) => (
+                      {METODOS_DEV.filter(m => clientId || m.value !== "Cuenta Corriente").map(({ value, label, icon: Icon }) => (
                         <button
                           key={value}
                           onClick={() => setMetodoDev(value)}
