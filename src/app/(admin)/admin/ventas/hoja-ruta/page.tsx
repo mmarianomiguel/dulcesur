@@ -167,6 +167,7 @@ export default function HojaDeRutaPage() {
   const [detailVenta, setDetailVenta] = useState<VentaRow | null>(null);
   const [detailPagos, setDetailPagos] = useState<{ metodo: string; monto: number; cuenta_bancaria?: string | null }[]>([]);
   const [dlvConfirm, setDlvConfirm] = useState<{ open: boolean; ids: string[]; pendiente: number; type: "paid" | "unpaid" | "no_client"; clienteNombre?: string }>({ open: false, ids: [], pendiente: 0, type: "paid" });
+  const [contextMenu, setContextMenu] = useState<{ x: number; y: number; groupKey: string } | null>(null);
   const [orden, setOrden] = useState<Record<string, number>>({});
   const [savedOrdenLoaded, setSavedOrdenLoaded] = useState(false);
   const savedOrdenRef = useRef<Record<string, number>>({});
@@ -906,6 +907,35 @@ export default function HojaDeRutaPage() {
 
     pdf.save(`entregas-${historialDateFrom}-a-${historialDateTo}.pdf`);
   };
+
+  const handleContextMenu = (e: React.MouseEvent, groupKey: string) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const menuWidth = 240;
+    const menuHeight = 380;
+    const vw = window.innerWidth;
+    const vh = window.innerHeight;
+    let x = e.clientX;
+    let y = e.clientY;
+    if (x + menuWidth > vw - 8) x = vw - menuWidth - 8;
+    if (y + menuHeight > vh - 8) y = vh - menuHeight - 8;
+    if (y < 8) y = 8;
+    setContextMenu({ x, y, groupKey });
+  };
+
+  useEffect(() => {
+    if (!contextMenu) return;
+    const close = () => setContextMenu(null);
+    const handleKey = (e: KeyboardEvent) => { if (e.key === "Escape") close(); };
+    document.addEventListener("click", close);
+    document.addEventListener("keydown", handleKey);
+    window.addEventListener("scroll", close, true);
+    return () => {
+      document.removeEventListener("click", close);
+      document.removeEventListener("keydown", handleKey);
+      window.removeEventListener("scroll", close, true);
+    };
+  }, [contextMenu]);
 
   const handleMarkDelivered = async (groupVentas: VentaRow[]) => {
     const ids = groupVentas.map((v) => v.id);
@@ -2473,6 +2503,7 @@ export default function HojaDeRutaPage() {
                     onDragOver={(e) => !quickOrderMode && handleDragOver(e, group.key)}
                     onDrop={() => !quickOrderMode && handleDrop(group.key)}
                     onDragEnd={handleDragEnd}
+                    onContextMenu={(e) => handleContextMenu(e, group.key)}
                     onClick={(e) => {
                       if (!quickOrderMode) return;
                       const t = e.target as HTMLElement;
@@ -3223,6 +3254,82 @@ export default function HojaDeRutaPage() {
               </div>
             </DialogContent>
           </Dialog>
+        );
+      })()}
+
+      {/* Context menu */}
+      {contextMenu && (() => {
+        const group = clientGroups.find((g) => g.key === contextMenu.groupKey);
+        if (!group) return null;
+        const { debe } = groupTotals(group);
+        const isDelivered = group.ventas.every((v) => v.entregado);
+        const direccion = [group.cliente?.domicilio, group.cliente?.localidad].filter(Boolean).join(", ");
+        const mapsUrl = direccion ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(direccion)}` : null;
+        const tel = group.cliente?.telefono?.replace(/\D/g, "") || "";
+        const whatsappUrl = tel ? `https://wa.me/54${tel.startsWith("0") ? tel.slice(1) : tel}` : null;
+        const phoneRaw = group.cliente?.telefono || "";
+        return (
+          <div
+            className="fixed z-50 bg-background border border-border rounded-xl shadow-lg py-1 min-w-[240px]"
+            style={{ left: contextMenu.x, top: contextMenu.y, maxHeight: "calc(100vh - 16px)", overflowY: "auto" }}
+            onClick={(e) => e.stopPropagation()}
+            onContextMenu={(e) => e.preventDefault()}
+          >
+            <div className="px-3 py-2 border-b">
+              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide truncate">
+                {(group.cliente?.nombre || "Sin cliente").length > 30
+                  ? (group.cliente?.nombre || "Sin cliente").slice(0, 28) + "..."
+                  : (group.cliente?.nombre || "Sin cliente")}
+              </p>
+            </div>
+            <div className="py-1">
+              {!isDelivered && (
+                <button
+                  className="flex items-center gap-2.5 w-full px-3 py-2 text-sm hover:bg-muted/60 transition-colors text-left"
+                  onClick={() => { setContextMenu(null); handleMarkDelivered(group.ventas); }}
+                >
+                  <CheckCircle className="w-4 h-4 text-green-600" /> Marcar entregado
+                </button>
+              )}
+              {debe > 0 && (
+                <button
+                  className="flex items-center gap-2.5 w-full px-3 py-2 text-sm hover:bg-muted/60 transition-colors text-left"
+                  onClick={() => { setContextMenu(null); openPayDialog(group.ventas[0], group.ventas); }}
+                >
+                  <DollarSign className="w-4 h-4 text-emerald-600" /> Cobrar ({formatCurrency(debe)})
+                </button>
+              )}
+              <button
+                className="flex items-center gap-2.5 w-full px-3 py-2 text-sm hover:bg-muted/60 transition-colors text-left"
+                onClick={() => { setContextMenu(null); handleViewDetail(group.ventas[0]); }}
+              >
+                <Eye className="w-4 h-4 text-muted-foreground" /> Ver detalle
+              </button>
+            </div>
+            <div className="border-t py-1">
+              <button
+                className="flex items-center gap-2.5 w-full px-3 py-2 text-sm hover:bg-muted/60 transition-colors text-left disabled:opacity-50 disabled:cursor-not-allowed"
+                disabled={!mapsUrl}
+                onClick={() => { setContextMenu(null); if (mapsUrl) window.open(mapsUrl, "_blank", "noopener,noreferrer"); }}
+              >
+                <Navigation className="w-4 h-4 text-blue-600" /> Navegar en Maps
+              </button>
+              <button
+                className="flex items-center gap-2.5 w-full px-3 py-2 text-sm hover:bg-muted/60 transition-colors text-left disabled:opacity-50 disabled:cursor-not-allowed"
+                disabled={!whatsappUrl}
+                onClick={() => { setContextMenu(null); if (whatsappUrl) window.open(whatsappUrl, "_blank", "noopener,noreferrer"); }}
+              >
+                <MessageCircle className="w-4 h-4 text-green-600" /> Enviar WhatsApp
+              </button>
+              <button
+                className="flex items-center gap-2.5 w-full px-3 py-2 text-sm hover:bg-muted/60 transition-colors text-left disabled:opacity-50 disabled:cursor-not-allowed"
+                disabled={!phoneRaw}
+                onClick={() => { setContextMenu(null); if (phoneRaw) window.location.href = `tel:${phoneRaw}`; }}
+              >
+                <Phone className="w-4 h-4 text-muted-foreground" /> Llamar
+              </button>
+            </div>
+          </div>
         );
       })()}
     </div>
