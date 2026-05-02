@@ -60,6 +60,7 @@ import {
   Gift,
   Percent,
   Tag,
+  History,
 } from "lucide-react";
 
 import { ReceiptPrintView, defaultReceiptConfig } from "@/components/receipt-print-view";
@@ -767,7 +768,7 @@ export default function VentasPage() {
     setCcData(null);
     const [{ data: cli }, { data: movs }] = await Promise.all([
       supabase.from("clientes").select("saldo").eq("id", selectedClient.id).single(),
-      supabase.from("cuenta_corriente").select("fecha, comprobante, descripcion, debe, haber, saldo, forma_pago").eq("cliente_id", selectedClient.id).order("fecha", { ascending: false }).order("created_at", { ascending: false }).limit(50),
+      supabase.from("cuenta_corriente").select("fecha, comprobante, descripcion, debe, haber, saldo, forma_pago").eq("cliente_id", selectedClient.id).order("fecha", { ascending: true }).order("created_at", { ascending: true }).range(0, 4999),
     ]);
     setCcData({ saldo: (cli as any)?.saldo ?? 0, movimientos: movs ?? [] });
     setHistorialLoading(false);
@@ -4847,57 +4848,96 @@ export default function VentasPage() {
 
       {/* Ver cuenta corriente dialog */}
       <Dialog open={ccDialogOpen} onOpenChange={setCcDialogOpen}>
-        <DialogContent className="sm:max-w-2xl max-h-[85vh] overflow-hidden flex flex-col">
+        <DialogContent className="sm:max-w-3xl max-h-[90vh] overflow-hidden flex flex-col">
           <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <Eye className="w-5 h-5" /> Cuenta corriente — {selectedClient?.nombre}
-            </DialogTitle>
+            <div className="flex items-start gap-3">
+              <div className="w-10 h-10 rounded-full bg-foreground/90 text-background flex items-center justify-center shrink-0">
+                <History className="w-5 h-5" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <DialogTitle className="text-lg">Resumen de Cuenta</DialogTitle>
+                <p className="text-sm text-muted-foreground truncate">{selectedClient?.nombre}</p>
+              </div>
+              {ccData && (
+                <span className={`text-xs px-2 py-1 rounded-full font-medium shrink-0 ${ccData.saldo > 0 ? "bg-orange-100 text-orange-700" : ccData.saldo < 0 ? "bg-emerald-100 text-emerald-700" : "bg-muted text-muted-foreground"}`}>
+                  {ccData.saldo > 0 ? "Tiene saldo deudor" : ccData.saldo < 0 ? "A favor" : "Al día"}
+                </span>
+              )}
+            </div>
           </DialogHeader>
           {historialLoading ? (
             <div className="flex items-center justify-center py-12"><Loader2 className="w-6 h-6 animate-spin text-muted-foreground" /></div>
           ) : ccData ? (
-            <div className="flex-1 overflow-y-auto space-y-4">
-              <div className="rounded-lg border p-4 flex items-center justify-between">
-                <div>
-                  <p className="text-xs text-muted-foreground uppercase">Saldo actual</p>
-                  <p className={`text-2xl font-bold ${ccData.saldo > 0 ? "text-orange-600" : ccData.saldo < 0 ? "text-emerald-600" : "text-muted-foreground"}`}>
-                    {ccData.saldo > 0 ? "Debe " : ccData.saldo < 0 ? "A favor " : ""}{formatCurrency(Math.abs(ccData.saldo))}
-                  </p>
-                </div>
-              </div>
+            <div className="flex-1 overflow-hidden flex flex-col">
               {ccData.movimientos.length === 0 ? (
-                <p className="text-sm text-muted-foreground text-center py-8">Sin movimientos registrados</p>
+                <p className="text-sm text-muted-foreground text-center py-12">Sin movimientos registrados</p>
               ) : (
-                <div className="overflow-x-auto">
-                  <table className="w-full text-sm">
-                    <thead>
-                      <tr className="border-b text-muted-foreground text-xs">
-                        <th className="text-left py-2 px-2 font-medium">Fecha</th>
-                        <th className="text-left py-2 px-2 font-medium">Comprobante</th>
-                        <th className="text-left py-2 px-2 font-medium">Descripción</th>
-                        <th className="text-right py-2 px-2 font-medium">Debe</th>
-                        <th className="text-right py-2 px-2 font-medium">Haber</th>
-                        <th className="text-right py-2 px-2 font-medium">Saldo</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {ccData.movimientos.map((m, idx) => (
-                        <tr key={idx} className="border-b last:border-0">
-                          <td className="py-1.5 px-2 text-xs tabular-nums">{m.fecha ? new Date(m.fecha + "T12:00:00").toLocaleDateString("es-AR", { day: "2-digit", month: "2-digit", year: "2-digit" }) : "—"}</td>
-                          <td className="py-1.5 px-2 text-xs font-mono">{m.comprobante || "—"}</td>
-                          <td className="py-1.5 px-2 text-xs truncate max-w-[200px]">{m.descripcion || "—"}</td>
-                          <td className="py-1.5 px-2 text-xs text-right tabular-nums text-orange-600">{m.debe ? formatCurrency(m.debe) : "—"}</td>
-                          <td className="py-1.5 px-2 text-xs text-right tabular-nums text-emerald-600">{m.haber ? formatCurrency(m.haber) : "—"}</td>
-                          <td className="py-1.5 px-2 text-xs text-right tabular-nums font-semibold">{formatCurrency(m.saldo || 0)}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
+                <>
+                  <div className="rounded-lg border overflow-hidden flex-1 flex flex-col">
+                    <div className="overflow-y-auto flex-1">
+                      <table className="w-full text-sm">
+                        <thead className="bg-muted/40 sticky top-0">
+                          <tr className="text-muted-foreground text-[11px] uppercase">
+                            <th className="text-left py-2.5 px-3 font-medium w-16">Fecha</th>
+                            <th className="text-left py-2.5 px-3 font-medium">Comprobante</th>
+                            <th className="text-center py-2.5 px-3 font-medium w-28">Tipo</th>
+                            <th className="text-right py-2.5 px-3 font-medium">Debe</th>
+                            <th className="text-right py-2.5 px-3 font-medium">Haber</th>
+                            <th className="text-right py-2.5 px-3 font-medium">Saldo</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {ccData.movimientos.map((m, idx) => {
+                            const tipo = m.debe > 0 && m.haber === 0
+                              ? (m.descripcion?.toLowerCase().includes("nota de cr") ? "Nota Crédito" : "Venta")
+                              : m.haber > 0 && m.debe === 0
+                                ? (m.forma_pago === "Cuenta Corriente" ? "Cta. Cte." : "Cobro")
+                                : "—";
+                            const tipoColor = tipo === "Venta" ? "border-blue-200 text-blue-700 bg-blue-50"
+                              : tipo === "Cobro" ? "border-emerald-200 text-emerald-700 bg-emerald-50"
+                              : tipo === "Cta. Cte." ? "border-orange-200 text-orange-700 bg-orange-50"
+                              : tipo === "Nota Crédito" ? "border-rose-200 text-rose-700 bg-rose-50"
+                              : "border-gray-200 text-gray-600 bg-gray-50";
+                            return (
+                              <tr key={idx} className="border-t hover:bg-muted/20">
+                                <td className="py-2 px-3 text-xs tabular-nums text-muted-foreground">{m.fecha ? new Date(m.fecha + "T12:00:00").toLocaleDateString("es-AR", { day: "2-digit", month: "2-digit" }) : "—"}</td>
+                                <td className="py-2 px-3 text-xs font-mono">{m.comprobante || "—"}</td>
+                                <td className="py-2 px-3 text-center"><span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium border ${tipoColor}`}>{tipo}</span></td>
+                                <td className="py-2 px-3 text-xs text-right tabular-nums">{m.debe ? formatCurrency(m.debe) : "—"}</td>
+                                <td className="py-2 px-3 text-xs text-right tabular-nums text-emerald-600">{m.haber ? formatCurrency(m.haber) : "—"}</td>
+                                <td className="py-2 px-3 text-xs text-right tabular-nums font-semibold">{formatCurrency(m.saldo || 0)}</td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                    {(() => {
+                      const totalDebe = ccData.movimientos.reduce((s, m) => s + (m.debe || 0), 0);
+                      const totalHaber = ccData.movimientos.reduce((s, m) => s + (m.haber || 0), 0);
+                      return (
+                        <div className="border-t bg-muted/30 px-3 py-2 grid grid-cols-3 gap-3 text-right">
+                          <div>
+                            <p className="text-[10px] uppercase text-muted-foreground">Total ventas</p>
+                            <p className="text-sm font-semibold">{formatCurrency(totalDebe)}</p>
+                          </div>
+                          <div>
+                            <p className="text-[10px] uppercase text-muted-foreground">Total cobrado</p>
+                            <p className="text-sm font-semibold text-emerald-600">{formatCurrency(totalHaber)}</p>
+                          </div>
+                          <div>
+                            <p className="text-[10px] uppercase text-muted-foreground">Saldo deudor</p>
+                            <p className={`text-sm font-bold ${ccData.saldo > 0 ? "text-orange-600" : ccData.saldo < 0 ? "text-emerald-600" : "text-muted-foreground"}`}>{formatCurrency(Math.abs(ccData.saldo))}</p>
+                          </div>
+                        </div>
+                      );
+                    })()}
+                  </div>
+                </>
               )}
             </div>
           ) : null}
-          <div className="flex justify-end pt-2 border-t">
+          <div className="flex justify-end pt-3 border-t mt-3">
             <Button variant="outline" onClick={() => setCcDialogOpen(false)}>Cerrar</Button>
           </div>
         </DialogContent>
