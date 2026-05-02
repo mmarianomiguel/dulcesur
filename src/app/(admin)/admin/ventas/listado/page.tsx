@@ -276,6 +276,7 @@ export default function ListadoVentasPage() {
   const [poPedidos, setPoPedidos] = useState<Pedido[]>([]);
   const [poLoading, setPoLoading] = useState(true);
   const [poFilterEstado, setPoFilterEstado] = useState("todos");
+  const [filterPickupReady, setFilterPickupReady] = useState(false);
   const [poFilterEntrega, setPoFilterEntrega] = useState("todos");
   const [poSearch, setPoSearch] = useState("");
 
@@ -2652,6 +2653,13 @@ export default function ListadoVentasPage() {
       if (poFilterEstado !== "todos") {
         if (poFilterEstado === "entregado" ? (o.estado !== "entregado" && o.estado !== "cerrada") : o.estado !== poFilterEstado) return false;
       }
+      // "Para retirar" filter: pedidos en armado/pendiente con metodo_entrega de retiro
+      if (filterPickupReady) {
+        const me = (o.metodo_entrega || "").toLowerCase();
+        const isPickup = me.includes("retir") || me === "" || me === "pickup";
+        const estadoOk = o.estado === "armado" || o.estado === "pendiente";
+        if (!isPickup || !estadoOk) return false;
+      }
       const pago = (o.forma_pago || o.metodo_pago || "").toLowerCase();
       const isMixto = pago === "mixto";
       const montoEf = (o as any).monto_efectivo || 0;
@@ -2689,7 +2697,7 @@ export default function ListadoVentasPage() {
       }
       return true;
     });
-  }, [allOrders, filterSource, poFilterEstado, filterPayment, filterBanco, searchClient, quickPeriod]);
+  }, [allOrders, filterSource, poFilterEstado, filterPayment, filterBanco, searchClient, quickPeriod, filterPickupReady]);
 
   // Count online orders hidden because delivery is in the future (only relevant in "today" view)
   const hiddenFutureOrders = useMemo(() => {
@@ -2716,6 +2724,12 @@ export default function ListadoVentasPage() {
     return s + baseNeta + (baseNeta > 0 ? Math.round(baseNeta * pctEfectivo) : 0);
   }, 0);
   const unifiedPendientes = filteredOrders.filter((o) => o.estado === "pendiente" || o.estado === "armado").length;
+  const pendientesRetiro = allOrders.filter((o) => {
+    const me = (o.metodo_entrega || "").toLowerCase();
+    const isPickup = me.includes("retir") || me === "" || me === "pickup";
+    const estadoOk = o.estado === "armado" || o.estado === "pendiente";
+    return isPickup && estadoOk;
+  }).length;
 
   // ══════════════════════════════════════════════════════════════
   // RENDER
@@ -2763,7 +2777,7 @@ export default function ListadoVentasPage() {
       </div>
 
       {/* Unified Stats */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 sm:grid-cols-5 gap-4">
         <Card>
           <CardContent className="pt-6 flex items-center gap-4">
             <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center"><Receipt className="w-5 h-5 text-primary" /></div>
@@ -2780,6 +2794,12 @@ export default function ListadoVentasPage() {
           <CardContent className="pt-6 flex items-center gap-4">
             <div className="w-10 h-10 rounded-xl bg-violet-500/10 flex items-center justify-center"><Package className="w-5 h-5 text-violet-500" /></div>
             <div><p className="text-xs text-muted-foreground">Pendientes entrega</p><p className="text-xl font-bold text-violet-600">{unifiedPendientes}</p></div>
+          </CardContent>
+        </Card>
+        <Card className={`cursor-pointer transition-all ${filterPickupReady ? "ring-2 ring-blue-400" : "hover:shadow-md"}`} onClick={() => setFilterPickupReady((v) => !v)}>
+          <CardContent className="pt-6 flex items-center gap-4">
+            <div className="w-10 h-10 rounded-xl bg-blue-500/10 flex items-center justify-center"><Store className="w-5 h-5 text-blue-500" /></div>
+            <div><p className="text-xs text-muted-foreground">Para retirar</p><p className="text-xl font-bold text-blue-600">{pendientesRetiro}</p></div>
           </CardContent>
         </Card>
         <Card>
