@@ -112,6 +112,7 @@ export default function ReportesPage() {
         .order("created_at", { ascending: false }),
       supabase.from("compras").select("id, fecha, total, forma_pago, proveedor_id, observacion, proveedores(nombre)")
         .gte("fecha", dEff).lte("fecha", hEff)
+        .neq("estado", "Pendiente")
         .order("fecha", { ascending: false }),
       supabase.from("productos").select("id, nombre, codigo, stock, precio, costo, categoria_id, subcategoria_id, marca_id").eq("activo", true).order("nombre").limit(10000),
     ]);
