@@ -128,6 +128,8 @@ interface LineItem {
   comboItems?: ComboItemRef[];
   categoria_nombre?: string | null;
   categoria_orden?: number | null;
+  subcategoria_id?: string | null;
+  subcategoria_nombre?: string | null;
 }
 
 // ---------- helpers ----------
@@ -153,6 +155,7 @@ export default function VentasPage() {
   const [activeDiscounts, setActiveDiscounts] = useState<any[]>([]);
   const [cajaAbierta, setCajaAbierta] = useState<boolean | null>(null);
   const [categoriasMap, setCategoriasMap] = useState<Record<string, { nombre: string; orden: number | null }>>({});
+  const [subcategoriasMap, setSubcategoriasMap] = useState<Record<string, { nombre: string; categoria_id: string | null }>>({});
 
   // --- sale state ---
   const [items, setItems] = useState<LineItem[]>([]);
@@ -433,15 +436,28 @@ export default function VentasPage() {
       for (const c of (data as any[]) || []) m[c.id] = { nombre: c.nombre, orden: c.orden ?? null };
       setCategoriasMap(m);
     });
+    supabase.from("subcategorias").select("id, nombre, categoria_id").range(0, 999).then(({ data }) => {
+      const m: Record<string, { nombre: string; categoria_id: string | null }> = {};
+      for (const s of (data as any[]) || []) m[s.id] = { nombre: s.nombre, categoria_id: s.categoria_id ?? null };
+      setSubcategoriasMap(m);
+    });
   }, []);
 
   const enrichItemsWithCategoria = useCallback((linesItems: LineItem[]) => {
     return linesItems.map((it) => {
       const prod = products.find((p) => p.id === it.producto_id);
       const cat = prod ? categoriasMap[(prod as any).categoria_id] : null;
-      return { ...it, categoria_nombre: cat?.nombre ?? null, categoria_orden: cat?.orden ?? null };
+      const subId = prod ? ((prod as any).subcategoria_id || null) : null;
+      const sub = subId ? subcategoriasMap[subId] : null;
+      return {
+        ...it,
+        categoria_nombre: cat?.nombre ?? null,
+        categoria_orden: cat?.orden ?? null,
+        subcategoria_id: subId,
+        subcategoria_nombre: sub?.nombre ?? null,
+      };
     });
-  }, [products, categoriasMap]);
+  }, [products, categoriasMap, subcategoriasMap]);
 
   useEffect(() => {
     fetchData();
@@ -817,14 +833,15 @@ export default function VentasPage() {
     if (!v) { showAdminToast("No se pudo cargar el comprobante", "error"); return; }
     // Cargar categoria_id de los productos vinculados para agrupar por categoria.
     const prodIds = [...new Set((vis ?? []).map((it: any) => it.producto_id).filter(Boolean))] as string[];
-    let prodCatMap: Record<string, string | null> = {};
+    let prodCatMap: Record<string, { categoria_id: string | null; subcategoria_id: string | null }> = {};
     if (prodIds.length > 0) {
-      const { data: prodData } = await supabase.from("productos").select("id, categoria_id").in("id", prodIds);
-      for (const p of (prodData as any[]) || []) prodCatMap[p.id] = p.categoria_id || null;
+      const { data: prodData } = await supabase.from("productos").select("id, categoria_id, subcategoria_id").in("id", prodIds);
+      for (const p of (prodData as any[]) || []) prodCatMap[p.id] = { categoria_id: p.categoria_id || null, subcategoria_id: p.subcategoria_id || null };
     }
     const items: LineItem[] = (vis ?? []).map((it: any, idx: number) => {
-      const catId = prodCatMap[it.producto_id || ""] || null;
-      const cat = catId ? categoriasMap[catId] : null;
+      const pm = prodCatMap[it.producto_id || ""] || { categoria_id: null, subcategoria_id: null };
+      const cat = pm.categoria_id ? categoriasMap[pm.categoria_id] : null;
+      const sub = pm.subcategoria_id ? subcategoriasMap[pm.subcategoria_id] : null;
       return {
         id: it.id || String(idx),
         producto_id: it.producto_id || "",
@@ -841,6 +858,8 @@ export default function VentasPage() {
         stock: 0,
         categoria_nombre: cat?.nombre ?? null,
         categoria_orden: cat?.orden ?? null,
+        subcategoria_id: pm.subcategoria_id,
+        subcategoria_nombre: sub?.nombre ?? null,
       };
     });
     let formaPagoLabel = (v as any).forma_pago || "—";
@@ -4582,6 +4601,8 @@ export default function VentasPage() {
                         comboItems: i.comboItems,
                         categoria_nombre: (i as any).categoria_nombre ?? null,
                         categoria_orden: (i as any).categoria_orden ?? null,
+                        subcategoria_id: (i as any).subcategoria_id ?? null,
+                        subcategoria_nombre: (i as any).subcategoria_nombre ?? null,
                       })),
                       fecha: lastPrintData.fecha,
                       saldoAnterior: lastPrintData.saldoAnterior,

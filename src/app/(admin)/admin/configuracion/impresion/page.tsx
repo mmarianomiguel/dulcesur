@@ -52,42 +52,89 @@ async function persistReceiptConfig(config: ReceiptConfig) {
   }
 }
 
-function CategoriaOrdenList() {
+function CategoriaOrdenList({
+  expandedSubs,
+  onToggleSub,
+}: {
+  expandedSubs: string[];
+  onToggleSub: (subId: string) => void;
+}) {
   const [cats, setCats] = useState<{ id: string; nombre: string; orden: number | null }[]>([]);
+  const [subs, setSubs] = useState<{ id: string; nombre: string; categoria_id: string | null }[]>([]);
   const [loading, setLoading] = useState(true);
   useEffect(() => {
     let alive = true;
     (async () => {
-      const { data } = await supabase.from("categorias").select("id, nombre, orden").order("orden", { nullsFirst: false }).order("nombre");
+      const [catRes, subRes] = await Promise.all([
+        supabase.from("categorias").select("id, nombre, orden").order("orden", { nullsFirst: false }).order("nombre"),
+        supabase.from("subcategorias").select("id, nombre, categoria_id").order("nombre").range(0, 999),
+      ]);
       if (!alive) return;
-      setCats(((data as any) || []).map((c: any) => ({ id: c.id, nombre: c.nombre, orden: c.orden })));
+      setCats(((catRes.data as any) || []).map((c: any) => ({ id: c.id, nombre: c.nombre, orden: c.orden })));
+      setSubs(((subRes.data as any) || []).map((s: any) => ({ id: s.id, nombre: s.nombre, categoria_id: s.categoria_id })));
       setLoading(false);
     })();
     return () => { alive = false; };
   }, []);
   if (loading) return <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />;
   if (cats.length === 0) return <p className="text-xs text-muted-foreground">No hay categorías cargadas.</p>;
+  const subsByCat: Record<string, { id: string; nombre: string }[]> = {};
+  for (const s of subs) {
+    if (!s.categoria_id) continue;
+    (subsByCat[s.categoria_id] ||= []).push({ id: s.id, nombre: s.nombre });
+  }
   return (
-    <div className="space-y-1.5">
-      {cats.map((c) => (
-        <div key={c.id} className="flex items-center gap-3 py-1">
-          <Input
-            type="number"
-            value={c.orden ?? ""}
-            placeholder="—"
-            className="h-8 w-20 text-xs"
-            onChange={(e) => {
-              const val = e.target.value === "" ? null : Number(e.target.value);
-              setCats((prev) => prev.map((cat) => cat.id === c.id ? { ...cat, orden: val } : cat));
-            }}
-            onBlur={async (e) => {
-              const val = e.target.value === "" ? null : Number(e.target.value);
-              await supabase.from("categorias").update({ orden: val }).eq("id", c.id);
-            }}
-          />
-          <span className="text-sm">{c.nombre}</span>
-        </div>
-      ))}
+    <div className="space-y-2">
+      {cats.map((c) => {
+        const catSubs = subsByCat[c.id] || [];
+        return (
+          <div key={c.id} className="border rounded-md p-2.5">
+            <div className="flex items-center gap-3">
+              <Input
+                type="number"
+                value={c.orden ?? ""}
+                placeholder="—"
+                className="h-8 w-20 text-xs"
+                onChange={(e) => {
+                  const val = e.target.value === "" ? null : Number(e.target.value);
+                  setCats((prev) => prev.map((cat) => cat.id === c.id ? { ...cat, orden: val } : cat));
+                }}
+                onBlur={async (e) => {
+                  const val = e.target.value === "" ? null : Number(e.target.value);
+                  await supabase.from("categorias").update({ orden: val }).eq("id", c.id);
+                }}
+              />
+              <span className="text-sm font-medium">{c.nombre}</span>
+              {catSubs.length > 0 && (
+                <span className="text-[10px] text-muted-foreground ml-auto">{catSubs.length} subcategoría{catSubs.length !== 1 ? "s" : ""}</span>
+              )}
+            </div>
+            {catSubs.length > 0 && (
+              <div className="mt-2 pl-5 flex flex-wrap gap-1.5">
+                {catSubs.map((s) => {
+                  const checked = expandedSubs.includes(s.id);
+                  return (
+                    <button
+                      key={s.id}
+                      type="button"
+                      onClick={() => onToggleSub(s.id)}
+                      className={cn(
+                        "text-xs px-2 py-0.5 rounded-full border transition-colors cursor-pointer",
+                        checked
+                          ? "bg-emerald-50 border-emerald-300 text-emerald-700"
+                          : "bg-muted/30 border-border text-muted-foreground hover:bg-muted"
+                      )}
+                      title={checked ? "Se mostrará como sub-bloque" : "Se mezcla en la categoría"}
+                    >
+                      {s.nombre}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        );
+      })}
     </div>
   );
 }
@@ -472,9 +519,17 @@ export default function ImpresionPage() {
               <>
                 <Separator />
                 <div>
-                  <p className="text-xs font-medium mb-2">Orden de las categorías en el ticket</p>
+                  <p className="text-xs font-medium mb-2">Orden de las categorías y subgrupos</p>
                   <p className="text-xs text-muted-foreground mb-3">Asigná un número (1, 2, 3, ...) para fijar el orden. Las categorías sin número se muestran al final ordenadas alfabéticamente. &quot;Otros&quot; (sin categoría) siempre va al final.</p>
-                  <CategoriaOrdenList />
+                  <p className="text-xs text-muted-foreground mb-3">Tocá una subcategoría para mostrarla como sub-bloque dentro del ticket (ej: dentro de Almacén, separar Limpieza y Galletitas). Las que no marques se muestran mezcladas con el resto de la categoría.</p>
+                  <CategoriaOrdenList
+                    expandedSubs={rcfg.subcategoriasExpandidas || []}
+                    onToggleSub={(subId) => setRcfg((prev) => {
+                      const cur = prev.subcategoriasExpandidas || [];
+                      const next = cur.includes(subId) ? cur.filter((x) => x !== subId) : [...cur, subId];
+                      return { ...prev, subcategoriasExpandidas: next };
+                    })}
+                  />
                 </div>
               </>
             )}

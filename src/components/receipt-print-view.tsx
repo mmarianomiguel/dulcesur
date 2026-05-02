@@ -26,6 +26,9 @@ export interface ReceiptConfig {
   mostrarFormaPago: boolean;
   mostrarMoneda: boolean;
   agruparPorCategoria?: boolean;
+  // IDs de subcategorias que se renderizan como sub-bloque dentro de su categoria
+  // (las que no esten en esta lista se muestran mezcladas en la categoria padre).
+  subcategoriasExpandidas?: string[];
 }
 
 export const defaultReceiptConfig: ReceiptConfig = {
@@ -54,6 +57,7 @@ export const defaultReceiptConfig: ReceiptConfig = {
   mostrarFormaPago: true,
   mostrarMoneda: true,
   agruparPorCategoria: true,
+  subcategoriasExpandidas: [],
 };
 
 export interface ReceiptLineItem {
@@ -73,6 +77,8 @@ export interface ReceiptLineItem {
   comboItems?: { nombre: string; cantidad: number }[];
   categoria_nombre?: string | null;
   categoria_orden?: number | null;
+  subcategoria_id?: string | null;
+  subcategoria_nombre?: string | null;
 }
 
 export interface ReceiptSale {
@@ -143,6 +149,10 @@ export function ReceiptPrintView({
   const pages: ReceiptLineItem[][] = [];
   // Si agrupamos por categoria, primero ordenamos los items en bloque para que la
   // paginacion no parta una categoria en dos lugares no contiguos del ticket.
+  // Dentro de cada categoria, los items de subcategorias EXPANDIDAS se mandan
+  // al final (orden alfabetico por subcategoria) para que el sub-header las
+  // separe del bloque "principal" de la categoria.
+  const expandedSet = new Set(config.subcategoriasExpandidas || []);
   const allItems = config.agruparPorCategoria !== false
     ? [...sale.items].sort((a, b) => {
         const aOrden = a.categoria_orden ?? Number.POSITIVE_INFINITY;
@@ -154,6 +164,12 @@ export function ReceiptPrintView({
         if (aOtros !== bOtros) return aOtros ? 1 : -1;
         if (aOrden !== bOrden) return aOrden - bOrden;
         if (aNombre !== bNombre) return aNombre.localeCompare(bNombre, "es");
+        const aExp = a.subcategoria_id && expandedSet.has(a.subcategoria_id);
+        const bExp = b.subcategoria_id && expandedSet.has(b.subcategoria_id);
+        if (aExp !== bExp) return aExp ? 1 : -1;
+        if (aExp && bExp) {
+          return (a.subcategoria_nombre || "").localeCompare(b.subcategoria_nombre || "", "es");
+        }
         return 0;
       })
     : [...sale.items];
@@ -335,20 +351,52 @@ export function ReceiptPrintView({
         return a.nombre.localeCompare(b.nombre, "es");
       });
       let runningIdx = 0;
-      body = groups.map((g, gi) => (
-        <Fragment key={`g-${gi}`}>
-          <tr>
-            <td colSpan={colSpan} style={{ padding: gi > 0 ? "8px 4px 3px" : "4px 4px 3px", fontWeight: 500, fontSize: `${fsProductos - 2}px`, color: "#555", borderTop: gi > 0 ? "1px solid #d8d8d8" : "none", fontStyle: "italic" }}>
-              {g.nombre}
-            </td>
-          </tr>
-          {g.items.map((item) => {
-            const row = renderItemRow(item, runningIdx, 0);
-            runningIdx += 1;
-            return row;
-          })}
-        </Fragment>
-      ));
+      // Dentro de cada categoria: separar items "principales" (sin sub expandida)
+      // de items con subcategoria expandida. Los principales van primero, luego
+      // un sub-header por subcategoria expandida.
+      body = groups.map((g, gi) => {
+        const principales: ReceiptLineItem[] = [];
+        const porSubcat = new Map<string, { nombre: string; items: ReceiptLineItem[] }>();
+        for (const item of g.items) {
+          const subId = item.subcategoria_id || null;
+          if (subId && expandedSet.has(subId)) {
+            const sub = porSubcat.get(subId);
+            if (sub) sub.items.push(item);
+            else porSubcat.set(subId, { nombre: item.subcategoria_nombre || "Subcategoría", items: [item] });
+          } else {
+            principales.push(item);
+          }
+        }
+        const subgrupos = Array.from(porSubcat.values()).sort((a, b) => a.nombre.localeCompare(b.nombre, "es"));
+        return (
+          <Fragment key={`g-${gi}`}>
+            <tr>
+              <td colSpan={colSpan} style={{ padding: gi > 0 ? "8px 4px 3px" : "4px 4px 3px", fontWeight: 500, fontSize: `${fsProductos - 2}px`, color: "#555", borderTop: gi > 0 ? "1px solid #d8d8d8" : "none", fontStyle: "italic" }}>
+                {g.nombre}
+              </td>
+            </tr>
+            {principales.map((item) => {
+              const row = renderItemRow(item, runningIdx, 0);
+              runningIdx += 1;
+              return row;
+            })}
+            {subgrupos.map((sg, sgi) => (
+              <Fragment key={`g-${gi}-s-${sgi}`}>
+                <tr>
+                  <td colSpan={colSpan} style={{ padding: "5px 4px 2px 18px", fontWeight: 400, fontSize: `${fsProductos - 3}px`, color: "#777", fontStyle: "italic" }}>
+                    {g.nombre} · {sg.nombre}
+                  </td>
+                </tr>
+                {sg.items.map((item) => {
+                  const row = renderItemRow(item, runningIdx, 0);
+                  runningIdx += 1;
+                  return row;
+                })}
+              </Fragment>
+            ))}
+          </Fragment>
+        );
+      });
     } else {
       body = items.map((item, i) => renderItemRow(item, i, 0));
     }

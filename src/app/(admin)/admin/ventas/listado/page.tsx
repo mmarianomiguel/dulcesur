@@ -1187,11 +1187,13 @@ export default function ListadoVentasPage() {
     const comboItemsMap: Record<string, { nombre: string; cantidad: number }[]> = {};
     const comboIds = new Set<string>();
     const prodCatMap: Record<string, string | null> = {};
+    const prodSubMap: Record<string, string | null> = {};
     if (productIds.length > 0) {
-      const { data: prods } = await supabase.from("productos").select("id, es_combo, categoria_id").in("id", productIds);
+      const { data: prods } = await supabase.from("productos").select("id, es_combo, categoria_id, subcategoria_id").in("id", productIds);
       for (const p of prods || []) {
         if ((p as any).es_combo) comboIds.add(p.id);
         prodCatMap[(p as any).id] = (p as any).categoria_id || null;
+        prodSubMap[(p as any).id] = (p as any).subcategoria_id || null;
       }
       if (comboIds.size > 0) {
         const comboResults = await Promise.all([...comboIds].map((comboId) =>
@@ -1210,17 +1212,25 @@ export default function ListadoVentasPage() {
       }
     }
 
-    // Cargar categorias para agrupar items en el ticket.
+    // Cargar categorias y subcategorias para agrupar items en el ticket.
     const catIds = [...new Set(Object.values(prodCatMap).filter(Boolean) as string[])];
+    const subIds = [...new Set(Object.values(prodSubMap).filter(Boolean) as string[])];
     const categoriaMap: Record<string, { nombre: string; orden: number | null }> = {};
+    const subcategoriaMap: Record<string, { nombre: string }> = {};
     if (catIds.length > 0) {
       const { data: cats } = await supabase.from("categorias").select("id, nombre, orden").in("id", catIds);
       for (const c of (cats as any[]) || []) categoriaMap[c.id] = { nombre: c.nombre, orden: c.orden ?? null };
+    }
+    if (subIds.length > 0) {
+      const { data: subs } = await supabase.from("subcategorias").select("id, nombre").in("id", subIds);
+      for (const s of (subs as any[]) || []) subcategoriaMap[s.id] = { nombre: s.nombre };
     }
 
     const lineItems: ReceiptLineItem[] = items.map((item) => {
       const catId = prodCatMap[item.producto_id || ""] || null;
       const cat = catId ? categoriaMap[catId] : null;
+      const subId = prodSubMap[item.producto_id || ""] || null;
+      const sub = subId ? subcategoriaMap[subId] : null;
       return {
         id: item.id,
         producto_id: item.producto_id || "",
@@ -1238,6 +1248,8 @@ export default function ListadoVentasPage() {
         comboItems: comboItemsMap[item.producto_id || ""] || [],
         categoria_nombre: cat?.nombre ?? null,
         categoria_orden: cat?.orden ?? null,
+        subcategoria_id: subId,
+        subcategoria_nombre: sub?.nombre ?? null,
       };
     });
 

@@ -747,19 +747,31 @@ export default function PedidosOnlinePage() {
         // Cargar categoria_id de los productos vinculados para agrupar en el ticket.
         const prodIdsForCat = [...new Set((vitems || []).map((it: any) => it.producto_id).filter(Boolean) as string[])];
         const prodCatMap: Record<string, string | null> = {};
+        const prodSubMap: Record<string, string | null> = {};
         const categoriaMap: Record<string, { nombre: string; orden: number | null }> = {};
+        const subcategoriaMap: Record<string, { nombre: string }> = {};
         if (prodIdsForCat.length > 0) {
-          const { data: prodData } = await supabase.from("productos").select("id, categoria_id").in("id", prodIdsForCat);
-          for (const p of (prodData as any[]) || []) prodCatMap[p.id] = p.categoria_id || null;
+          const { data: prodData } = await supabase.from("productos").select("id, categoria_id, subcategoria_id").in("id", prodIdsForCat);
+          for (const p of (prodData as any[]) || []) {
+            prodCatMap[p.id] = p.categoria_id || null;
+            prodSubMap[p.id] = p.subcategoria_id || null;
+          }
           const catIds = [...new Set(Object.values(prodCatMap).filter(Boolean) as string[])];
+          const subIds = [...new Set(Object.values(prodSubMap).filter(Boolean) as string[])];
           if (catIds.length > 0) {
             const { data: cats } = await supabase.from("categorias").select("id, nombre, orden").in("id", catIds);
             for (const c of (cats as any[]) || []) categoriaMap[c.id] = { nombre: c.nombre, orden: c.orden ?? null };
+          }
+          if (subIds.length > 0) {
+            const { data: subs } = await supabase.from("subcategorias").select("id, nombre").in("id", subIds);
+            for (const s of (subs as any[]) || []) subcategoriaMap[s.id] = { nombre: s.nombre };
           }
         }
         const lineItems: ReceiptLineItem[] = (vitems || []).map((item: any) => {
           const catId = prodCatMap[item.producto_id || ""] || null;
           const cat = catId ? categoriaMap[catId] : null;
+          const subId = prodSubMap[item.producto_id || ""] || null;
+          const sub = subId ? subcategoriaMap[subId] : null;
           return {
             id: item.id,
             producto_id: item.producto_id || "",
@@ -775,6 +787,8 @@ export default function PedidosOnlinePage() {
             stock: 0,
             categoria_nombre: cat?.nombre ?? null,
             categoria_orden: cat?.orden ?? null,
+            subcategoria_id: subId,
+            subcategoria_nombre: sub?.nombre ?? null,
           };
         });
         let pagoEf = 0, pagoTr = 0, pagoCC = 0;
