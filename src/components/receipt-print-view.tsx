@@ -368,11 +368,12 @@ export function ReceiptPrintView({
           }
         }
         const subgrupos = Array.from(porSubcat.values()).sort((a, b) => a.nombre.localeCompare(b.nombre, "es"));
+        const totalCat = g.items.length;
         return (
           <Fragment key={`g-${gi}`}>
             <tr>
-              <td colSpan={colSpan} style={{ padding: gi > 0 ? "8px 4px 3px" : "4px 4px 3px", fontWeight: 500, fontSize: `${fsProductos - 2}px`, color: "#555", borderTop: gi > 0 ? "1px solid #d8d8d8" : "none", fontStyle: "italic" }}>
-                {g.nombre}
+              <td colSpan={colSpan} style={{ padding: gi > 0 ? "3px 4px 1px" : "1px 4px", fontWeight: 600, fontSize: `${fsProductos - 2}px`, color: "#555", borderTop: gi > 0 ? "1px solid #d8d8d8" : "none" }}>
+                {g.nombre} <span style={{ fontWeight: 400, color: "#888" }}>({totalCat})</span>
               </td>
             </tr>
             {principales.map((item) => {
@@ -383,8 +384,8 @@ export function ReceiptPrintView({
             {subgrupos.map((sg, sgi) => (
               <Fragment key={`g-${gi}-s-${sgi}`}>
                 <tr>
-                  <td colSpan={colSpan} style={{ padding: "5px 4px 2px 18px", fontWeight: 400, fontSize: `${fsProductos - 3}px`, color: "#777", fontStyle: "italic" }}>
-                    {g.nombre} · {sg.nombre}
+                  <td colSpan={colSpan} style={{ padding: "2px 4px 1px 12px", fontWeight: 500, fontSize: `${fsProductos - 3}px`, color: "#777" }}>
+                    └ {sg.nombre} <span style={{ color: "#999" }}>({sg.items.length})</span>
                   </td>
                 </tr>
                 {sg.items.map((item) => {
