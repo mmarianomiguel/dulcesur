@@ -427,6 +427,19 @@ export default function ListadoVentasPage() {
   }, [quickPeriod, filterOrigen, filterType, filterPayment, filterBanco, filterMode, filterDay, filterMonth, filterYear, filterFrom, filterTo, searchClient]);
 
   useEffect(() => { fetchVentas(); }, [fetchVentas]);
+  // Refrescar ventas cuando la pestaña vuelve a primer plano:
+  // si en otra pantalla (clientes/cobranza, hoja-ruta, caja) se asigna la
+  // cuenta de transferencia a una venta, al volver a este listado el badge
+  // de la card debe reflejar el cambio sin tener que hacer hard reload.
+  useEffect(() => {
+    const onFocus = () => { if (document.visibilityState === "visible") fetchVentas(); };
+    window.addEventListener("focus", onFocus);
+    document.addEventListener("visibilitychange", onFocus);
+    return () => {
+      window.removeEventListener("focus", onFocus);
+      document.removeEventListener("visibilitychange", onFocus);
+    };
+  }, [fetchVentas]);
   // Fetch all reference data in parallel on mount
   useEffect(() => {
     // Synchronous localStorage reads
