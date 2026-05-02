@@ -4336,8 +4336,10 @@ export default function VentasPage() {
               <Eye className="w-4 h-4 text-muted-foreground" />
               <span className="text-sm font-medium">Vista previa del comprobante</span>
             </div>
-            <div ref={receiptRef} className="bg-white shadow-lg mx-auto" style={{ width: "210mm", transformOrigin: "top center", transform: "scale(0.52)" }}>
-              <ReceiptPrintView sale={successModal} config={receiptConfig} />
+            <div className="flex justify-center">
+              <div ref={receiptRef} className="bg-white shadow-lg" style={{ zoom: 0.85 }}>
+                <ReceiptPrintView sale={successModal} config={receiptConfig} />
+              </div>
             </div>
           </div>
 

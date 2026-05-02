@@ -101,23 +101,15 @@ export function PrintPreviewDialog({
 
   return (
     <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
-      <DialogContent className="max-w-2xl max-h-[85vh] flex flex-col">
+      <DialogContent className="max-w-3xl max-h-[90vh] flex flex-col overflow-hidden">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Printer className="w-4 h-4" />
             {title || "Vista previa del recibo"}
           </DialogTitle>
         </DialogHeader>
-        <div className="flex-1 overflow-auto border rounded-lg bg-white min-h-0">
-          <div
-            ref={printRef}
-            style={{
-              transform: "scale(0.52)",
-              transformOrigin: "top left",
-              width: "192%",
-              pointerEvents: "none",
-            }}
-          >
+        <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden border rounded-lg bg-white p-4 flex justify-center">
+          <div ref={printRef} style={{ zoom: 0.85, pointerEvents: "none" }}>
             <ReceiptPrintView config={config} sale={sale} />
           </div>
         </div>
