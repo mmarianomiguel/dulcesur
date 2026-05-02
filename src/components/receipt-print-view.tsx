@@ -141,7 +141,22 @@ export function ReceiptPrintView({
 
   // Split items into pages
   const pages: ReceiptLineItem[][] = [];
-  const allItems = [...sale.items];
+  // Si agrupamos por categoria, primero ordenamos los items en bloque para que la
+  // paginacion no parta una categoria en dos lugares no contiguos del ticket.
+  const allItems = config.agruparPorCategoria !== false
+    ? [...sale.items].sort((a, b) => {
+        const aOrden = a.categoria_orden ?? Number.POSITIVE_INFINITY;
+        const bOrden = b.categoria_orden ?? Number.POSITIVE_INFINITY;
+        const aNombre = a.categoria_nombre ?? "Otros";
+        const bNombre = b.categoria_nombre ?? "Otros";
+        const aOtros = aNombre === "Otros";
+        const bOtros = bNombre === "Otros";
+        if (aOtros !== bOtros) return aOtros ? 1 : -1;
+        if (aOrden !== bOrden) return aOrden - bOrden;
+        if (aNombre !== bNombre) return aNombre.localeCompare(bNombre, "es");
+        return 0;
+      })
+    : [...sale.items];
 
   // Squeeze check: if only a few items overflow, force single page
   const overflow = allItems.length - singlePageItems;
@@ -323,7 +338,7 @@ export function ReceiptPrintView({
       body = groups.map((g, gi) => (
         <Fragment key={`g-${gi}`}>
           <tr>
-            <td colSpan={colSpan} style={{ padding: gi > 0 ? "8px 4px 2px" : "4px 4px 2px", fontWeight: 500, fontSize: `${fsProductos - 2}px`, color: "#888", borderTop: gi > 0 ? "1px dotted #ccc" : "none", fontStyle: "italic" }}>
+            <td colSpan={colSpan} style={{ padding: gi > 0 ? "8px 4px 3px" : "4px 4px 3px", fontWeight: 500, fontSize: `${fsProductos - 2}px`, color: "#555", borderTop: gi > 0 ? "1px solid #d8d8d8" : "none", fontStyle: "italic" }}>
               {g.nombre}
             </td>
           </tr>
