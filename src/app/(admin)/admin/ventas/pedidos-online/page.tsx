@@ -744,20 +744,39 @@ export default function PedidosOnlinePage() {
         supabase.from("ventas").select("total").eq("remito_origen_id", pedido.ventaId).ilike("tipo_comprobante", "Nota de Crédito%").neq("estado", "anulada"),
       ]);
       if (v) {
-        const lineItems: ReceiptLineItem[] = (vitems || []).map((item: any) => ({
-          id: item.id,
-          producto_id: item.producto_id || "",
-          code: item.codigo || "",
-          description: item.descripcion,
-          qty: item.cantidad,
-          unit: item.unidad_medida || "Un",
-          price: item.precio_unitario,
-          discount: item.descuento || 0,
-          subtotal: item.subtotal,
-          presentacion: item.presentacion || "",
-          unidades_por_presentacion: item.unidades_por_presentacion ?? 1,
-          stock: 0,
-        }));
+        // Cargar categoria_id de los productos vinculados para agrupar en el ticket.
+        const prodIdsForCat = [...new Set((vitems || []).map((it: any) => it.producto_id).filter(Boolean) as string[])];
+        const prodCatMap: Record<string, string | null> = {};
+        const categoriaMap: Record<string, { nombre: string; orden: number | null }> = {};
+        if (prodIdsForCat.length > 0) {
+          const { data: prodData } = await supabase.from("productos").select("id, categoria_id").in("id", prodIdsForCat);
+          for (const p of (prodData as any[]) || []) prodCatMap[p.id] = p.categoria_id || null;
+          const catIds = [...new Set(Object.values(prodCatMap).filter(Boolean) as string[])];
+          if (catIds.length > 0) {
+            const { data: cats } = await supabase.from("categorias").select("id, nombre, orden").in("id", catIds);
+            for (const c of (cats as any[]) || []) categoriaMap[c.id] = { nombre: c.nombre, orden: c.orden ?? null };
+          }
+        }
+        const lineItems: ReceiptLineItem[] = (vitems || []).map((item: any) => {
+          const catId = prodCatMap[item.producto_id || ""] || null;
+          const cat = catId ? categoriaMap[catId] : null;
+          return {
+            id: item.id,
+            producto_id: item.producto_id || "",
+            code: item.codigo || "",
+            description: item.descripcion,
+            qty: item.cantidad,
+            unit: item.unidad_medida || "Un",
+            price: item.precio_unitario,
+            discount: item.descuento || 0,
+            subtotal: item.subtotal,
+            presentacion: item.presentacion || "",
+            unidades_por_presentacion: item.unidades_por_presentacion ?? 1,
+            stock: 0,
+            categoria_nombre: cat?.nombre ?? null,
+            categoria_orden: cat?.orden ?? null,
+          };
+        });
         let pagoEf = 0, pagoTr = 0, pagoCC = 0;
         for (const m of movs || []) {
           if (m.tipo === "ingreso") {

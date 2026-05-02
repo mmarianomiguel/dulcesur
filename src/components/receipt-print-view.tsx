@@ -323,7 +323,7 @@ export function ReceiptPrintView({
       body = groups.map((g, gi) => (
         <Fragment key={`g-${gi}`}>
           <tr>
-            <td colSpan={colSpan} style={{ padding: "6px 8px 4px", fontWeight: 700, fontSize: `${fsProductos}px`, borderTop: gi > 0 ? "1px solid #000" : "none", background: "#f3f3f3", letterSpacing: "0.5px", textTransform: "uppercase" }}>
+            <td colSpan={colSpan} style={{ padding: gi > 0 ? "8px 4px 2px" : "4px 4px 2px", fontWeight: 500, fontSize: `${fsProductos - 2}px`, color: "#888", borderTop: gi > 0 ? "1px dotted #ccc" : "none", fontStyle: "italic" }}>
               {g.nombre}
             </td>
           </tr>
