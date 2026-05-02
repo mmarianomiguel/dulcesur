@@ -188,6 +188,11 @@ export default function NotaCreditoPage() {
   }, [fetchNotas, fetchFormData]);
 
 
+  // CF cannot use Cuenta Corriente — reset método si se va a CF estando en CC
+  useEffect(() => {
+    if (!clientId && metodoDev === "Cuenta Corriente") setMetodoDev("Efectivo");
+  }, [clientId, metodoDev]);
+
   // When client changes (or CF is selected), fetch matching ventas for origen
   useEffect(() => {
     setOrigenId("");
@@ -726,7 +731,7 @@ export default function NotaCreditoPage() {
                               {(n.tipo_comprobante || "").replace("Nota de Crédito", "NC")}
                             </Badge>
                           </td>
-                          <td className="py-3 px-4 font-medium">{n.clientes?.nombre || "-"}</td>
+                          <td className="py-3 px-4 font-medium">{n.clientes?.nombre || "Consumidor Final"}</td>
                           <td className="py-3 px-4">
                             <Badge variant="outline" className={`text-xs font-medium ${
                               n.forma_pago === "Efectivo"
@@ -771,7 +776,7 @@ export default function NotaCreditoPage() {
                       <div className="flex gap-2">
                         <Button variant="outline" className="flex-1 justify-start text-sm font-normal" onClick={() => setClientOpen(true)}>
                           <Search className="w-4 h-4 mr-2 text-muted-foreground" />
-                          {selectedClient ? selectedClient.nombre : "Buscar cliente..."}
+                          {selectedClient ? selectedClient.nombre : "Consumidor Final"}
                         </Button>
                         {clientId && (
                           <Button variant="ghost" size="icon" className="shrink-0" onClick={() => { setClientId(""); setClientSearch(""); setOrigenId(""); setItems([]); setOrigenAvailable([]); }}>
@@ -787,6 +792,13 @@ export default function NotaCreditoPage() {
                             <Input placeholder="Buscar por nombre, CUIT o teléfono..." value={clientSearch} onChange={(e) => setClientSearch(e.target.value)} className="pl-9" autoFocus />
                           </div>
                           <div className="max-h-[400px] overflow-y-auto space-y-1">
+                            <button
+                              className={`w-full text-left px-3 py-2.5 rounded-md border-2 transition-colors ${!clientId ? "border-emerald-500 bg-emerald-50" : "border-transparent hover:bg-muted"}`}
+                              onClick={() => { setClientId(""); setClientSearch(""); setClientOpen(false); }}
+                            >
+                              <div className="font-medium text-sm">Consumidor Final</div>
+                              <div className="text-xs text-muted-foreground mt-0.5">Sin datos de cliente</div>
+                            </button>
                             {filteredClients.slice(0, 30).map((c) => (
                               <button key={c.id} className="w-full text-left px-3 py-2.5 hover:bg-muted rounded-md border transition-colors"
                                 onClick={() => { setClientId(c.id); setClientSearch(""); setClientOpen(false); }}>
@@ -1099,7 +1111,7 @@ export default function NotaCreditoPage() {
                 </div>
                 <div className="rounded-lg border p-3">
                   <p className="text-xs text-muted-foreground">Cliente</p>
-                  <p className="font-bold text-xs">{ncDetail.nc.clientes?.nombre || "-"}</p>
+                  <p className="font-bold text-xs">{ncDetail.nc.clientes?.nombre || "Consumidor Final"}</p>
                 </div>
                 <div className="rounded-lg border p-3">
                   <p className="text-xs text-muted-foreground">Devolución vía</p>

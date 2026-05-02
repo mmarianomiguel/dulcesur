@@ -373,8 +373,8 @@ export function ReceiptPrintView({
         return (
           <Fragment key={`g-${gi}`}>
             <tr>
-              <td colSpan={colSpan} style={{ padding: "2px 8px", background: "#222", color: "#fff", fontWeight: 700, fontSize: `${fsProductos - 2}px`, letterSpacing: "0.5px", textTransform: "uppercase" }}>
-                {g.nombre} <span style={{ fontWeight: 400, opacity: 0.75 }}>({totalCat}) · {fmtCur(Math.round(subtotalCat))}</span>
+              <td colSpan={colSpan} style={{ padding: "2px 8px", background: "#ececec", color: "#333", fontWeight: 700, fontSize: `${fsProductos - 2}px`, letterSpacing: "0.4px", textTransform: "uppercase", borderTop: "1px solid #bbb", borderBottom: "1px solid #bbb" }}>
+                {g.nombre} <span style={{ fontWeight: 400, color: "#777" }}>({totalCat}) · {fmtCur(Math.round(subtotalCat))}</span>
               </td>
             </tr>
             {principales.map((item) => {
@@ -387,8 +387,8 @@ export function ReceiptPrintView({
               return (
                 <Fragment key={`g-${gi}-s-${sgi}`}>
                   <tr>
-                    <td colSpan={colSpan} style={{ padding: "1px 8px 1px 18px", background: "#888", color: "#fff", fontWeight: 600, fontSize: `${fsProductos - 3}px` }}>
-                      └ {sg.nombre} <span style={{ fontWeight: 400, opacity: 0.85 }}>({sg.items.length}) · {fmtCur(Math.round(subtotalSg))}</span>
+                    <td colSpan={colSpan} style={{ padding: "1px 8px 1px 18px", background: "#f6f6f6", color: "#555", fontWeight: 600, fontSize: `${fsProductos - 3}px`, borderTop: "1px dashed #d0d0d0", borderBottom: "1px dashed #d0d0d0" }}>
+                      └ {sg.nombre} <span style={{ fontWeight: 400, color: "#888" }}>({sg.items.length}) · {fmtCur(Math.round(subtotalSg))}</span>
                     </td>
                   </tr>
                   {sg.items.map((item) => {
