@@ -1,3 +1,5 @@
+import { Fragment, type ReactNode, type CSSProperties } from "react";
+
 export interface ReceiptConfig {
   logoUrl: string;
   empresaNombre: string;
@@ -23,6 +25,7 @@ export interface ReceiptConfig {
   mostrarTelefono: boolean;
   mostrarFormaPago: boolean;
   mostrarMoneda: boolean;
+  agruparPorCategoria?: boolean;
 }
 
 export const defaultReceiptConfig: ReceiptConfig = {
@@ -50,6 +53,7 @@ export const defaultReceiptConfig: ReceiptConfig = {
   mostrarTelefono: true,
   mostrarFormaPago: true,
   mostrarMoneda: true,
+  agruparPorCategoria: true,
 };
 
 export interface ReceiptLineItem {
@@ -67,6 +71,8 @@ export interface ReceiptLineItem {
   stock: number;
   es_combo?: boolean;
   comboItems?: { nombre: string; cantidad: number }[];
+  categoria_nombre?: string | null;
+  categoria_orden?: number | null;
 }
 
 export interface ReceiptSale {
@@ -250,76 +256,115 @@ export function ReceiptPrintView({
     </div>
   );
 
-  // Items table for a page
-  const ItemsTable = ({ items, showContinue }: { items: ReceiptLineItem[]; showContinue?: boolean }) => (
-    <table style={{ width: "100%", borderCollapse: "collapse", fontSize: `${fsProductos}px` }}>
-      <thead>
-        <tr style={{ borderBottom: "2px solid #000", borderTop: "2px solid #000" }}>
-          <th style={{ textAlign: "left", padding: rowPad, fontWeight: "bold" }}>Cant.</th>
-          <th style={{ textAlign: "left", padding: rowPad, fontWeight: "bold" }}>Producto</th>
-          <th style={{ textAlign: "center", padding: rowPad, fontWeight: "bold" }}>U/Med</th>
-          <th style={{ textAlign: "right", padding: rowPad, fontWeight: "bold", whiteSpace: "nowrap" }}>P.Unit.</th>
+  // Items table for a page — agrupa por categoria si config.agruparPorCategoria === true.
+  const ItemsTable = ({ items, showContinue }: { items: ReceiptLineItem[]; showContinue?: boolean }) => {
+    const colSpan = config.mostrarDescuento ? 6 : 5;
+    const renderItemRow = (item: ReceiptLineItem, i: number, altOffset: number) => {
+      const totalComboUnits = item.es_combo && item.comboItems && item.comboItems.length > 0
+        ? item.comboItems.reduce((s, ci) => s + ci.cantidad, 0)
+        : 0;
+      const isBox = !item.es_combo && item.unidades_por_presentacion > 1;
+      const isMedio = (item.unidades_por_presentacion || 1) < 1;
+      const displayQty = isMedio ? item.qty * (item.unidades_por_presentacion || 0.5) : item.qty;
+      const precioUnitario = isMedio && item.unidades_por_presentacion > 0
+        ? item.price / item.unidades_por_presentacion
+        : item.price;
+      return (
+        <tr key={`${i}-${item.id}`} style={{ borderBottom: "1px solid #ccc", background: (i + altOffset) % 2 === 1 ? altRowBg : "transparent" }}>
+          <td style={{ padding: rowPad, textAlign: "left" }}>{displayQty}</td>
+          <td style={{ padding: rowPad, textAlign: "left", maxWidth: "180px", wordBreak: "break-word", overflow: "hidden" }}>
+            {item.es_combo && (
+              <span style={{ fontSize: `${fsProductos - 3}px`, fontWeight: "bold", border: "1px solid #000", padding: "0 3px", marginRight: "4px", letterSpacing: "0.5px" }}>COMBO</span>
+            )}
+            {cleanDesc(item)}
+            {item.es_combo && item.comboItems && item.comboItems.length > 0 && (
+              <div style={{ fontSize: `${fsProductos - 3}px`, color: "#555", marginTop: "1px", lineHeight: "1.2" }}>
+                {item.comboItems.map((ci) => `${ci.nombre} x${ci.cantidad}`).join(" · ")}
+              </div>
+            )}
+          </td>
+          <td style={{ padding: rowPad, textAlign: "center" }}>
+            {item.es_combo && totalComboUnits > 0
+              ? `x${totalComboUnits} un`
+              : isBox
+              ? `x${item.unidades_por_presentacion} un`
+              : isMedio
+              ? "Un"
+              : /^(unidad|un)$/i.test(item.unit || "") ? "Un" : (item.unit || "Un")}
+          </td>
+          <td style={{ padding: rowPad, textAlign: "right", fontVariantNumeric: "tabular-nums" }}>{fmtCur(precioUnitario)}</td>
           {config.mostrarDescuento && (
-            <th style={{ textAlign: "right", padding: rowPad, fontWeight: "bold" }}>Dto.%</th>
+            <td style={{ padding: rowPad, textAlign: "right" }}>{item.discount ? `${item.discount}%` : ""}</td>
           )}
-          <th style={{ textAlign: "right", padding: rowPad, fontWeight: "bold" }}>Importe</th>
+          <td style={{ padding: rowPad, textAlign: "right", fontWeight: "600", fontVariantNumeric: "tabular-nums" }}>{fmtCur(item.subtotal)}</td>
         </tr>
-      </thead>
-      <tbody>
-        {items.map((item, i) => {
-          const totalComboUnits = item.es_combo && item.comboItems && item.comboItems.length > 0
-            ? item.comboItems.reduce((s, ci) => s + ci.cantidad, 0)
-            : 0;
-          const isBox = !item.es_combo && item.unidades_por_presentacion > 1;
-          const isMedio = (item.unidades_por_presentacion || 1) < 1;
-          const displayQty = isMedio ? item.qty * (item.unidades_por_presentacion || 0.5) : item.qty;
-          // For fractional presentations (e.g. 0.5 = medio cartón), show the full unit price
-          const precioUnitario = isMedio && item.unidades_por_presentacion > 0
-            ? item.price / item.unidades_por_presentacion
-            : item.price;
-          return (
-            <tr key={i} style={{ borderBottom: "1px solid #ccc", background: i % 2 === 1 ? altRowBg : "transparent" }}>
-              <td style={{ padding: rowPad, textAlign: "left" }}>{displayQty}</td>
-              <td style={{ padding: rowPad, textAlign: "left", maxWidth: "180px", wordBreak: "break-word", overflow: "hidden" }}>
-                {item.es_combo && (
-                  <span style={{ fontSize: `${fsProductos - 3}px`, fontWeight: "bold", border: "1px solid #000", padding: "0 3px", marginRight: "4px", letterSpacing: "0.5px" }}>COMBO</span>
-                )}
-                {cleanDesc(item)}
-                {item.es_combo && item.comboItems && item.comboItems.length > 0 && (
-                  <div style={{ fontSize: `${fsProductos - 3}px`, color: "#555", marginTop: "1px", lineHeight: "1.2" }}>
-                    {item.comboItems.map((ci) => `${ci.nombre} x${ci.cantidad}`).join(" · ")}
-                  </div>
-                )}
-              </td>
-              <td style={{ padding: rowPad, textAlign: "center" }}>
-                {item.es_combo && totalComboUnits > 0
-                  ? `x${totalComboUnits} un`
-                  : isBox
-                  ? `x${item.unidades_por_presentacion} un`
-                  : isMedio
-                  ? "Un"
-                  : /^(unidad|un)$/i.test(item.unit || "") ? "Un" : (item.unit || "Un")}
-              </td>
-              <td style={{ padding: rowPad, textAlign: "right", fontVariantNumeric: "tabular-nums" }}>{fmtCur(precioUnitario)}</td>
-              {config.mostrarDescuento && (
-                <td style={{ padding: rowPad, textAlign: "right" }}>{item.discount ? `${item.discount}%` : ""}</td>
-              )}
-              <td style={{ padding: rowPad, textAlign: "right", fontWeight: "600", fontVariantNumeric: "tabular-nums" }}>{fmtCur(item.subtotal)}</td>
-            </tr>
-          );
-        })}
-      </tbody>
-      {showContinue && (
-        <tfoot>
+      );
+    };
+
+    let body: ReactNode;
+    if (config.agruparPorCategoria !== false) {
+      // Agrupar por categoria, conservando orden original dentro de cada grupo.
+      const groupsMap = new Map<string, { nombre: string; orden: number; items: ReceiptLineItem[] }>();
+      for (const item of items) {
+        const key = item.categoria_nombre || "__OTROS__";
+        const nombre = item.categoria_nombre || "Otros";
+        const orden = item.categoria_orden ?? Number.POSITIVE_INFINITY;
+        const g = groupsMap.get(key);
+        if (g) g.items.push(item);
+        else groupsMap.set(key, { nombre, orden, items: [item] });
+      }
+      const groups = Array.from(groupsMap.values()).sort((a, b) => {
+        if (a.nombre === "Otros" && b.nombre !== "Otros") return 1;
+        if (b.nombre === "Otros" && a.nombre !== "Otros") return -1;
+        if (a.orden !== b.orden) return a.orden - b.orden;
+        return a.nombre.localeCompare(b.nombre, "es");
+      });
+      let runningIdx = 0;
+      body = groups.map((g, gi) => (
+        <Fragment key={`g-${gi}`}>
           <tr>
-            <td colSpan={config.mostrarDescuento ? 6 : 5} style={{ textAlign: "center", padding: "6px", fontSize: `${fsProductos - 1}px`, fontStyle: "italic", borderTop: "1px solid #000" }}>
-              Continúa en la siguiente página...
+            <td colSpan={colSpan} style={{ padding: "6px 8px 4px", fontWeight: 700, fontSize: `${fsProductos}px`, borderTop: gi > 0 ? "1px solid #000" : "none", background: "#f3f3f3", letterSpacing: "0.5px", textTransform: "uppercase" }}>
+              {g.nombre}
             </td>
           </tr>
-        </tfoot>
-      )}
-    </table>
-  );
+          {g.items.map((item) => {
+            const row = renderItemRow(item, runningIdx, 0);
+            runningIdx += 1;
+            return row;
+          })}
+        </Fragment>
+      ));
+    } else {
+      body = items.map((item, i) => renderItemRow(item, i, 0));
+    }
+
+    return (
+      <table style={{ width: "100%", borderCollapse: "collapse", fontSize: `${fsProductos}px` }}>
+        <thead>
+          <tr style={{ borderBottom: "2px solid #000", borderTop: "2px solid #000" }}>
+            <th style={{ textAlign: "left", padding: rowPad, fontWeight: "bold" }}>Cant.</th>
+            <th style={{ textAlign: "left", padding: rowPad, fontWeight: "bold" }}>Producto</th>
+            <th style={{ textAlign: "center", padding: rowPad, fontWeight: "bold" }}>U/Med</th>
+            <th style={{ textAlign: "right", padding: rowPad, fontWeight: "bold", whiteSpace: "nowrap" }}>P.Unit.</th>
+            {config.mostrarDescuento && (
+              <th style={{ textAlign: "right", padding: rowPad, fontWeight: "bold" }}>Dto.%</th>
+            )}
+            <th style={{ textAlign: "right", padding: rowPad, fontWeight: "bold" }}>Importe</th>
+          </tr>
+        </thead>
+        <tbody>{body}</tbody>
+        {showContinue && (
+          <tfoot>
+            <tr>
+              <td colSpan={colSpan} style={{ textAlign: "center", padding: "6px", fontSize: `${fsProductos - 1}px`, fontStyle: "italic", borderTop: "1px solid #000" }}>
+                Continúa en la siguiente página...
+              </td>
+            </tr>
+          </tfoot>
+        )}
+      </table>
+    );
+  };
 
   // Totals + Payment section (only on last page) — compact, B&W friendly
   const TotalsAndPayment = ({ pushToBottom = true }: { pushToBottom?: boolean }) => {
@@ -413,7 +458,7 @@ export function ReceiptPrintView({
               const cobro = Math.round(sale.cobroSaldoMonto || 0);
               const saldoFinal = Math.round(sale.saldoNuevo);
               const ccWidth = "260px";
-              const rowStyle: React.CSSProperties = { display: "flex", justifyContent: "space-between", fontSize: `${fs - 1}px`, marginBottom: "1px" };
+              const rowStyle: CSSProperties = { display: "flex", justifyContent: "space-between", fontSize: `${fs - 1}px`, marginBottom: "1px" };
               return (
                 <div style={{ display: "flex", justifyContent: "flex-end", marginTop: "4px" }}>
                   <div style={{ width: ccWidth, borderTop: "1px solid #000", paddingTop: "3px" }}>

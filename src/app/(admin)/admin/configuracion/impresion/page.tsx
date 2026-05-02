@@ -52,6 +52,46 @@ async function persistReceiptConfig(config: ReceiptConfig) {
   }
 }
 
+function CategoriaOrdenList() {
+  const [cats, setCats] = useState<{ id: string; nombre: string; orden: number | null }[]>([]);
+  const [loading, setLoading] = useState(true);
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      const { data } = await supabase.from("categorias").select("id, nombre, orden").order("orden", { nullsFirst: false }).order("nombre");
+      if (!alive) return;
+      setCats(((data as any) || []).map((c: any) => ({ id: c.id, nombre: c.nombre, orden: c.orden })));
+      setLoading(false);
+    })();
+    return () => { alive = false; };
+  }, []);
+  if (loading) return <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />;
+  if (cats.length === 0) return <p className="text-xs text-muted-foreground">No hay categorías cargadas.</p>;
+  return (
+    <div className="space-y-1.5">
+      {cats.map((c) => (
+        <div key={c.id} className="flex items-center gap-3 py-1">
+          <Input
+            type="number"
+            value={c.orden ?? ""}
+            placeholder="—"
+            className="h-8 w-20 text-xs"
+            onChange={(e) => {
+              const val = e.target.value === "" ? null : Number(e.target.value);
+              setCats((prev) => prev.map((cat) => cat.id === c.id ? { ...cat, orden: val } : cat));
+            }}
+            onBlur={async (e) => {
+              const val = e.target.value === "" ? null : Number(e.target.value);
+              await supabase.from("categorias").update({ orden: val }).eq("id", c.id);
+            }}
+          />
+          <span className="text-sm">{c.nombre}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 export default function ImpresionPage() {
   const [empresa, setEmpresa] = useState<Empresa | null>(null);
   const [loading, setLoading] = useState(true);
@@ -405,6 +445,39 @@ export default function ImpresionPage() {
                 </div>
               </div>
             </div>
+          </CardContent>
+        </Card>
+
+        {/* Agrupación por categoría */}
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-sm">Agrupación por categoría</CardTitle>
+            <CardDescription className="text-xs">Mostrar los items del comprobante separados por categoría — útil para armar pedidos en orden.</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                onClick={() => setRcfg({ ...rcfg, agruparPorCategoria: !rcfg.agruparPorCategoria })}
+                className={cn(
+                  "relative inline-flex h-6 w-11 shrink-0 rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none cursor-pointer",
+                  rcfg.agruparPorCategoria ? "bg-emerald-500" : "bg-gray-300"
+                )}
+              >
+                <span className={cn("pointer-events-none inline-block h-5 w-5 rounded-full bg-white shadow transform transition-transform duration-200 ease-in-out", rcfg.agruparPorCategoria ? "translate-x-5" : "translate-x-0")} />
+              </button>
+              <span className="text-sm">Agrupar items por categoría</span>
+            </div>
+            {rcfg.agruparPorCategoria && (
+              <>
+                <Separator />
+                <div>
+                  <p className="text-xs font-medium mb-2">Orden de las categorías en el ticket</p>
+                  <p className="text-xs text-muted-foreground mb-3">Asigná un número (1, 2, 3, ...) para fijar el orden. Las categorías sin número se muestran al final ordenadas alfabéticamente. &quot;Otros&quot; (sin categoría) siempre va al final.</p>
+                  <CategoriaOrdenList />
+                </div>
+              </>
+            )}
           </CardContent>
         </Card>
 

@@ -1171,10 +1171,12 @@ export default function ListadoVentasPage() {
     const productIds = items.map((i) => i.producto_id).filter(Boolean) as string[];
     const comboItemsMap: Record<string, { nombre: string; cantidad: number }[]> = {};
     const comboIds = new Set<string>();
+    const prodCatMap: Record<string, string | null> = {};
     if (productIds.length > 0) {
-      const { data: prods } = await supabase.from("productos").select("id, es_combo").in("id", productIds);
+      const { data: prods } = await supabase.from("productos").select("id, es_combo, categoria_id").in("id", productIds);
       for (const p of prods || []) {
         if ((p as any).es_combo) comboIds.add(p.id);
+        prodCatMap[(p as any).id] = (p as any).categoria_id || null;
       }
       if (comboIds.size > 0) {
         const comboResults = await Promise.all([...comboIds].map((comboId) =>
@@ -1193,22 +1195,36 @@ export default function ListadoVentasPage() {
       }
     }
 
-    const lineItems: ReceiptLineItem[] = items.map((item) => ({
-      id: item.id,
-      producto_id: item.producto_id || "",
-      code: item.codigo,
-      description: item.descripcion,
-      qty: item.cantidad,
-      unit: item.unidad_medida || "Un",
-      price: item.precio_unitario,
-      discount: item.descuento,
-      subtotal: item.subtotal,
-      presentacion: (item as any).presentacion || "",
-      unidades_por_presentacion: (item as any).unidades_por_presentacion ?? 1,
-      stock: 0,
-      es_combo: comboIds.has(item.producto_id || ""),
-      comboItems: comboItemsMap[item.producto_id || ""] || [],
-    }));
+    // Cargar categorias para agrupar items en el ticket.
+    const catIds = [...new Set(Object.values(prodCatMap).filter(Boolean) as string[])];
+    const categoriaMap: Record<string, { nombre: string; orden: number | null }> = {};
+    if (catIds.length > 0) {
+      const { data: cats } = await supabase.from("categorias").select("id, nombre, orden").in("id", catIds);
+      for (const c of (cats as any[]) || []) categoriaMap[c.id] = { nombre: c.nombre, orden: c.orden ?? null };
+    }
+
+    const lineItems: ReceiptLineItem[] = items.map((item) => {
+      const catId = prodCatMap[item.producto_id || ""] || null;
+      const cat = catId ? categoriaMap[catId] : null;
+      return {
+        id: item.id,
+        producto_id: item.producto_id || "",
+        code: item.codigo,
+        description: item.descripcion,
+        qty: item.cantidad,
+        unit: item.unidad_medida || "Un",
+        price: item.precio_unitario,
+        discount: item.descuento,
+        subtotal: item.subtotal,
+        presentacion: (item as any).presentacion || "",
+        unidades_por_presentacion: (item as any).unidades_por_presentacion ?? 1,
+        stock: 0,
+        es_combo: comboIds.has(item.producto_id || ""),
+        comboItems: comboItemsMap[item.producto_id || ""] || [],
+        categoria_nombre: cat?.nombre ?? null,
+        categoria_orden: cat?.orden ?? null,
+      };
+    });
 
     // Payment breakdown from caja_movimientos (pre-fetched)
     let pagoEf = 0, pagoTr = 0, pagoCC = 0;
