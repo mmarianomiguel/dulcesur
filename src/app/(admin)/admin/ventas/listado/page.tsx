@@ -1423,13 +1423,20 @@ export default function ListadoVentasPage() {
       .in("pedido_id", ids);
 
     // Also fetch venta_items to get unidades_por_presentacion
+    // y cuenta_transferencia_alias / forma_pago para enriquecer pedidos online
+    // viejos que ya no caen en el limit(200) de fetchVentas (sino el badge de
+    // cuenta bancaria en la card aparece como "Sin cuenta").
     const numeros = data.map((p: any) => p.numero);
     const { data: ventasData } = await supabase
       .from("ventas")
-      .select("id, numero")
+      .select("id, numero, cuenta_transferencia_alias, cuenta_transferencia_id, forma_pago, monto_efectivo, monto_transferencia, monto_pagado")
       .in("numero", numeros);
     const ventaIdMap: Record<string, string> = {};
-    for (const v of ventasData || []) ventaIdMap[v.numero] = v.id;
+    const ventaExtraByNumero: Record<string, any> = {};
+    for (const v of ventasData || []) {
+      ventaIdMap[v.numero] = v.id;
+      ventaExtraByNumero[v.numero] = v;
+    }
     const ventaIds = Object.values(ventaIdMap);
 
     let uppByProducto: Record<string, number> = {};
@@ -1455,7 +1462,21 @@ export default function ListadoVentasPage() {
       itemsByPedido[item.pedido_id].push({ ...item, unidades_por_presentacion: upp });
     });
 
-    setPoPedidos(data.map((p: any) => ({ ...p, items: itemsByPedido[p.id] || [] })));
+    setPoPedidos(data.map((p: any) => {
+      const ve = ventaExtraByNumero[p.numero];
+      return {
+        ...p,
+        items: itemsByPedido[p.id] || [],
+        ...(ve ? {
+          cuenta_transferencia_alias: ve.cuenta_transferencia_alias ?? null,
+          cuenta_transferencia_id: ve.cuenta_transferencia_id ?? null,
+          forma_pago: ve.forma_pago ?? p.metodo_pago,
+          monto_efectivo: ve.monto_efectivo ?? p.monto_efectivo,
+          monto_transferencia: ve.monto_transferencia ?? p.monto_transferencia,
+          monto_pagado: ve.monto_pagado ?? 0,
+        } : {}),
+      };
+    }));
     setPoLoading(false);
   }, [quickPeriod, filterMode, filterDay, filterMonth, filterYear, filterFrom, filterTo]);
 
