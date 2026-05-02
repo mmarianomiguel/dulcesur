@@ -38,7 +38,13 @@ export default function imageLoader({
       "/storage/v1/render/image/public/"
     );
     const url = new URL(rendered);
+    // Square + contain padding para que las imágenes con aspect ratio
+    // distinto al cuadrado (ej. portrait 400x900) se vean bien dentro de
+    // los cards. Supabase renderiza padding transparente que se ve sobre
+    // el fondo blanco/gris de la card.
     url.searchParams.set("width", String(w));
+    url.searchParams.set("height", String(w));
+    url.searchParams.set("resize", "contain");
     url.searchParams.set("quality", String(quality ?? 70));
     return url.toString();
   }
