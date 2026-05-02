@@ -63,7 +63,8 @@ export default function ResumenMensualPage() {
         .ilike("tipo_comprobante", "Nota de Crédito%")
         .neq("estado", "anulada"),
       supabase.from("compras").select("total")
-        .gte("fecha", start).lt("fecha", end),
+        .gte("fecha", start).lt("fecha", end)
+        .neq("estado", "Pendiente"),
     ]);
     // Exclude pending web orders from totals
     const vList = (ventas || []).filter((v: any) => !(v.estado === "pendiente" && v.tipo_comprobante === "Pedido Web"));
