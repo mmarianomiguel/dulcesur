@@ -4504,7 +4504,7 @@ export default function VentasPage() {
 
       {/* Reprint Last Receipt Dialog */}
       <Dialog open={reprintOpen} onOpenChange={setReprintOpen}>
-        <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
+        <DialogContent className="max-w-3xl max-h-[90vh] overflow-hidden flex flex-col">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Printer className="w-5 h-5" />
@@ -4512,9 +4512,9 @@ export default function VentasPage() {
             </DialogTitle>
           </DialogHeader>
           {lastPrintData && (
-            <div className="space-y-4">
-              <div className="border rounded-lg overflow-hidden bg-white" style={{ maxHeight: "55vh", overflow: "auto" }}>
-                <div ref={reprintRef} style={{ transform: "scale(0.52)", transformOrigin: "top left", width: "192%", pointerEvents: "none" }}>
+            <div className="flex flex-col gap-4 flex-1 min-h-0">
+              <div className="border rounded-lg bg-white flex-1 min-h-0 overflow-y-auto overflow-x-hidden flex justify-center p-4">
+                <div ref={reprintRef} style={{ zoom: 0.85, pointerEvents: "none" }}>
                   <ReceiptPrintView
                     sale={{
                       numero: lastPrintData.numero,
