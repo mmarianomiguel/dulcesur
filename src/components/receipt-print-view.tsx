@@ -358,6 +358,8 @@ export function ReceiptPrintView({
       // Dentro de cada categoria: separar items "principales" (sin sub expandida)
       // de items con subcategoria expandida. Los principales van primero, luego
       // un sub-header por subcategoria expandida.
+      const cmpAlfa = (a: ReceiptLineItem, b: ReceiptLineItem) =>
+        cleanDesc(a).localeCompare(cleanDesc(b), "es", { sensitivity: "base" });
       body = groups.map((g, gi) => {
         const principales: ReceiptLineItem[] = [];
         const porSubcat = new Map<string, { nombre: string; items: ReceiptLineItem[] }>();
@@ -371,7 +373,10 @@ export function ReceiptPrintView({
             principales.push(item);
           }
         }
-        const subgrupos = Array.from(porSubcat.values()).sort((a, b) => a.nombre.localeCompare(b.nombre, "es"));
+        principales.sort(cmpAlfa);
+        const subgrupos = Array.from(porSubcat.values())
+          .sort((a, b) => a.nombre.localeCompare(b.nombre, "es"))
+          .map((sg) => ({ ...sg, items: [...sg.items].sort(cmpAlfa) }));
         const totalCat = g.items.length;
         const showSubtotalCat = !!(g.id && mostrarSubtotalSet.has(g.id));
         const subtotalCat = showSubtotalCat ? g.items.reduce((s, it) => s + (it.subtotal || 0), 0) : 0;

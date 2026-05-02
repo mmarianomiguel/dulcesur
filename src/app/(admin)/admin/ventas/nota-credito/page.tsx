@@ -829,8 +829,7 @@ export default function NotaCreditoPage() {
                         <Button
                           variant="outline"
                           className="flex-1 justify-start text-sm font-normal truncate"
-                          onClick={() => clientId && setOrigenSelectOpen(true)}
-                          disabled={!clientId}
+                          onClick={() => setOrigenSelectOpen(true)}
                         >
                           <Search className="w-4 h-4 mr-2 text-muted-foreground shrink-0" />
                           {origenId && origenId !== "none" ? (() => {
@@ -838,7 +837,7 @@ export default function NotaCreditoPage() {
                             if (!v) return "Sin referencia";
                             const fecha = v.fecha ? new Date(v.fecha + "T12:00:00").toLocaleDateString("es-AR", { day: "2-digit", month: "2-digit", year: "2-digit" }) : "";
                             return <span className="truncate">{fecha && `${fecha} · `}{v.tipo_comprobante} {v.numero} — {formatCurrency(v.total)}</span>;
-                          })() : (clientId ? "Sin referencia" : "Primero elegí un cliente")}
+                          })() : "Sin referencia"}
                         </Button>
                         {origenId && (
                           <Button variant="ghost" size="icon" className="shrink-0" onClick={() => { setOrigenId(""); setItems([]); setOrigenAvailable([]); }}>
@@ -1082,7 +1081,7 @@ export default function NotaCreditoPage() {
               </Card>
 
               <Button className="w-full" size="lg" onClick={handleSave}
-                disabled={!clientId || items.length === 0 || saving}>
+                disabled={items.length === 0 || saving}>
                 {saving ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <FileMinus className="w-4 h-4 mr-2" />}
                 Emitir Nota de Crédito
               </Button>
