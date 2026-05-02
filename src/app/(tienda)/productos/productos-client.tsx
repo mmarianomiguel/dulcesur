@@ -465,7 +465,7 @@ function ProductosContent({ initialData }: { initialData?: InitialProductosData 
         );
       }
       if (disponibilidad === "en_stock") query = query.gt("stock", 0);
-      if (disponibilidad === "sin_stock") query = query.eq("stock", 0);
+      if (disponibilidad === "sin_stock") query = query.eq("stock", 0).eq("es_combo", false);
       if (tagFilter) query = query.contains("tags", [tagFilter]);
       if (tipoFilter === "combos") query = query.eq("es_combo", true);
       if (tipoFilter === "precio_actualizado") {
@@ -827,6 +827,24 @@ function ProductosContent({ initialData }: { initialData?: InitialProductosData 
               </span>
             )}
           </div>
+          <button
+            onClick={() =>
+              updateParams({
+                categoria: null,
+                subcategoria: null,
+                marca: null,
+                q: null,
+                precio_min: null,
+                precio_max: null,
+                disponibilidad: null,
+                tipo: null,
+                tag: null,
+              })
+            }
+            className="mt-3 text-xs text-primary font-medium hover:underline"
+          >
+            Limpiar todos los filtros
+          </button>
         </div>
       )}
 
@@ -1183,6 +1201,17 @@ function ProductosContent({ initialData }: { initialData?: InitialProductosData 
               {total} {total === 1 ? "resultado" : "resultados"}
             </p>
           )}
+          {!loading && searchQuery && categoriaId && (
+            <p className="text-sm text-gray-500 mt-1">
+              ¿No encontrás lo que buscás? {" "}
+              <button
+                onClick={() => updateParams({ categoria: null, subcategoria: null })}
+                className="text-primary font-medium hover:underline"
+              >
+                Buscar &quot;{searchQuery}&quot; en todas las categorías
+              </button>
+            </p>
+          )}
         </div>
 
         {/* Mobile search bar */}
@@ -1303,8 +1332,9 @@ function ProductosContent({ initialData }: { initialData?: InitialProductosData 
                 <button
                   onClick={() => {
                     updateParams({
-                      marca: null, disponibilidad: null, tipo: null,
-                      precio_min: null, precio_max: null,
+                      categoria: null, subcategoria: null, marca: null,
+                      q: null, precio_min: null, precio_max: null,
+                      disponibilidad: null, tipo: null, tag: null,
                     });
                   }}
                   className="text-xs text-primary font-medium"
