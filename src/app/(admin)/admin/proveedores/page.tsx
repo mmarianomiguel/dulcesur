@@ -36,6 +36,9 @@ import {
   FileText,
   AlertCircle,
   Download,
+  Copy,
+  MessageSquare,
+  Package,
 } from "lucide-react";
 
 
@@ -63,6 +66,7 @@ const emptyForm = {
 export default function ProveedoresPage() {
   const [search, setSearch] = useState("");
   const [form, setForm] = useState(emptyForm);
+  const [contextMenu, setContextMenu] = useState<{ x: number; y: number; provider: Proveedor } | null>(null);
   const importRef = useRef<HTMLInputElement>(null);
   const [comprasPendientes, setComprasPendientes] = useState<(Compra & { proveedores?: { nombre: string } })[]>([]);
   const [ccMovimientos, setCcMovimientos] = useState<CuentaCorrienteProveedor[]>([]);
@@ -109,6 +113,42 @@ export default function ProveedoresPage() {
     setForm(emptyForm);
     editDialog.onOpen();
   };
+
+  const handleContextMenu = (e: React.MouseEvent, provider: Proveedor) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const menuWidth = 240;
+    const menuHeight = 380;
+    const vw = window.innerWidth;
+    const vh = window.innerHeight;
+    let x = e.clientX;
+    let y = e.clientY;
+    if (x + menuWidth > vw - 8) x = vw - menuWidth - 8;
+    if (y + menuHeight > vh - 8) y = vh - menuHeight - 8;
+    if (y < 8) y = 8;
+    setContextMenu({ x, y, provider });
+  };
+
+  const waUrl = (telefono: string | null | undefined, nombre: string) => {
+    if (!telefono) return null;
+    const digits = telefono.replace(/\D/g, "");
+    const wa = digits.startsWith("54") ? digits : `54${digits.startsWith("0") ? digits.slice(1) : digits}`;
+    return `https://wa.me/${wa}?text=${encodeURIComponent(`Hola ${nombre}!`)}`;
+  };
+
+  useEffect(() => {
+    if (!contextMenu) return;
+    const close = () => setContextMenu(null);
+    const handleKey = (e: KeyboardEvent) => { if (e.key === "Escape") close(); };
+    document.addEventListener("click", close);
+    document.addEventListener("keydown", handleKey);
+    window.addEventListener("scroll", close, true);
+    return () => {
+      document.removeEventListener("click", close);
+      document.removeEventListener("keydown", handleKey);
+      window.removeEventListener("scroll", close, true);
+    };
+  }, [contextMenu]);
 
   const openEdit = async (p: Proveedor) => {
     setForm({
@@ -577,7 +617,7 @@ export default function ProveedoresPage() {
                   </thead>
                   <tbody>
                     {filtered.map((p) => (
-                      <tr key={p.id} className="border-b last:border-0 hover:bg-muted/50 transition-colors">
+                      <tr key={p.id} className="border-b last:border-0 hover:bg-muted/50 transition-colors" onContextMenu={(e) => handleContextMenu(e, p)}>
                         <td className="py-3 px-4">
                           <div className="font-medium">{p.nombre}</div>
                           {(p as any).razon_social && <div className="text-xs text-muted-foreground">{(p as any).razon_social}</div>}
@@ -1096,6 +1136,90 @@ export default function ProveedoresPage() {
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* Context menu */}
+      {contextMenu && (
+        <div
+          className="fixed z-50 bg-background border border-border rounded-xl shadow-lg py-1 min-w-[240px]"
+          style={{ left: contextMenu.x, top: contextMenu.y, maxHeight: "calc(100vh - 16px)", overflowY: "auto" }}
+          onClick={(e) => e.stopPropagation()}
+          onContextMenu={(e) => e.preventDefault()}
+        >
+          <div className="px-3 py-2 border-b">
+            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide truncate">
+              {contextMenu.provider.nombre.length > 30
+                ? contextMenu.provider.nombre.slice(0, 28) + "..."
+                : contextMenu.provider.nombre}
+            </p>
+          </div>
+          <div className="py-1">
+            <button
+              className="flex items-center gap-2.5 w-full px-3 py-2 text-sm hover:bg-muted/60 transition-colors text-left"
+              onClick={() => { const p = contextMenu.provider; setContextMenu(null); openEdit(p); }}
+            >
+              <Edit className="w-4 h-4 text-muted-foreground" /> Editar proveedor
+            </button>
+            <button
+              className="flex items-center gap-2.5 w-full px-3 py-2 text-sm hover:bg-muted/60 transition-colors text-left"
+              onClick={() => { const p = contextMenu.provider; setContextMenu(null); openCuentaCorriente(p); }}
+            >
+              <History className="w-4 h-4 text-muted-foreground" /> Ver cuenta corriente
+            </button>
+            <button
+              className="flex items-center gap-2.5 w-full px-3 py-2 text-sm hover:bg-muted/60 transition-colors text-left"
+              onClick={() => { const p = contextMenu.provider; setContextMenu(null); openPago(p); }}
+            >
+              <DollarSign className="w-4 h-4 text-muted-foreground" /> Registrar pago
+            </button>
+            <button
+              className="flex items-center gap-2.5 w-full px-3 py-2 text-sm hover:bg-muted/60 transition-colors text-left disabled:opacity-50 disabled:cursor-not-allowed"
+              disabled={(prodCountMap[contextMenu.provider.id] || 0) === 0}
+              onClick={async () => {
+                const p = contextMenu.provider;
+                setContextMenu(null);
+                const { data } = await supabase.from("producto_proveedores").select("productos(nombre, codigo, precio, stock)").eq("proveedor_id", p.id);
+                const prods = (data || []).map((pp: any) => pp.productos).filter(Boolean);
+                setProdListDialog({ open: true, nombre: p.nombre, productos: prods });
+              }}
+            >
+              <Package className="w-4 h-4 text-muted-foreground" /> Ver productos {(prodCountMap[contextMenu.provider.id] || 0) > 0 ? `(${prodCountMap[contextMenu.provider.id]})` : ""}
+            </button>
+          </div>
+          <div className="border-t py-1">
+            <button
+              className="flex items-center gap-2.5 w-full px-3 py-2 text-sm hover:bg-muted/60 transition-colors text-left disabled:opacity-50 disabled:cursor-not-allowed"
+              disabled={!contextMenu.provider.telefono}
+              onClick={() => {
+                const p = contextMenu.provider;
+                setContextMenu(null);
+                if (p.telefono) navigator.clipboard.writeText(p.telefono).catch(() => {});
+              }}
+            >
+              <Copy className="w-4 h-4 text-muted-foreground" /> Copiar teléfono
+            </button>
+            <button
+              className="flex items-center gap-2.5 w-full px-3 py-2 text-sm hover:bg-muted/60 transition-colors text-left disabled:opacity-50 disabled:cursor-not-allowed"
+              disabled={!contextMenu.provider.telefono}
+              onClick={() => {
+                const p = contextMenu.provider;
+                setContextMenu(null);
+                const url = waUrl(p.telefono, p.nombre);
+                if (url) window.open(url, "_blank", "noopener,noreferrer");
+              }}
+            >
+              <MessageSquare className="w-4 h-4 text-muted-foreground" /> Enviar WhatsApp
+            </button>
+          </div>
+          <div className="border-t py-1">
+            <button
+              className="flex items-center gap-2.5 w-full px-3 py-2 text-sm hover:bg-muted/60 transition-colors text-left text-destructive"
+              onClick={() => { const p = contextMenu.provider; setContextMenu(null); handleDelete(p.id); }}
+            >
+              <Trash2 className="w-4 h-4" /> Eliminar proveedor
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Confirm Dialog */}
       <Dialog open={confirmDialog.open} onOpenChange={(o) => setConfirmDialog(prev => ({ ...prev, open: o }))}>
