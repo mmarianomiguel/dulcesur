@@ -785,6 +785,7 @@ export default function PedidosOnlinePage() {
             presentacion: item.presentacion || "",
             unidades_por_presentacion: item.unidades_por_presentacion ?? 1,
             stock: 0,
+            categoria_id: catId,
             categoria_nombre: cat?.nombre ?? null,
             categoria_orden: cat?.orden ?? null,
             subcategoria_id: subId,

@@ -1246,6 +1246,7 @@ export default function ListadoVentasPage() {
         stock: 0,
         es_combo: comboIds.has(item.producto_id || ""),
         comboItems: comboItemsMap[item.producto_id || ""] || [],
+        categoria_id: catId,
         categoria_nombre: cat?.nombre ?? null,
         categoria_orden: cat?.orden ?? null,
         subcategoria_id: subId,

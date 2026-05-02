@@ -29,6 +29,8 @@ export interface ReceiptConfig {
   // IDs de subcategorias que se renderizan como sub-bloque dentro de su categoria
   // (las que no esten en esta lista se muestran mezcladas en la categoria padre).
   subcategoriasExpandidas?: string[];
+  // IDs de categorias para las que se muestra el subtotal $ en el header.
+  mostrarSubtotalCategorias?: string[];
 }
 
 export const defaultReceiptConfig: ReceiptConfig = {
@@ -75,6 +77,7 @@ export interface ReceiptLineItem {
   stock: number;
   es_combo?: boolean;
   comboItems?: { nombre: string; cantidad: number }[];
+  categoria_id?: string | null;
   categoria_nombre?: string | null;
   categoria_orden?: number | null;
   subcategoria_id?: string | null;
@@ -333,16 +336,17 @@ export function ReceiptPrintView({
     };
 
     let body: ReactNode;
+    const mostrarSubtotalSet = new Set(config.mostrarSubtotalCategorias || []);
     if (config.agruparPorCategoria !== false) {
       // Agrupar por categoria, conservando orden original dentro de cada grupo.
-      const groupsMap = new Map<string, { nombre: string; orden: number; items: ReceiptLineItem[] }>();
+      const groupsMap = new Map<string, { id: string | null; nombre: string; orden: number; items: ReceiptLineItem[] }>();
       for (const item of items) {
         const key = item.categoria_nombre || "__OTROS__";
         const nombre = item.categoria_nombre || "Otros";
         const orden = item.categoria_orden ?? Number.POSITIVE_INFINITY;
         const g = groupsMap.get(key);
         if (g) g.items.push(item);
-        else groupsMap.set(key, { nombre, orden, items: [item] });
+        else groupsMap.set(key, { id: item.categoria_id || null, nombre, orden, items: [item] });
       }
       const groups = Array.from(groupsMap.values()).sort((a, b) => {
         if (a.nombre === "Otros" && b.nombre !== "Otros") return 1;
@@ -369,11 +373,13 @@ export function ReceiptPrintView({
         }
         const subgrupos = Array.from(porSubcat.values()).sort((a, b) => a.nombre.localeCompare(b.nombre, "es"));
         const totalCat = g.items.length;
+        const showSubtotalCat = !!(g.id && mostrarSubtotalSet.has(g.id));
+        const subtotalCat = showSubtotalCat ? g.items.reduce((s, it) => s + (it.subtotal || 0), 0) : 0;
         return (
           <Fragment key={`g-${gi}`}>
             <tr>
               <td colSpan={colSpan} style={{ padding: gi > 0 ? "3px 4px 1px" : "1px 4px", fontWeight: 600, fontSize: `${fsProductos - 2}px`, color: "#555", borderTop: gi > 0 ? "1px solid #d8d8d8" : "none" }}>
-                {g.nombre} <span style={{ fontWeight: 400, color: "#888" }}>({totalCat})</span>
+                {g.nombre} <span style={{ fontWeight: 400, color: "#888" }}>({totalCat}{showSubtotalCat ? ` · ${fmtCur(Math.round(subtotalCat))}` : ""})</span>
               </td>
             </tr>
             {principales.map((item) => {

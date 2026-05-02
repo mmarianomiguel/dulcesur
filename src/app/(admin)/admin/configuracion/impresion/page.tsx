@@ -55,9 +55,13 @@ async function persistReceiptConfig(config: ReceiptConfig) {
 function CategoriaOrdenList({
   expandedSubs,
   onToggleSub,
+  subtotalCats,
+  onToggleSubtotalCat,
 }: {
   expandedSubs: string[];
   onToggleSub: (subId: string) => void;
+  subtotalCats: string[];
+  onToggleSubtotalCat: (catId: string) => void;
 }) {
   const [cats, setCats] = useState<{ id: string; nombre: string; orden: number | null }[]>([]);
   const [subs, setSubs] = useState<{ id: string; nombre: string; categoria_id: string | null }[]>([]);
@@ -105,8 +109,21 @@ function CategoriaOrdenList({
                 }}
               />
               <span className="text-sm font-medium">{c.nombre}</span>
+              <button
+                type="button"
+                onClick={() => onToggleSubtotalCat(c.id)}
+                className={cn(
+                  "ml-auto text-[11px] px-2 py-0.5 rounded-full border font-medium cursor-pointer transition-colors",
+                  subtotalCats.includes(c.id)
+                    ? "bg-emerald-50 border-emerald-300 text-emerald-700"
+                    : "bg-muted/30 border-border text-muted-foreground hover:bg-muted"
+                )}
+                title={subtotalCats.includes(c.id) ? "Mostrar el subtotal $ de esta categoría en el ticket" : "No mostrar subtotal $ en el ticket"}
+              >
+                $ subtotal
+              </button>
               {catSubs.length > 0 && (
-                <span className="text-[10px] text-muted-foreground ml-auto">{catSubs.length} subcategoría{catSubs.length !== 1 ? "s" : ""}</span>
+                <span className="text-[10px] text-muted-foreground">{catSubs.length} subcat.</span>
               )}
             </div>
             {catSubs.length > 0 && (
@@ -528,6 +545,12 @@ export default function ImpresionPage() {
                       const cur = prev.subcategoriasExpandidas || [];
                       const next = cur.includes(subId) ? cur.filter((x) => x !== subId) : [...cur, subId];
                       return { ...prev, subcategoriasExpandidas: next };
+                    })}
+                    subtotalCats={rcfg.mostrarSubtotalCategorias || []}
+                    onToggleSubtotalCat={(catId) => setRcfg((prev) => {
+                      const cur = prev.mostrarSubtotalCategorias || [];
+                      const next = cur.includes(catId) ? cur.filter((x) => x !== catId) : [...cur, catId];
+                      return { ...prev, mostrarSubtotalCategorias: next };
                     })}
                   />
                 </div>

@@ -126,6 +126,7 @@ interface LineItem {
   stock: number;
   es_combo?: boolean;
   comboItems?: ComboItemRef[];
+  categoria_id?: string | null;
   categoria_nombre?: string | null;
   categoria_orden?: number | null;
   subcategoria_id?: string | null;
@@ -446,11 +447,13 @@ export default function VentasPage() {
   const enrichItemsWithCategoria = useCallback((linesItems: LineItem[]) => {
     return linesItems.map((it) => {
       const prod = products.find((p) => p.id === it.producto_id);
-      const cat = prod ? categoriasMap[(prod as any).categoria_id] : null;
+      const catId = prod ? ((prod as any).categoria_id || null) : null;
+      const cat = catId ? categoriasMap[catId] : null;
       const subId = prod ? ((prod as any).subcategoria_id || null) : null;
       const sub = subId ? subcategoriasMap[subId] : null;
       return {
         ...it,
+        categoria_id: catId,
         categoria_nombre: cat?.nombre ?? null,
         categoria_orden: cat?.orden ?? null,
         subcategoria_id: subId,
@@ -856,6 +859,7 @@ export default function VentasPage() {
         unidades_por_presentacion: it.unidades_por_presentacion || 1,
         costo_unitario: it.costo_unitario || 0,
         stock: 0,
+        categoria_id: pm.categoria_id,
         categoria_nombre: cat?.nombre ?? null,
         categoria_orden: cat?.orden ?? null,
         subcategoria_id: pm.subcategoria_id,
@@ -4599,6 +4603,7 @@ export default function VentasPage() {
                         stock: i.stock,
                         es_combo: i.es_combo,
                         comboItems: i.comboItems,
+                        categoria_id: (i as any).categoria_id ?? null,
                         categoria_nombre: (i as any).categoria_nombre ?? null,
                         categoria_orden: (i as any).categoria_orden ?? null,
                         subcategoria_id: (i as any).subcategoria_id ?? null,
