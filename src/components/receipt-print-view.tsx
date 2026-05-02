@@ -31,6 +31,8 @@ export interface ReceiptConfig {
   subcategoriasExpandidas?: string[];
   // IDs de categorias para las que se muestra el subtotal $ en el header.
   mostrarSubtotalCategorias?: string[];
+  // IDs de categorias cuyos items se ordenan A-Z (las demas conservan orden de carga).
+  categoriasOrdenAlfabetico?: string[];
 }
 
 export const defaultReceiptConfig: ReceiptConfig = {
@@ -337,6 +339,7 @@ export function ReceiptPrintView({
 
     let body: ReactNode;
     const mostrarSubtotalSet = new Set(config.mostrarSubtotalCategorias || []);
+    const ordenAlfabeticoSet = new Set(config.categoriasOrdenAlfabetico || []);
     if (config.agruparPorCategoria !== false) {
       // Agrupar por categoria, conservando orden original dentro de cada grupo.
       const groupsMap = new Map<string, { id: string | null; nombre: string; orden: number; items: ReceiptLineItem[] }>();
@@ -373,10 +376,11 @@ export function ReceiptPrintView({
             principales.push(item);
           }
         }
-        principales.sort(cmpAlfa);
+        const ordenAlfa = !!(g.id && ordenAlfabeticoSet.has(g.id));
+        if (ordenAlfa) principales.sort(cmpAlfa);
         const subgrupos = Array.from(porSubcat.values())
           .sort((a, b) => a.nombre.localeCompare(b.nombre, "es"))
-          .map((sg) => ({ ...sg, items: [...sg.items].sort(cmpAlfa) }));
+          .map((sg) => ({ ...sg, items: ordenAlfa ? [...sg.items].sort(cmpAlfa) : sg.items }));
         const totalCat = g.items.length;
         const showSubtotalCat = !!(g.id && mostrarSubtotalSet.has(g.id));
         const subtotalCat = showSubtotalCat ? g.items.reduce((s, it) => s + (it.subtotal || 0), 0) : 0;

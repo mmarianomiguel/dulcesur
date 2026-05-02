@@ -57,11 +57,15 @@ function CategoriaOrdenList({
   onToggleSub,
   subtotalCats,
   onToggleSubtotalCat,
+  alfaCats,
+  onToggleAlfaCat,
 }: {
   expandedSubs: string[];
   onToggleSub: (subId: string) => void;
   subtotalCats: string[];
   onToggleSubtotalCat: (catId: string) => void;
+  alfaCats: string[];
+  onToggleAlfaCat: (catId: string) => void;
 }) {
   const [cats, setCats] = useState<{ id: string; nombre: string; orden: number | null }[]>([]);
   const [subs, setSubs] = useState<{ id: string; nombre: string; categoria_id: string | null }[]>([]);
@@ -121,6 +125,19 @@ function CategoriaOrdenList({
                 title={subtotalCats.includes(c.id) ? "Mostrar el subtotal $ de esta categoría en el ticket" : "No mostrar subtotal $ en el ticket"}
               >
                 $ subtotal
+              </button>
+              <button
+                type="button"
+                onClick={() => onToggleAlfaCat(c.id)}
+                className={cn(
+                  "text-[11px] px-2 py-0.5 rounded-full border font-medium cursor-pointer transition-colors",
+                  alfaCats.includes(c.id)
+                    ? "bg-sky-50 border-sky-300 text-sky-700"
+                    : "bg-muted/30 border-border text-muted-foreground hover:bg-muted"
+                )}
+                title={alfaCats.includes(c.id) ? "Items ordenados A-Z dentro de esta categoría" : "Items en orden de carga (default)"}
+              >
+                A-Z
               </button>
               {catSubs.length > 0 && (
                 <span className="text-[10px] text-muted-foreground">{catSubs.length} subcat.</span>
@@ -551,6 +568,12 @@ export default function ImpresionPage() {
                       const cur = prev.mostrarSubtotalCategorias || [];
                       const next = cur.includes(catId) ? cur.filter((x) => x !== catId) : [...cur, catId];
                       return { ...prev, mostrarSubtotalCategorias: next };
+                    })}
+                    alfaCats={rcfg.categoriasOrdenAlfabetico || []}
+                    onToggleAlfaCat={(catId) => setRcfg((prev) => {
+                      const cur = prev.categoriasOrdenAlfabetico || [];
+                      const next = cur.includes(catId) ? cur.filter((x) => x !== catId) : [...cur, catId];
+                      return { ...prev, categoriasOrdenAlfabetico: next };
                     })}
                   />
                 </div>
