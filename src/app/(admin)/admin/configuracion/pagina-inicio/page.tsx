@@ -1646,14 +1646,18 @@ function BlockConfigForm({
           {(() => {
             const TAB_META: Record<string, { label: string }> = {
               destacados: { label: "Destacados" },
-              mas_vendidos: { label: "Más vendidos" },
               nuevos: { label: "Nuevos ingresos" },
+              reingresos: { label: "De vuelta en stock" },
+              ofertas: { label: "Ofertas" },
+              mas_vendidos: { label: "Más vendidos" },
             };
             const rawTabs = (c.tabs as Array<{ key: string; activo: boolean }> | undefined);
             const defaultTabs = [
               { key: "destacados", activo: true },
-              { key: "mas_vendidos", activo: true },
               { key: "nuevos", activo: true },
+              { key: "reingresos", activo: true },
+              { key: "ofertas", activo: true },
+              { key: "mas_vendidos", activo: true },
             ];
             const currentTabs = Array.isArray(rawTabs) && rawTabs.length > 0
               ? defaultTabs.map((d) => rawTabs.find((t) => t.key === d.key) ?? d)
