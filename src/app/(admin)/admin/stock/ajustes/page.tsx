@@ -6,6 +6,7 @@ import { norm } from "@/lib/utils";
 import { formatCurrency } from "@/lib/formatters";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { DateInput } from "@/components/ui/date-input";
 import { MoneyInput } from "@/components/ui/money-input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
@@ -441,7 +442,7 @@ export default function AjustesStockPage() {
           <div className="flex flex-wrap items-end gap-4">
             <div className="space-y-1">
               <label className="text-xs text-muted-foreground font-medium">Fecha</label>
-              <Input type="date" value={fecha} onChange={(e) => setFecha(e.target.value)} className="h-8 w-36 text-sm" />
+              <DateInput value={fecha} onChange={setFecha} className="h-8 w-36 text-sm" />
             </div>
             <div className="space-y-1">
               <label className="text-xs text-muted-foreground font-medium">Usuario</label>
@@ -865,7 +866,7 @@ export default function AjustesStockPage() {
           </Select>
         </div>
         {filterMode === "day" && (
-          <Input type="date" value={filterDay} onChange={(e) => setFilterDay(e.target.value)} className="w-40" />
+          <DateInput value={filterDay} onChange={setFilterDay} className="w-40" />
         )}
         {filterMode === "month" && (
           <>
@@ -884,11 +885,11 @@ export default function AjustesStockPage() {
           <>
             <div className="flex items-center gap-1">
               <Label className="text-xs text-muted-foreground">Desde</Label>
-              <Input type="date" value={filterFrom} onChange={(e) => setFilterFrom(e.target.value)} className="w-40" />
+              <DateInput value={filterFrom} onChange={setFilterFrom} className="w-40" />
             </div>
             <div className="flex items-center gap-1">
               <Label className="text-xs text-muted-foreground">Hasta</Label>
-              <Input type="date" value={filterTo} onChange={(e) => setFilterTo(e.target.value)} className="w-40" />
+              <DateInput value={filterTo} onChange={setFilterTo} className="w-40" />
             </div>
           </>
         )}

@@ -7,6 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { DateInput } from "@/components/ui/date-input";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
@@ -1135,15 +1136,15 @@ export default function DashboardPage() {
             ))}
           </div>
           {filterMode === "diario" && (
-            <Input type="date" value={filterDate} onChange={(ev) => setFilterDate(ev.target.value)} className="h-8 w-[140px]" />
+            <DateInput value={filterDate} onChange={setFilterDate} className="h-8 w-[140px]" />
           )}
           {filterMode === "mensual" && (
             <Input type="month" value={filterMonth} onChange={(ev) => setFilterMonth(ev.target.value)} className="h-8 w-[140px]" />
           )}
           {filterMode === "rango" && (
             <>
-              <Input type="date" value={filterFrom} onChange={(ev) => setFilterFrom(ev.target.value)} className="h-8 w-[130px]" />
-              <Input type="date" value={filterTo} onChange={(ev) => setFilterTo(ev.target.value)} className="h-8 w-[130px]" />
+              <DateInput value={filterFrom} onChange={setFilterFrom} className="h-8 w-[130px]" />
+              <DateInput value={filterTo} onChange={setFilterTo} className="h-8 w-[130px]" />
             </>
           )}
           <Button variant="outline" size="sm" onClick={() => setShowWidgetSettings(!showWidgetSettings)} className="gap-1.5 h-8">

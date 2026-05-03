@@ -10,6 +10,8 @@ import { logAudit } from "@/lib/audit";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { DateInput } from "@/components/ui/date-input";
+import { Popover as PopoverPrimitive } from "@base-ui/react/popover";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { showAdminToast } from "@/components/admin-toast";
@@ -68,6 +70,8 @@ import {
   Shuffle,
   BookOpen,
   PrinterCheck,
+  SlidersHorizontal,
+  CreditCard,
 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -2691,6 +2695,11 @@ export default function ListadoVentasPage() {
   const filteredOrders = useMemo(() => {
     const todayStr = todayARG();
     return allOrders.filter((o) => {
+      // Tipo comprobante filter — pedidos_tienda sin venta no tienen tipo, se ocultan si filtramos por uno específico
+      if (filterType !== "all") {
+        const tc = (o as any)._tipo_comprobante;
+        if (!tc || tc !== filterType) return false;
+      }
       // Source filter
       const isOnlineOrder = o._source === "pedidos" || o.isOnline || (o as any)._tipo_comprobante === "Pedido Web";
       if (filterSource === "pos" && isOnlineOrder) return false;
@@ -2745,7 +2754,7 @@ export default function ListadoVentasPage() {
       }
       return true;
     });
-  }, [allOrders, filterSource, poFilterEstado, filterPayment, filterBanco, searchClient, quickPeriod, filterPickupReady]);
+  }, [allOrders, filterSource, poFilterEstado, filterPayment, filterBanco, searchClient, quickPeriod, filterPickupReady, filterType]);
 
   // Count online orders hidden because delivery is in the future (only relevant in "today" view)
   const hiddenFutureOrders = useMemo(() => {
@@ -2881,10 +2890,13 @@ export default function ListadoVentasPage() {
           {quickPeriod === "custom" && (
             <div className="flex items-center gap-2 flex-wrap pl-1">
               <Select value={filterMode} onValueChange={(v) => setFilterMode((v ?? "day") as any)}>
-                <SelectTrigger className="w-28 h-8 text-sm">
-                  {filterMode === "day" ? "Día" : filterMode === "month" ? "Mes" : filterMode === "range" ? "Rango" : "Todos"}
+                <SelectTrigger className="h-8 rounded-full bg-muted/60 border-none px-3 gap-2 text-xs hover:bg-muted/80 transition-colors min-w-[90px]">
+                  <Calendar className="w-3.5 h-3.5 text-muted-foreground" />
+                  <span className="font-medium">
+                    {filterMode === "day" ? "Día" : filterMode === "month" ? "Mes" : filterMode === "range" ? "Rango" : "Todos"}
+                  </span>
                 </SelectTrigger>
-                <SelectContent>
+                <SelectContent align="start" alignItemWithTrigger={false} className="w-auto min-w-[140px] p-1">
                   <SelectItem value="day">Día</SelectItem>
                   <SelectItem value="month">Mes</SelectItem>
                   <SelectItem value="range">Rango</SelectItem>
@@ -2892,52 +2904,34 @@ export default function ListadoVentasPage() {
                 </SelectContent>
               </Select>
               {filterMode === "day" && (
-                <Input type="date" value={filterDay} onChange={(e) => setFilterDay(e.target.value)} className="w-40 h-8 text-sm" />
+                <DateInput value={filterDay} onChange={setFilterDay} className="w-40 h-8 text-sm" />
               )}
               {filterMode === "month" && (
                 <>
-                  <Select value={filterMonth} onValueChange={(v) => setFilterMonth(v ?? "1")}>
-                    <SelectTrigger className="w-32 h-8 text-sm"><SelectValue placeholder="Mes" /></SelectTrigger>
-                    <SelectContent>
-                      {months.map((m, i) => (<SelectItem key={i} value={String(i + 1)}>{m}</SelectItem>))}
+                  <Select value={filterMonth} onValueChange={(v) => setFilterMonth(v ?? "01")}>
+                    <SelectTrigger className="h-8 rounded-full bg-muted/60 border-none px-3 gap-2 text-xs hover:bg-muted/80 transition-colors min-w-[120px]">
+                      <span className="font-medium">{months[Math.max(0, Math.min(11, Number(filterMonth) - 1))] || "Mes"}</span>
+                    </SelectTrigger>
+                    <SelectContent align="start" alignItemWithTrigger={false} className="w-auto min-w-[140px] p-1">
+                      {months.map((m, i) => (<SelectItem key={i} value={String(i + 1).padStart(2, "0")}>{m}</SelectItem>))}
                     </SelectContent>
                   </Select>
-                  <Input type="number" value={filterYear} onChange={(e) => setFilterYear(e.target.value)} className="w-20 h-8 text-sm" />
+                  <Input type="number" value={filterYear} onChange={(e) => setFilterYear(e.target.value)} className="w-20 h-8 text-sm rounded-full bg-muted/60 border-none px-3 hover:bg-muted/80 transition-colors" />
                 </>
               )}
               {filterMode === "range" && (
                 <>
-                  <Input type="date" value={filterFrom} onChange={(e) => setFilterFrom(e.target.value)} className="w-40 h-8 text-sm" />
+                  <DateInput value={filterFrom} onChange={setFilterFrom} className="w-40 h-8 text-sm" />
                   <span className="text-muted-foreground text-sm">a</span>
-                  <Input type="date" value={filterTo} onChange={(e) => setFilterTo(e.target.value)} className="w-40 h-8 text-sm" />
+                  <DateInput value={filterTo} onChange={setFilterTo} className="w-40 h-8 text-sm" />
                 </>
               )}
             </div>
           )}
 
-          {/* Row 2: Filters - Origin, Estado, Cobro, Comprobante */}
+          {/* Row 2: Estado + Tipo (siempre visibles) + "Más filtros" (Origen, Cobro, Banco) */}
           <div className="flex flex-wrap items-center gap-2 pt-3 border-t">
-            {/* Origin */}
-            <div className="flex items-center gap-1 bg-muted/60 rounded-lg p-0.5">
-              {([["todos", "Todos", null], ["pos", "POS", Store], ["online", "Online", Globe]] as const).map(([val, label, Icon]) => (
-                <button
-                  key={val}
-                  onClick={() => setFilterSource(val as any)}
-                  className={`flex items-center gap-1 px-2.5 py-1.5 rounded-md text-xs font-medium transition-all ${
-                    filterSource === val
-                      ? "bg-background text-foreground shadow-sm"
-                      : "text-muted-foreground hover:text-foreground"
-                  }`}
-                >
-                  {Icon && <Icon className="w-3 h-3" />}
-                  {label}
-                </button>
-              ))}
-            </div>
-
-            <div className="w-px h-5 bg-border hidden sm:block" />
-
-            {/* Estado */}
+            {/* Estado — el filtro más usado, siempre visible */}
             <div className="flex items-center gap-1 bg-muted/60 rounded-lg p-0.5">
               {([["todos", "Todos"], ["pendiente", "Pendiente"], ["armado", "Armado"], ["entregado", "Entregado"], ["cancelado", "Cancelado"]] as const).map(([val, label]) => (
                 <button
@@ -2956,59 +2950,154 @@ export default function ListadoVentasPage() {
 
             <div className="w-px h-5 bg-border hidden sm:block" />
 
-            {/* Cobro — pills en lugar de Select */}
-            <div className="flex items-center gap-1 bg-muted/60 rounded-lg p-0.5">
-              {([["all", "Todos"], ["Efectivo", "Efectivo"], ["Transferencia", "Transfer."], ["Cuenta Corriente", "Cta Cte"], ["Mixto", "Mixto"]] as const).map(([val, label]) => (
-                <button
-                  key={val}
-                  onClick={() => { setFilterPayment(val); setFilterBanco("all"); }}
-                  className={`px-2.5 py-1.5 rounded-md text-xs font-medium transition-all ${
-                    filterPayment === val
-                      ? "bg-background text-foreground shadow-sm"
-                      : "text-muted-foreground hover:text-foreground"
-                  }`}
-                >
-                  {label}
-                </button>
-              ))}
-            </div>
+            {/* Tipo comprobante */}
+            {(() => {
+              const TIPO_LABELS: Record<string, string> = {
+                "all": "Todos",
+                "Remito X": "Remito X",
+                "Pedido Web": "Pedido Web",
+                "Nota de Crédito B": "Nota de Crédito B",
+                "Nota de Crédito C": "Nota de Crédito C",
+                "Nota de Débito B": "Nota de Débito B",
+                "Nota de Débito C": "Nota de Débito C",
+              };
+              return (
+                <Select value={filterType} onValueChange={(v) => setFilterType(v ?? "all")}>
+                  <SelectTrigger className="h-8 rounded-full bg-muted/60 border-none px-3 gap-2 text-xs hover:bg-muted/80 transition-colors">
+                    <Receipt className="w-3.5 h-3.5 text-muted-foreground" />
+                    <span className="text-muted-foreground">Tipo:</span>
+                    <span className="font-medium">{TIPO_LABELS[filterType] ?? "Todos"}</span>
+                  </SelectTrigger>
+                  <SelectContent align="start" alignItemWithTrigger={false} className="w-auto min-w-[200px] p-1">
+                    <SelectItem value="all">Todos</SelectItem>
+                    <SelectItem value="Remito X">Remito X</SelectItem>
+                    <SelectItem value="Pedido Web">Pedido Web</SelectItem>
+                    <SelectItem value="Nota de Crédito B">Nota de Crédito B</SelectItem>
+                    <SelectItem value="Nota de Crédito C">Nota de Crédito C</SelectItem>
+                    <SelectItem value="Nota de Débito B">Nota de Débito B</SelectItem>
+                    <SelectItem value="Nota de Débito C">Nota de Débito C</SelectItem>
+                  </SelectContent>
+                </Select>
+              );
+            })()}
 
-            {/* Banco — visible salvo que el filtro sea estrictamente Efectivo o Cta Cte (casos sin transferencia) */}
-            {filterPayment !== "Efectivo" && filterPayment !== "Cuenta Corriente" && cuentasBancarias.length > 0 && (
-              <div className="flex items-center gap-1 flex-wrap">
-                {[{ id: "all", label: "Todos" }, ...cuentasBancarias.map((c: any) => ({ id: c.alias || c.nombre, label: c.alias || c.nombre }))].map((banco) => (
-                  <button
-                    key={banco.id}
-                    onClick={() => setFilterBanco(banco.id)}
-                    className={`px-2.5 py-1.5 rounded-md text-xs font-medium transition-all border ${
-                      filterBanco === banco.id
-                        ? "bg-blue-600 text-white border-blue-600"
-                        : "bg-background text-blue-700 border-blue-200 hover:border-blue-400"
+            {/* Más filtros — popover con Origen, Cobro y Banco */}
+            {(() => {
+              const activeHidden =
+                (filterSource !== "todos" ? 1 : 0) +
+                (filterPayment !== "all" ? 1 : 0) +
+                (filterBanco !== "all" ? 1 : 0);
+              return (
+                <PopoverPrimitive.Root>
+                  <PopoverPrimitive.Trigger
+                    className={`h-8 rounded-full px-3 gap-2 text-xs font-medium transition-colors flex items-center ${
+                      activeHidden > 0
+                        ? "bg-primary/10 text-primary hover:bg-primary/15"
+                        : "bg-muted/60 text-muted-foreground hover:bg-muted/80 hover:text-foreground"
                     }`}
                   >
-                    {banco.label}
-                  </button>
-                ))}
-              </div>
-            )}
+                    <SlidersHorizontal className="w-3.5 h-3.5" />
+                    <span>Más filtros</span>
+                    {activeHidden > 0 && (
+                      <span className="ml-0.5 inline-flex items-center justify-center min-w-[18px] h-[18px] rounded-full bg-primary text-primary-foreground text-[10px] font-semibold px-1">
+                        {activeHidden}
+                      </span>
+                    )}
+                  </PopoverPrimitive.Trigger>
+                  <PopoverPrimitive.Portal>
+                    <PopoverPrimitive.Positioner side="bottom" sideOffset={6} align="start" className="z-[200]">
+                      <PopoverPrimitive.Popup className="rounded-xl bg-popover text-popover-foreground shadow-lg ring-1 ring-foreground/10 p-4 w-[340px] outline-none space-y-4">
+                        {/* Origen */}
+                        <div className="space-y-1.5">
+                          <div className="flex items-center justify-between">
+                            <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">Origen</label>
+                            {filterSource !== "todos" && (
+                              <button onClick={() => setFilterSource("todos")} className="text-[10px] text-muted-foreground hover:text-foreground">Limpiar</button>
+                            )}
+                          </div>
+                          <p className="text-[11px] text-muted-foreground -mt-1">Cómo se cargó la venta</p>
+                          <div className="flex items-center gap-1 bg-muted/60 rounded-lg p-0.5">
+                            {([["todos", "Todos", null], ["pos", "POS (mostrador)", Store], ["online", "Tienda online", Globe]] as const).map(([val, label, Icon]) => (
+                              <button
+                                key={val}
+                                onClick={() => setFilterSource(val as any)}
+                                className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs font-medium transition-all flex-1 justify-center ${
+                                  filterSource === val
+                                    ? "bg-background text-foreground shadow-sm"
+                                    : "text-muted-foreground hover:text-foreground"
+                                }`}
+                              >
+                                {Icon && <Icon className="w-3 h-3" />}
+                                {label}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
 
-            <div className="w-px h-5 bg-border hidden sm:block" />
+                        {/* Cobro */}
+                        <div className="space-y-1.5">
+                          <div className="flex items-center justify-between">
+                            <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">Forma de cobro</label>
+                            {filterPayment !== "all" && (
+                              <button onClick={() => { setFilterPayment("all"); setFilterBanco("all"); }} className="text-[10px] text-muted-foreground hover:text-foreground">Limpiar</button>
+                            )}
+                          </div>
+                          <p className="text-[11px] text-muted-foreground -mt-1">Cómo pagó el cliente</p>
+                          <div className="flex flex-wrap items-center gap-1 bg-muted/60 rounded-lg p-0.5">
+                            {([["all", "Todos"], ["Efectivo", "Efectivo"], ["Transferencia", "Transferencia"], ["Cuenta Corriente", "Cta. Corriente"], ["Mixto", "Mixto"]] as const).map(([val, label]) => (
+                              <button
+                                key={val}
+                                onClick={() => { setFilterPayment(val); setFilterBanco("all"); }}
+                                className={`px-2.5 py-1.5 rounded-md text-xs font-medium transition-all ${
+                                  filterPayment === val
+                                    ? "bg-background text-foreground shadow-sm"
+                                    : "text-muted-foreground hover:text-foreground"
+                                }`}
+                              >
+                                {label}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
 
-            {/* Tipo comprobante */}
-            <Select value={filterType} onValueChange={(v) => setFilterType(v ?? "all")}>
-              <SelectTrigger className="h-8 w-auto min-w-[100px] text-xs border-dashed bg-muted/40">
-                <SelectValue placeholder="Tipo" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Todos los tipos</SelectItem>
-                <SelectItem value="Remito X">Remito X</SelectItem>
-                <SelectItem value="Pedido Web">Pedido Web</SelectItem>
-                <SelectItem value="Nota de Crédito B">NC B</SelectItem>
-                <SelectItem value="Nota de Crédito C">NC C</SelectItem>
-                <SelectItem value="Nota de Débito B">ND B</SelectItem>
-                <SelectItem value="Nota de Débito C">ND C</SelectItem>
-              </SelectContent>
-            </Select>
+                        {/* Banco — solo cuando hay transferencia involucrada */}
+                        {filterPayment !== "Efectivo" && filterPayment !== "Cuenta Corriente" && cuentasBancarias.length > 0 && (
+                          <div className="space-y-1.5">
+                            <div className="flex items-center justify-between">
+                              <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">Cuenta bancaria</label>
+                              {filterBanco !== "all" && (
+                                <button onClick={() => setFilterBanco("all")} className="text-[10px] text-muted-foreground hover:text-foreground">Limpiar</button>
+                              )}
+                            </div>
+                            <p className="text-[11px] text-muted-foreground -mt-1">Filtrar por alias receptor de la transferencia</p>
+                            <div className="flex flex-wrap items-center gap-1.5">
+                              {[{ id: "all", label: "Todas" }, ...cuentasBancarias.map((c: any) => ({ id: c.alias || c.nombre, label: c.alias || c.nombre }))].map((banco) => {
+                                const isAll = banco.id === "all";
+                                const isActive = filterBanco === banco.id;
+                                return (
+                                  <button
+                                    key={banco.id}
+                                    onClick={() => setFilterBanco(banco.id)}
+                                    className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-full text-xs font-medium transition-all ${
+                                      isActive
+                                        ? "bg-foreground text-background"
+                                        : "bg-muted/60 text-muted-foreground hover:bg-muted hover:text-foreground"
+                                    }`}
+                                  >
+                                    {!isAll && <CreditCard className="w-3 h-3" />}
+                                    <span className="font-mono">{banco.label}</span>
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        )}
+                      </PopoverPrimitive.Popup>
+                    </PopoverPrimitive.Positioner>
+                  </PopoverPrimitive.Portal>
+                </PopoverPrimitive.Root>
+              );
+            })()}
           </div>
         </CardContent>
       </Card>

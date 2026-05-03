@@ -8,6 +8,7 @@ import { formatCuentaCanonica } from "@/lib/cuenta-bancaria";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { DateInput } from "@/components/ui/date-input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -1734,13 +1735,9 @@ export default function HojaDeRutaPage() {
             </label>
             <div className="flex items-center gap-2">
               <Calendar className="w-5 h-5 text-muted-foreground" />
-              <Input
-                type="date"
+              <DateInput
                 value={selectedDate}
-                onChange={(e) => {
-                  setSelectedDate(e.target.value);
-                  setShowAllPending(false);
-                }}
+                onChange={(v) => { setSelectedDate(v); setShowAllPending(false); }}
                 className="w-44"
               />
             </div>
@@ -1755,17 +1752,15 @@ export default function HojaDeRutaPage() {
             <div className="flex items-center gap-2">
               <Calendar className="w-4 h-4 text-muted-foreground" />
               <span className="text-sm text-muted-foreground">Desde</span>
-              <Input
-                type="date"
+              <DateInput
                 value={historialDateFrom}
-                onChange={(e) => setHistorialDateFrom(e.target.value)}
+                onChange={setHistorialDateFrom}
                 className="w-40 h-9"
               />
               <span className="text-sm text-muted-foreground">Hasta</span>
-              <Input
-                type="date"
+              <DateInput
                 value={historialDateTo}
-                onChange={(e) => setHistorialDateTo(e.target.value)}
+                onChange={setHistorialDateTo}
                 className="w-40 h-9"
               />
             </div>

@@ -9,6 +9,7 @@ import type { Cliente, Producto, Venta } from "@/types/database";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { DateInput } from "@/components/ui/date-input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
@@ -118,11 +119,18 @@ export default function NotaCreditoPage() {
   const [clientVentas, setClientVentas] = useState<Venta[]>([]);
   const [items, setItems] = useState<LineItem[]>([]);
   const [origenAvailable, setOrigenAvailable] = useState<LineItem[]>([]);
+  const [origenRemainingUnits, setOrigenRemainingUnits] = useState<Record<string, number>>({});
   const [origenPickerOpen, setOrigenPickerOpen] = useState(false);
   const [origenPickerSearch, setOrigenPickerSearch] = useState("");
   const [origenPickerQtys, setOrigenPickerQtys] = useState<Record<string, number>>({});
+  const [origenUnidadesQtys, setOrigenUnidadesQtys] = useState<Record<string, number>>({});
   const [origenSelectOpen, setOrigenSelectOpen] = useState(false);
   const [origenSelectSearch, setOrigenSelectSearch] = useState("");
+  const [origenFilterFrom, setOrigenFilterFrom] = useState("");
+  const [origenFilterTo, setOrigenFilterTo] = useState("");
+  const [previewVenta, setPreviewVenta] = useState<Venta | null>(null);
+  const [previewItems, setPreviewItems] = useState<any[]>([]);
+  const [previewLoading, setPreviewLoading] = useState(false);
   const [observacion, setObservacion] = useState("");
   const [metodoDev, setMetodoDev] = useState<MetodoDev>("Efectivo");
   const [saving, setSaving] = useState(false);
@@ -203,12 +211,14 @@ export default function NotaCreditoPage() {
         .not("tipo_comprobante", "ilike", "Nota de Crédito%")
         .not("tipo_comprobante", "ilike", "Nota de Débito%")
         .order("fecha", { ascending: false })
-        .limit(50);
+        .limit(origenFilterFrom || origenFilterTo ? 500 : 50);
       q = clientId ? q.eq("cliente_id", clientId) : q.is("cliente_id", null);
+      if (origenFilterFrom) q = q.gte("fecha", origenFilterFrom);
+      if (origenFilterTo) q = q.lte("fecha", origenFilterTo);
       const { data } = await q;
       setClientVentas(data || []);
     })();
-  }, [clientId]);
+  }, [clientId, origenFilterFrom, origenFilterTo]);
 
   // When origin comprobante changes, load its items
   useEffect(() => {
@@ -227,44 +237,57 @@ export default function NotaCreditoPage() {
         .eq("remito_origen_id", origenId)
         .ilike("tipo_comprobante", "Nota de Crédito%");
 
-      const returnedMap: Record<string, number> = {};
+      // Acumular ya devuelto en UNIDADES por producto, para soportar mezcla cajas/sueltas entre NCs
+      const returnedUnitsByProd: Record<string, number> = {};
       if (existingNCs && existingNCs.length > 0) {
         const ncIds = existingNCs.map((nc: any) => nc.id);
         const { data: ncItems } = await supabase
           .from("venta_items")
-          .select("producto_id, descripcion, cantidad")
+          .select("producto_id, cantidad, unidades_por_presentacion")
           .in("venta_id", ncIds);
         if (ncItems) {
-          for (const ni of ncItems) {
-            const key = `${ni.producto_id || ""}|${ni.descripcion}`;
-            returnedMap[key] = (returnedMap[key] || 0) + (ni.cantidad || 0);
+          for (const ni of ncItems as any[]) {
+            const pid = ni.producto_id || "";
+            if (!pid) continue;
+            const upp = ni.unidades_por_presentacion || 1;
+            returnedUnitsByProd[pid] = (returnedUnitsByProd[pid] || 0) + (ni.cantidad || 0) * upp;
           }
         }
       }
 
       const loaded: LineItem[] = [];
+      const remainingUnitsByLine: Record<string, number> = {};
       for (const item of origItems) {
-        const key = `${item.producto_id || ""}|${item.descripcion}`;
-        const alreadyReturnedQty = returnedMap[key] || 0;
-        const remaining = (item.cantidad || 0) - alreadyReturnedQty;
-        if (remaining <= 0) continue;
+        const upp = item.unidades_por_presentacion || 1;
+        const originalUnits = (item.cantidad || 0) * upp;
+        const pid = item.producto_id || "";
+        const returnedUnits = pid ? (returnedUnitsByProd[pid] || 0) : 0;
+        const remainingUnits = originalUnits - returnedUnits;
+        if (remainingUnits <= 0) continue;
+        // Descontar las unidades que vamos a "ocupar" para que dos líneas del mismo producto no compitan
+        if (pid) returnedUnitsByProd[pid] = (returnedUnitsByProd[pid] || 0) + remainingUnits;
+        const id = crypto.randomUUID();
+        const cajasMax = Math.floor(remainingUnits / upp);
         loaded.push({
-          id: crypto.randomUUID(),
+          id,
           producto_id: item.producto_id,
           code: item.codigo || "-",
           description: item.descripcion,
-          qty: 1,
-          maxQty: remaining,
+          qty: cajasMax > 0 ? 1 : 0,
+          maxQty: cajasMax,
           unit: item.unidad_medida || "UN",
           price: item.precio_unitario,
-          subtotal: item.precio_unitario,
+          subtotal: cajasMax > 0 ? item.precio_unitario : 0,
           presentacion: item.presentacion || "Unidad",
-          unidades_por_presentacion: item.unidades_por_presentacion || 1,
+          unidades_por_presentacion: upp,
           alreadyReturned: false,
           costo_unitario: (item as any).costo_unitario || 0,
         });
+        remainingUnitsByLine[id] = remainingUnits;
       }
       setOrigenAvailable(loaded);
+      setOrigenRemainingUnits(remainingUnitsByLine);
+      setOrigenUnidadesQtys({});
       setItems([]);
 
       // Suggest payment method from origin sale
@@ -659,7 +682,7 @@ export default function NotaCreditoPage() {
                     </Select>
                   </div>
                   {ncFilterMode === "day" && (
-                    <Input type="date" value={ncFilterDay} onChange={(e) => setNcFilterDay(e.target.value)} className="w-40" />
+                    <DateInput value={ncFilterDay} onChange={setNcFilterDay} className="w-40" />
                   )}
                   {ncFilterMode === "month" && (
                     <>
@@ -678,11 +701,11 @@ export default function NotaCreditoPage() {
                     <>
                       <div className="flex items-center gap-1">
                         <Label className="text-xs">Desde</Label>
-                        <Input type="date" value={ncFilterFrom} onChange={(e) => setNcFilterFrom(e.target.value)} className="w-40" />
+                        <DateInput value={ncFilterFrom} onChange={setNcFilterFrom} className="w-40" />
                       </div>
                       <div className="flex items-center gap-1">
                         <Label className="text-xs">Hasta</Label>
-                        <Input type="date" value={ncFilterTo} onChange={(e) => setNcFilterTo(e.target.value)} className="w-40" />
+                        <DateInput value={ncFilterTo} onChange={setNcFilterTo} className="w-40" />
                       </div>
                     </>
                   )}
@@ -779,7 +802,7 @@ export default function NotaCreditoPage() {
                           {selectedClient ? selectedClient.nombre : "Consumidor Final"}
                         </Button>
                         {clientId && (
-                          <Button variant="ghost" size="icon" className="shrink-0" onClick={() => { setClientId(""); setClientSearch(""); setOrigenId(""); setItems([]); setOrigenAvailable([]); }}>
+                          <Button variant="ghost" size="icon" className="shrink-0" onClick={() => { setClientId(""); setClientSearch(""); setOrigenId(""); setItems([]); setOrigenAvailable([]); setOrigenRemainingUnits({}); setOrigenUnidadesQtys({}); }}>
                             <X className="w-4 h-4" />
                           </Button>
                         )}
@@ -840,7 +863,7 @@ export default function NotaCreditoPage() {
                           })() : "Sin referencia"}
                         </Button>
                         {origenId && (
-                          <Button variant="ghost" size="icon" className="shrink-0" onClick={() => { setOrigenId(""); setItems([]); setOrigenAvailable([]); }}>
+                          <Button variant="ghost" size="icon" className="shrink-0" onClick={() => { setOrigenId(""); setItems([]); setOrigenAvailable([]); setOrigenRemainingUnits({}); setOrigenUnidadesQtys({}); }}>
                             <X className="w-4 h-4" />
                           </Button>
                         )}
@@ -852,6 +875,25 @@ export default function NotaCreditoPage() {
                             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                             <Input placeholder="Buscar por número, tipo o forma de pago..." value={origenSelectSearch} onChange={(e) => setOrigenSelectSearch(e.target.value)} className="pl-9" autoFocus />
                           </div>
+                          <div className="grid grid-cols-2 gap-2">
+                            <div className="space-y-1">
+                              <Label className="text-xs text-muted-foreground">Desde</Label>
+                              <DateInput value={origenFilterFrom} onChange={setOrigenFilterFrom} className="text-sm" />
+                            </div>
+                            <div className="space-y-1">
+                              <Label className="text-xs text-muted-foreground">Hasta</Label>
+                              <DateInput value={origenFilterTo} onChange={setOrigenFilterTo} className="text-sm" />
+                            </div>
+                          </div>
+                          {(origenFilterFrom || origenFilterTo) && (
+                            <button
+                              className="text-xs text-muted-foreground hover:text-foreground self-start"
+                              onClick={() => { setOrigenFilterFrom(""); setOrigenFilterTo(""); }}
+                            >
+                              Limpiar fechas
+                            </button>
+                          )}
+                          <p className="text-xs text-muted-foreground -mt-1">Tip: click derecho sobre un comprobante para ver sus productos.</p>
                           <div className="max-h-[400px] overflow-y-auto space-y-1">
                             <button
                               className="w-full text-left px-3 py-2 hover:bg-muted rounded-md text-sm italic text-muted-foreground border border-dashed"
@@ -869,17 +911,31 @@ export default function NotaCreditoPage() {
                               if (list.length === 0) return <p className="px-3 py-6 text-sm text-muted-foreground text-center">Sin resultados</p>;
                               return list.map((v) => {
                                 const fecha = v.fecha ? new Date(v.fecha + "T12:00:00").toLocaleDateString("es-AR", { weekday: "short", day: "2-digit", month: "2-digit", year: "numeric" }) : "—";
+                                const hora = v.created_at ? new Date(v.created_at).toLocaleTimeString("es-AR", { hour: "2-digit", minute: "2-digit", hour12: false }) : "";
                                 return (
                                   <button
                                     key={v.id}
                                     className="w-full text-left px-3 py-2.5 hover:bg-muted rounded-md border transition-colors"
                                     onClick={() => { setOrigenId(v.id); setItems([]); setOrigenAvailable([]); setOrigenSelectOpen(false); }}
+                                    onContextMenu={async (e) => {
+                                      e.preventDefault();
+                                      setPreviewVenta(v);
+                                      setPreviewItems([]);
+                                      setPreviewLoading(true);
+                                      const { data } = await supabase
+                                        .from("venta_items")
+                                        .select("descripcion, cantidad, presentacion, precio_unitario, subtotal")
+                                        .eq("venta_id", v.id)
+                                        .order("id");
+                                      setPreviewItems(data || []);
+                                      setPreviewLoading(false);
+                                    }}
                                   >
                                     <div className="flex items-start justify-between gap-3">
                                       <div className="min-w-0">
                                         <div className="font-medium text-sm truncate">{v.tipo_comprobante} {v.numero}</div>
                                         <div className="text-xs text-muted-foreground mt-0.5 flex items-center gap-2 flex-wrap">
-                                          <span>{fecha}</span>
+                                          <span>{fecha}{hora && ` · ${hora}`}</span>
                                           <span>·</span>
                                           <span>{v.forma_pago}</span>
                                         </div>
@@ -891,6 +947,85 @@ export default function NotaCreditoPage() {
                               });
                             })()}
                           </div>
+                        </DialogContent>
+                      </Dialog>
+
+                      <Dialog open={!!previewVenta} onOpenChange={(o) => { if (!o) { setPreviewVenta(null); setPreviewItems([]); } }}>
+                        <DialogContent className="max-w-lg">
+                          <DialogHeader>
+                            <DialogTitle>
+                              {previewVenta ? `${previewVenta.tipo_comprobante} ${previewVenta.numero}` : "Detalle"}
+                            </DialogTitle>
+                          </DialogHeader>
+                          {previewVenta && (
+                            <div className="text-xs text-muted-foreground flex gap-3 flex-wrap">
+                              <span>
+                                {previewVenta.fecha ? new Date(previewVenta.fecha + "T12:00:00").toLocaleDateString("es-AR", { weekday: "short", day: "2-digit", month: "2-digit", year: "numeric" }) : "—"}
+                                {previewVenta.created_at && ` · ${new Date(previewVenta.created_at).toLocaleTimeString("es-AR", { hour: "2-digit", minute: "2-digit", hour12: false })}`}
+                              </span>
+                              <span>·</span>
+                              <span>{previewVenta.forma_pago}</span>
+                              <span>·</span>
+                              <span className="font-semibold text-foreground">{formatCurrency(previewVenta.total)}</span>
+                            </div>
+                          )}
+                          <div className="max-h-[400px] overflow-y-auto">
+                            {previewLoading ? (
+                              <div className="flex justify-center py-8"><Loader2 className="w-5 h-5 animate-spin text-muted-foreground" /></div>
+                            ) : previewItems.length === 0 ? (
+                              <p className="text-sm text-muted-foreground text-center py-6">Sin items</p>
+                            ) : (
+                              <table className="w-full text-sm">
+                                <thead>
+                                  <tr className="text-xs text-muted-foreground border-b">
+                                    <th className="text-left py-2">Producto</th>
+                                    <th className="text-right py-2">Cant.</th>
+                                    <th className="text-right py-2">P.Unit.</th>
+                                    <th className="text-right py-2">Subtotal</th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {previewItems.map((it, idx) => (
+                                    <tr key={idx} className="border-b last:border-0">
+                                      <td className="py-2">
+                                        <div>{it.descripcion}</div>
+                                        {it.presentacion && it.presentacion !== "Unidad" && (
+                                          <div className="text-xs text-muted-foreground">{it.presentacion}</div>
+                                        )}
+                                      </td>
+                                      <td className="py-2 text-right">{it.cantidad}</td>
+                                      <td className="py-2 text-right">{formatCurrency(it.precio_unitario || 0)}</td>
+                                      <td className="py-2 text-right font-medium">{formatCurrency(it.subtotal || 0)}</td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            )}
+                          </div>
+                          {previewVenta && (
+                            <div className="flex gap-2 pt-2 border-t">
+                              <Button
+                                variant="default"
+                                className="flex-1"
+                                onClick={() => {
+                                  if (!previewVenta) return;
+                                  setOrigenId(previewVenta.id);
+                                  setItems([]);
+                                  setOrigenAvailable([]);
+                                  setOrigenRemainingUnits({});
+                                  setOrigenUnidadesQtys({});
+                                  setPreviewVenta(null);
+                                  setPreviewItems([]);
+                                  setOrigenSelectOpen(false);
+                                }}
+                              >
+                                Usar este comprobante
+                              </Button>
+                              <Button variant="outline" onClick={() => { setPreviewVenta(null); setPreviewItems([]); }}>
+                                Cerrar
+                              </Button>
+                            </div>
+                          )}
                         </DialogContent>
                       </Dialog>
                     </div>
@@ -1216,7 +1351,7 @@ export default function NotaCreditoPage() {
       </Dialog>
 
       {/* Origen items picker */}
-      <Dialog open={origenPickerOpen} onOpenChange={(o) => { setOrigenPickerOpen(o); if (!o) { setOrigenPickerSearch(""); setOrigenPickerQtys({}); } }}>
+      <Dialog open={origenPickerOpen} onOpenChange={(o) => { setOrigenPickerOpen(o); if (!o) { setOrigenPickerSearch(""); setOrigenPickerQtys({}); setOrigenUnidadesQtys({}); } }}>
         <DialogContent className="max-w-lg">
           <DialogHeader><DialogTitle>Agregar items del comprobante</DialogTitle></DialogHeader>
           <div className="relative">
@@ -1231,56 +1366,100 @@ export default function NotaCreditoPage() {
               const filtered = q ? origenAvailable.filter((it) => norm(it.description).includes(q) || norm(it.code || "").includes(q)) : origenAvailable;
               if (filtered.length === 0) return <p className="text-sm text-muted-foreground text-center py-8">Sin resultados</p>;
               return filtered.map((it) => {
-                const currentQty = origenPickerQtys[it.id] ?? 1;
+                const currentQty = origenPickerQtys[it.id] ?? (it.maxQty > 0 ? 1 : 0);
+                const upp = it.unidades_por_presentacion || 1;
+                const remainingUnits = origenRemainingUnits[it.id] ?? (it.maxQty * upp);
+                const unitPrice = upp > 0 ? it.price / upp : it.price;
+                const currentUnidades = origenUnidadesQtys[it.id] ?? (remainingUnits > 0 ? 1 : 0);
+                const consumeLine = (consumedUnits: number) => {
+                  const newRemaining = Math.max(0, remainingUnits - consumedUnits);
+                  if (newRemaining <= 0) {
+                    setOrigenAvailable((prev) => prev.filter((x) => x.id !== it.id));
+                    setOrigenRemainingUnits((prev) => { const { [it.id]: _omit, ...rest } = prev; return rest; });
+                    setOrigenPickerQtys((prev) => { const { [it.id]: _omit, ...rest } = prev; return rest; });
+                    setOrigenUnidadesQtys((prev) => { const { [it.id]: _omit, ...rest } = prev; return rest; });
+                  } else {
+                    const newCajasMax = Math.floor(newRemaining / upp);
+                    setOrigenAvailable((prev) => prev.map((x) => x.id === it.id ? { ...x, maxQty: newCajasMax } : x));
+                    setOrigenRemainingUnits((prev) => ({ ...prev, [it.id]: newRemaining }));
+                    setOrigenPickerQtys((prev) => ({ ...prev, [it.id]: newCajasMax > 0 ? Math.min(prev[it.id] ?? 1, newCajasMax) : 0 }));
+                    setOrigenUnidadesQtys((prev) => ({ ...prev, [it.id]: Math.min(prev[it.id] ?? 1, newRemaining) }));
+                  }
+                };
                 return (
-                  <div key={it.id} className="w-full rounded-xl border p-3 flex items-center gap-3 hover:border-primary/30">
-                    <div className="flex-1 min-w-0">
-                      <div className="font-medium text-sm truncate">{it.description}</div>
-                      <div className="flex items-center gap-2 text-xs text-muted-foreground mt-0.5">
-                        <span className="font-mono">{it.code}</span>
-                        <span>·</span>
-                        <span>Máx: <strong>{it.maxQty}</strong></span>
-                        <span>·</span>
-                        <span className="font-semibold text-foreground">{formatCurrency(it.price)}</span>
+                  <div key={it.id} className="w-full rounded-xl border p-3 hover:border-primary/30 space-y-2">
+                    <div className="flex items-center gap-3">
+                      <div className="flex-1 min-w-0">
+                        <div className="font-medium text-sm truncate">{it.description}</div>
+                        <div className="flex items-center gap-2 text-xs text-muted-foreground mt-0.5 flex-wrap">
+                          <span className="font-mono">{it.code}</span>
+                          <span>·</span>
+                          <span>{it.presentacion}</span>
+                          <span>·</span>
+                          <span className="font-semibold text-foreground">{formatCurrency(it.price)}</span>
+                          <span>·</span>
+                          <span>Restan: <strong>{it.maxQty}</strong> {upp > 1 ? `(${remainingUnits} u.)` : ""}</span>
+                        </div>
                       </div>
                     </div>
-                    <div className="flex items-center gap-1 shrink-0">
-                      <Button
-                        variant="outline"
-                        size="icon"
-                        className="h-8 w-8"
-                        onClick={() => setOrigenPickerQtys((prev) => ({ ...prev, [it.id]: Math.max(1, (prev[it.id] ?? 1) - 1) }))}
-                      >−</Button>
-                      <Input
-                        type="number"
-                        value={currentQty}
-                        onChange={(e) => {
-                          const v = Number(e.target.value) || 1;
-                          setOrigenPickerQtys((prev) => ({ ...prev, [it.id]: Math.min(Math.max(1, v), it.maxQty) }));
-                        }}
-                        className="w-14 h-8 text-center"
-                        min={1}
-                        max={it.maxQty}
-                      />
-                      <Button
-                        variant="outline"
-                        size="icon"
-                        className="h-8 w-8"
-                        onClick={() => setOrigenPickerQtys((prev) => ({ ...prev, [it.id]: Math.min(it.maxQty, (prev[it.id] ?? 1) + 1) }))}
-                      >+</Button>
-                      <Button
-                        size="sm"
-                        className="h-8 ml-1"
-                        onClick={() => {
-                          const qty = Math.min(Math.max(1, currentQty), it.maxQty);
-                          setItems((prev) => [...prev, { ...it, id: crypto.randomUUID(), qty, subtotal: it.price * qty }]);
-                          setOrigenAvailable((prev) => prev.filter((x) => x.id !== it.id));
-                          setOrigenPickerQtys((prev) => { const { [it.id]: _, ...rest } = prev; return rest; });
-                        }}
-                      >
-                        <Plus className="w-4 h-4" />
-                      </Button>
-                    </div>
+                    {it.maxQty > 0 && (
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-xs text-muted-foreground">{upp > 1 ? `Devolver ${it.presentacion}:` : "Cantidad:"}</span>
+                        <div className="flex items-center gap-1 shrink-0">
+                          <Button variant="outline" size="icon" className="h-8 w-8"
+                            onClick={() => setOrigenPickerQtys((prev) => ({ ...prev, [it.id]: Math.max(1, (prev[it.id] ?? 1) - 1) }))}>−</Button>
+                          <Input type="number" value={currentQty}
+                            onChange={(e) => { const v = Number(e.target.value) || 1; setOrigenPickerQtys((prev) => ({ ...prev, [it.id]: Math.min(Math.max(1, v), it.maxQty) })); }}
+                            className="w-14 h-8 text-center" min={1} max={it.maxQty} />
+                          <Button variant="outline" size="icon" className="h-8 w-8"
+                            onClick={() => setOrigenPickerQtys((prev) => ({ ...prev, [it.id]: Math.min(it.maxQty, (prev[it.id] ?? 1) + 1) }))}>+</Button>
+                          <Button size="sm" className="h-8 ml-1"
+                            onClick={() => {
+                              const qty = Math.min(Math.max(1, currentQty), it.maxQty);
+                              setItems((prev) => [...prev, { ...it, id: crypto.randomUUID(), qty, subtotal: it.price * qty }]);
+                              consumeLine(qty * upp);
+                            }}>
+                            <Plus className="w-4 h-4" />
+                          </Button>
+                        </div>
+                      </div>
+                    )}
+                    {upp > 1 && remainingUnits > 0 && (
+                      <div className="flex items-center justify-between gap-2 pt-1 border-t border-dashed">
+                        <span className="text-xs text-muted-foreground">Devolver unidades sueltas <span className="text-[10px]">({formatCurrency(unitPrice)} c/u)</span>:</span>
+                        <div className="flex items-center gap-1 shrink-0">
+                          <Button variant="outline" size="icon" className="h-8 w-8"
+                            onClick={() => setOrigenUnidadesQtys((prev) => ({ ...prev, [it.id]: Math.max(1, (prev[it.id] ?? 1) - 1) }))}>−</Button>
+                          <Input type="number" value={currentUnidades}
+                            onChange={(e) => { const v = Number(e.target.value) || 1; setOrigenUnidadesQtys((prev) => ({ ...prev, [it.id]: Math.min(Math.max(1, v), remainingUnits) })); }}
+                            className="w-14 h-8 text-center" min={1} max={remainingUnits} />
+                          <Button variant="outline" size="icon" className="h-8 w-8"
+                            onClick={() => setOrigenUnidadesQtys((prev) => ({ ...prev, [it.id]: Math.min(remainingUnits, (prev[it.id] ?? 1) + 1) }))}>+</Button>
+                          <Button size="sm" variant="secondary" className="h-8 ml-1"
+                            onClick={() => {
+                              const n = Math.min(Math.max(1, currentUnidades), remainingUnits);
+                              setItems((prev) => [...prev, {
+                                id: crypto.randomUUID(),
+                                producto_id: it.producto_id,
+                                code: it.code,
+                                description: `${it.description} (sueltas)`,
+                                qty: n,
+                                maxQty: n,
+                                unit: "UN",
+                                price: unitPrice,
+                                subtotal: unitPrice * n,
+                                presentacion: "Unidad",
+                                unidades_por_presentacion: 1,
+                                alreadyReturned: false,
+                                costo_unitario: it.costo_unitario / upp,
+                              }]);
+                              consumeLine(n);
+                            }}>
+                            <Plus className="w-4 h-4" />
+                          </Button>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 );
               });
@@ -1291,13 +1470,17 @@ export default function NotaCreditoPage() {
               variant="outline"
               size="sm"
               onClick={() => {
-                const newItems = origenAvailable.map((it) => {
-                  const qty = Math.min(Math.max(1, origenPickerQtys[it.id] ?? 1), it.maxQty);
-                  return { ...it, id: crypto.randomUUID(), qty, subtotal: it.price * qty };
-                });
+                const newItems = origenAvailable
+                  .filter((it) => it.maxQty > 0)
+                  .map((it) => {
+                    const qty = Math.min(Math.max(1, origenPickerQtys[it.id] ?? 1), it.maxQty);
+                    return { ...it, id: crypto.randomUUID(), qty, subtotal: it.price * qty };
+                  });
                 setItems((prev) => [...prev, ...newItems]);
                 setOrigenAvailable([]);
+                setOrigenRemainingUnits({});
                 setOrigenPickerQtys({});
+                setOrigenUnidadesQtys({});
                 setOrigenPickerOpen(false);
               }}
               disabled={origenAvailable.length === 0}

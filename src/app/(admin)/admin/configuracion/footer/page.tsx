@@ -27,6 +27,7 @@ interface FooterConfig {
   facebook_url: string;
   whatsapp_url: string;
   direccion: string;
+  maps_url: string;
   telefono: string;
   email: string;
   mostrar_newsletter: boolean;
@@ -49,6 +50,7 @@ const DEFAULT_CONFIG: FooterConfig = {
   facebook_url: "",
   whatsapp_url: "",
   direccion: "",
+  maps_url: "",
   telefono: "",
   email: "",
   mostrar_newsletter: true,
@@ -186,6 +188,15 @@ export default function FooterConfigPage() {
             <div className="space-y-2">
               <Label className="flex items-center gap-1.5"><Mail className="w-3.5 h-3.5" />Email</Label>
               <Input value={config.email} onChange={(e) => setConfig({ ...config, email: e.target.value })} />
+            </div>
+            <div className="space-y-2 md:col-span-3">
+              <Label className="flex items-center gap-1.5"><MapPin className="w-3.5 h-3.5" />Link Google Maps del local</Label>
+              <Input
+                value={config.maps_url}
+                onChange={(e) => setConfig({ ...config, maps_url: e.target.value })}
+                placeholder="https://maps.app.goo.gl/..."
+              />
+              <p className="text-xs text-muted-foreground">Si está vacío se busca por la dirección de arriba (puede caer en cualquier resultado). Pegá el link de Google Maps de tu local para que apunte exacto.</p>
             </div>
           </div>
         </CardContent>

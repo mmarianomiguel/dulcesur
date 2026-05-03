@@ -18,6 +18,8 @@ interface TiendaConfig {
   hora_corte: string;
   horario_atencion_inicio: string;
   horario_atencion_fin: string;
+  horario_entrega_inicio: string | null;
+  horario_entrega_fin: string | null;
   dias_atencion: string[];
   minimo_unidades_mayorista: number;
 }
@@ -33,7 +35,7 @@ export default function EnviosDinamico() {
         supabase.from("zonas_entrega").select("*").order("nombre"),
         supabase
           .from("tienda_config")
-          .select("monto_minimo_pedido, umbral_envio_gratis, hora_corte, horario_atencion_inicio, horario_atencion_fin, dias_atencion, minimo_unidades_mayorista")
+          .select("*")
           .limit(1)
           .single(),
       ]);
@@ -140,7 +142,7 @@ export default function EnviosDinamico() {
           </strong>{" "}
           en el horario de{" "}
           <strong className="text-gray-900">
-            {config?.horario_atencion_inicio?.slice(0, 5) || "08:00"} a {config?.horario_atencion_fin?.slice(0, 5) || "14:00"} hs
+            {(config?.horario_entrega_inicio || config?.horario_atencion_inicio)?.slice(0, 5) || "08:00"} a {(config?.horario_entrega_fin || config?.horario_atencion_fin)?.slice(0, 5) || "14:00"} hs
           </strong>.
         </p>
       </div>

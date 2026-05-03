@@ -11,7 +11,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import {
-  BarChart3, TrendingUp, Users, Package, ShoppingCart, Receipt,
+  BarChart3, Users, Package, ShoppingCart, Receipt,
   Loader2, DollarSign, Crown, Star, ArrowUpRight, ArrowDownRight, Wallet, Calendar,
 } from "lucide-react";
 
@@ -31,13 +31,13 @@ export default function ResumenMensualPage() {
   const [ganancia, setGanancia] = useState(0);
   const [itemsSinCosto, setItemsSinCosto] = useState(0);
   const [topClientes, setTopClientes] = useState<{ nombre: string; total: number; qty: number }[]>([]);
-  const [topProductos, setTopProductos] = useState<{ nombre: string; cantidad: number; total: number }[]>([]);
+  const [topProductos, setTopProductos] = useState<{ nombre: string; cantidad: number; total: number; ganancia: number }[]>([]);
+  const [topProdTab, setTopProdTab] = useState<"unidades" | "margen" | "facturacion">("unidades");
   const [ventasPorPago, setVentasPorPago] = useState<{ metodo: string; total: number; qty: number }[]>([]);
   const [egresosPorPago, setEgresosPorPago] = useState<{ metodo: string; total: number }[]>([]);
   const [egresosDetalle, setEgresosDetalle] = useState<{ descripcion: string; metodo: string; monto: number }[]>([]);
   const [transferPorCuenta, setTransferPorCuenta] = useState<{ cuenta: string; total: number }[]>([]);
   const [totalNC, setTotalNC] = useState(0);
-  const [rentabilidadProductos, setRentabilidadProductos] = useState<{ nombre: string; vendido: number; costo: number; ganancia: number; margen: number }[]>([]);
   const [comparativa, setComparativa] = useState<{ label: string; actual: number; anterior: number; diff: number } | null>(null);
 
   const fetchResumen = useCallback(async () => {
@@ -97,7 +97,7 @@ export default function ResumenMensualPage() {
         let from = 0;
         while (true) {
           const { data: chunkItems } = await supabase.from("venta_items")
-            .select("descripcion, cantidad, subtotal, precio_unitario, descuento, costo_unitario")
+            .select("producto_id, descripcion, cantidad, unidades_por_presentacion, subtotal, precio_unitario, descuento, costo_unitario, productos(nombre)")
             .in("venta_id", chunk)
             .range(from, from + PAGE - 1);
           const rows = chunkItems || [];
@@ -108,22 +108,28 @@ export default function ResumenMensualPage() {
       }
 
       let sinCosto = 0;
-      const prodMap: Record<string, { nombre: string; cantidad: number; total: number }> = {};
+      const prodMap: Record<string, { nombre: string; cantidad: number; total: number; ganancia: number }> = {};
       const g = (items || []).reduce((a: number, item: any) => {
         const costoReal = (item.costo_unitario && item.costo_unitario > 0) ? item.costo_unitario : 0;
         if (!costoReal) sinCosto++;
         const descPct = Number(item.descuento) || 0;
         const precioVenta = item.precio_unitario * (1 - descPct / 100);
-        // Agrupar para top productos
-        const key = item.descripcion;
-        if (!prodMap[key]) prodMap[key] = { nombre: key, cantidad: 0, total: 0 };
-        prodMap[key].cantidad += Number(item.cantidad);
+        const gananciaItem = (precioVenta - costoReal) * item.cantidad;
+        // Agrupar para top productos por producto_id (fallback descripcion para items free-text).
+        // Cantidad se normaliza a UNIDADES (cantidad × unidades_por_presentacion) para que cajas y sueltas sean comparables.
+        const key = item.producto_id || `__free__${item.descripcion}`;
+        const upp = Number(item.unidades_por_presentacion) || 1;
+        const unidades = Number(item.cantidad) * upp;
+        const nombreCanonico = item.productos?.nombre || item.descripcion;
+        if (!prodMap[key]) prodMap[key] = { nombre: nombreCanonico, cantidad: 0, total: 0, ganancia: 0 };
+        prodMap[key].cantidad += unidades;
         prodMap[key].total += Number(item.subtotal);
-        return a + (precioVenta - costoReal) * item.cantidad;
+        prodMap[key].ganancia += gananciaItem;
+        return a + gananciaItem;
       }, 0);
       setGanancia(g);
       setItemsSinCosto(sinCosto);
-      setTopProductos(Object.values(prodMap).sort((a, b) => b.total - a.total).slice(0, 10));
+      setTopProductos(Object.values(prodMap));
     } else {
       setGanancia(0);
       setItemsSinCosto(0);
@@ -255,49 +261,6 @@ export default function ResumenMensualPage() {
     });
     setTransferPorCuenta(Object.entries(cuentaMap).map(([cuenta, total]) => ({ cuenta, total })).sort((a, b) => b.total - a.total));
 
-    // Rentabilidad por producto (top 10 by ganancia)
-    if (vList.length > 0) {
-      const ids = vList.map((v: any) => v.id);
-      const VENTAS_CHUNK_RENT = 50;
-      const PAGE_RENT = 1000;
-      const rentItems: any[] = [];
-      for (let i = 0; i < ids.length; i += VENTAS_CHUNK_RENT) {
-        const chunk = ids.slice(i, i + VENTAS_CHUNK_RENT);
-        let from = 0;
-        while (true) {
-          const { data: chunkItems } = await supabase.from("venta_items")
-            .select("descripcion, cantidad, precio_unitario, descuento, costo_unitario")
-            .in("venta_id", chunk)
-            .range(from, from + PAGE_RENT - 1);
-          const rows = chunkItems || [];
-          rentItems.push(...rows);
-          if (rows.length < PAGE_RENT) break;
-          from += PAGE_RENT;
-        }
-      }
-      const prodRent: Record<string, { nombre: string; vendido: number; costo: number }> = {};
-      for (const item of rentItems || []) {
-        const nombre = (item as any).descripcion || "Sin nombre";
-        const costoReal = (item.costo_unitario && item.costo_unitario > 0) ? item.costo_unitario : 0;
-        const qty = (item as any).cantidad || 0;
-        const descPct = Number((item as any).descuento) || 0;
-        const precioReal = (item as any).precio_unitario * (1 - descPct / 100);
-        const venta = precioReal * qty;
-        const costoTotal = costoReal * qty;
-        if (!prodRent[nombre]) prodRent[nombre] = { nombre, vendido: 0, costo: 0 };
-        prodRent[nombre].vendido += venta;
-        prodRent[nombre].costo += costoTotal;
-      }
-      setRentabilidadProductos(
-        Object.values(prodRent)
-          .map((p) => ({ ...p, ganancia: p.vendido - p.costo, margen: p.vendido > 0 ? ((p.vendido - p.costo) / p.vendido) * 100 : 0 }))
-          .sort((a, b) => b.ganancia - a.ganancia)
-          .slice(0, 10)
-      );
-    } else {
-      setRentabilidadProductos([]);
-    }
-
     // Comparativa con mes anterior
     const prevM = m === 1 ? 12 : m - 1;
     const prevY = m === 1 ? y - 1 : y;
@@ -427,27 +390,64 @@ export default function ResumenMensualPage() {
             {/* Top 10 Productos */}
             <Card>
               <CardHeader className="pb-3">
-                <CardTitle className="text-base flex items-center gap-2"><Star className="w-4 h-4 text-blue-500" />Top 10 Productos</CardTitle>
+                <div className="flex items-center justify-between gap-2 flex-wrap">
+                  <CardTitle className="text-base flex items-center gap-2"><Star className="w-4 h-4 text-blue-500" />Top 10 Productos</CardTitle>
+                  <div className="inline-flex rounded-lg bg-muted p-0.5 text-xs">
+                    {([
+                      { id: "unidades", label: "Unidades" },
+                      { id: "margen", label: "Margen" },
+                      { id: "facturacion", label: "Facturación" },
+                    ] as const).map((t) => (
+                      <button
+                        key={t.id}
+                        onClick={() => setTopProdTab(t.id)}
+                        className={`px-2.5 py-1 rounded-md font-medium transition ${topProdTab === t.id ? "bg-white shadow text-foreground" : "text-muted-foreground hover:text-foreground"}`}
+                      >
+                        {t.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
               </CardHeader>
               <CardContent>
                 {topProductos.length === 0 ? (
                   <p className="text-sm text-muted-foreground text-center py-4">Sin datos</p>
-                ) : (
-                  <div className="space-y-2">
-                    {topProductos.map((p, i) => (
-                      <div key={p.nombre} className="flex items-center gap-3">
-                        <span className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${i < 3 ? "bg-blue-100 text-blue-700" : "bg-muted text-muted-foreground"}`}>
-                          {i + 1}
-                        </span>
-                        <div className="flex-1 min-w-0">
-                          <p className="text-sm font-medium truncate">{p.nombre}</p>
-                          <p className="text-[11px] text-muted-foreground">{p.cantidad} vendidos</p>
-                        </div>
-                        <span className="text-sm font-bold">{formatCurrency(p.total)}</span>
-                      </div>
-                    ))}
-                  </div>
-                )}
+                ) : (() => {
+                  const sorted = [...topProductos];
+                  if (topProdTab === "unidades") sorted.sort((a, b) => b.cantidad - a.cantidad);
+                  else if (topProdTab === "margen") sorted.sort((a, b) => b.ganancia - a.ganancia);
+                  else sorted.sort((a, b) => b.total - a.total);
+                  const top = sorted.slice(0, 10);
+                  return (
+                    <div className="space-y-2">
+                      {top.map((p, i) => {
+                        const margenPct = p.total > 0 ? (p.ganancia / p.total) * 100 : 0;
+                        const main = topProdTab === "unidades"
+                          ? `${p.cantidad} unidades`
+                          : topProdTab === "margen"
+                          ? `${formatCurrency(Math.round(p.ganancia))} (${margenPct >= 0 ? "+" : ""}${margenPct.toFixed(0)}%)`
+                          : formatCurrency(p.total);
+                        const sub = topProdTab === "unidades"
+                          ? formatCurrency(p.total)
+                          : topProdTab === "margen"
+                          ? `Vendido ${formatCurrency(p.total)}`
+                          : `${p.cantidad} unidades`;
+                        return (
+                          <div key={p.nombre} className="flex items-center gap-3">
+                            <span className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${i < 3 ? "bg-blue-100 text-blue-700" : "bg-muted text-muted-foreground"}`}>
+                              {i + 1}
+                            </span>
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm font-medium truncate">{p.nombre}</p>
+                              <p className="text-[11px] text-muted-foreground">{sub}</p>
+                            </div>
+                            <span className={`text-sm font-bold ${topProdTab === "margen" && p.ganancia < 0 ? "text-red-500" : ""}`}>{main}</span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  );
+                })()}
               </CardContent>
             </Card>
 
@@ -554,35 +554,6 @@ export default function ResumenMensualPage() {
             </Card>
           )}
 
-          {/* Rentabilidad por Producto */}
-          {rentabilidadProductos.length > 0 && (
-            <Card>
-              <CardHeader className="pb-3">
-                <CardTitle className="text-base flex items-center gap-2"><TrendingUp className="w-4 h-4" />Rentabilidad por Producto (Top 10)</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-2">
-                  {rentabilidadProductos.map((p, i) => (
-                    <div key={i} className="flex items-center justify-between text-sm border-b pb-1.5 last:border-0">
-                      <div className="flex items-center gap-2 min-w-0 flex-1">
-                        <span className="text-xs text-muted-foreground w-5">{i + 1}.</span>
-                        <span className="truncate">{p.nombre}</span>
-                      </div>
-                      <div className="flex items-center gap-3 shrink-0">
-                        <span className="text-xs text-muted-foreground">Vendido {formatCurrency(Math.round(p.vendido))}</span>
-                        <span className={`font-semibold ${p.ganancia >= 0 ? "text-emerald-600" : "text-red-500"}`}>
-                          {formatCurrency(Math.round(p.ganancia))}
-                        </span>
-                        <Badge variant={p.margen >= 0 ? "default" : "destructive"} className="text-[10px] px-1.5">
-                          {p.costo > 0 ? `${p.margen >= 0 ? "+" : ""}${p.margen.toFixed(0)}%` : "—"}
-                        </Badge>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
-          )}
         </>
       )}
     </div>

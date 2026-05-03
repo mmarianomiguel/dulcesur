@@ -7,6 +7,7 @@ import { formatCurrency } from "@/lib/formatters";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { DateInput } from "@/components/ui/date-input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -14,7 +15,6 @@ import {
   SelectContent,
   SelectItem,
   SelectTrigger,
-  SelectValue,
 } from "@/components/ui/select";
 import {
   Dialog,
@@ -234,30 +234,31 @@ export default function ResumenVendedorPage() {
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
             <div className="space-y-2">
               <Label className="text-xs text-muted-foreground">Desde</Label>
-              <Input
-                type="date"
+              <DateInput
                 value={fechaDesde}
-                onChange={(e) => setFechaDesde(e.target.value)}
+                onChange={setFechaDesde}
               />
             </div>
             <div className="space-y-2">
               <Label className="text-xs text-muted-foreground">Hasta</Label>
-              <Input
-                type="date"
+              <DateInput
                 value={fechaHasta}
-                onChange={(e) => setFechaHasta(e.target.value)}
+                onChange={setFechaHasta}
               />
             </div>
             <div className="space-y-2">
               <Label className="text-xs text-muted-foreground">Vendedor</Label>
               <Select
                 value={selectedVendedor}
-                onValueChange={(v) => setSelectedVendedor(v ?? "all")}
+                onValueChange={(v) => setSelectedVendedor(v ?? "todos")}
               >
-                <SelectTrigger>
-                  <SelectValue placeholder="Todos" />
+                <SelectTrigger className="h-9 rounded-full bg-muted/60 border-none px-3 gap-2 text-sm hover:bg-muted/80 transition-colors min-w-[180px]">
+                  <Users className="w-3.5 h-3.5 text-muted-foreground" />
+                  <span className="font-medium">
+                    {selectedVendedor === "todos" ? "Todos" : (vendedores.find(v => v.id === selectedVendedor)?.nombre ?? "Todos")}
+                  </span>
                 </SelectTrigger>
-                <SelectContent>
+                <SelectContent className="w-auto min-w-[180px] p-1">
                   <SelectItem value="todos">Todos</SelectItem>
                   {vendedores.map((v) => (
                     <SelectItem key={v.id} value={v.id}>

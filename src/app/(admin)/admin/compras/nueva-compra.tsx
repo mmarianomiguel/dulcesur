@@ -7,6 +7,7 @@ import { todayARG, nowTimeARG, formatCurrency } from "@/lib/formatters";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { DateInput } from "@/components/ui/date-input";
 import { MoneyInput } from "@/components/ui/money-input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
@@ -933,7 +934,7 @@ export default function NuevaCompra({
                 <CalendarDays className="w-3.5 h-3.5" />
                 Fecha
               </Label>
-              <Input type="date" value={fecha} onChange={(e) => setFecha(e.target.value)} />
+              <DateInput value={fecha} onChange={setFecha} />
             </div>
 
             {/* Numero de compra */}

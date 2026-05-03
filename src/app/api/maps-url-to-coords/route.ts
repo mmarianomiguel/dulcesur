@@ -1,12 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 
+// Orden importa: priorizamos coords del PIN/marcador sobre la cámara del mapa.
+// !3d!4d = marcador real del lugar; @lat,lng = posición de la cámara (puede caer 100s de metros del pin).
 const COORD_PATTERNS = [
-  /@(-?\d+\.\d+),(-?\d+\.\d+)/,
   /[?&]q=(-?\d+\.\d+),(-?\d+\.\d+)/,
   /[?&]ll=(-?\d+\.\d+),(-?\d+\.\d+)/,
   /[?&]daddr=(-?\d+\.\d+),(-?\d+\.\d+)/,
   /[?&]center=(-?\d+\.\d+),(-?\d+\.\d+)/,
   /!3d(-?\d+\.\d+)!4d(-?\d+\.\d+)/,
+  /@(-?\d+\.\d+),(-?\d+\.\d+)/,
   /"latitude":(-?\d+\.\d+),"longitude":(-?\d+\.\d+)/,
   /\[null,null,(-?\d+\.\d+),(-?\d+\.\d+)\]/,
   /center=(-?\d+\.\d+)%2C(-?\d+\.\d+)/,

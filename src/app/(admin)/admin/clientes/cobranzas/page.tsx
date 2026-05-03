@@ -7,6 +7,7 @@ import { formatCurrency } from "@/lib/formatters";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { DateInput } from "@/components/ui/date-input";
 import { Label } from "@/components/ui/label";
 import {
   Dialog,
@@ -273,11 +274,11 @@ export default function CobranzasPage() {
           <div className="flex flex-wrap gap-2 items-end mb-3">
             <div className="space-y-1 flex-1 min-w-[120px]">
               <Label className="text-xs">Desde</Label>
-              <Input type="date" value={filterFrom} onChange={(e) => setFilterFrom(e.target.value)} className="h-8 text-xs" />
+              <DateInput value={filterFrom} onChange={setFilterFrom} className="h-8 text-xs" />
             </div>
             <div className="space-y-1 flex-1 min-w-[120px]">
               <Label className="text-xs">Hasta</Label>
-              <Input type="date" value={filterTo} onChange={(e) => setFilterTo(e.target.value)} className="h-8 text-xs" />
+              <DateInput value={filterTo} onChange={setFilterTo} className="h-8 text-xs" />
             </div>
             <Button variant="outline" size="sm" onClick={() => selectedClient && openDetail(selectedClient, filterFrom, filterTo)}>Filtrar</Button>
           </div>

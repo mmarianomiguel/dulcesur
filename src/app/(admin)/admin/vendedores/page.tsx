@@ -6,6 +6,7 @@ import { norm } from "@/lib/utils";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { DateInput } from "@/components/ui/date-input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
@@ -913,10 +914,9 @@ export default function VendedoresPage() {
                 {filterMode === "day" && (
                   <div className="space-y-1">
                     <Label className="text-xs text-muted-foreground">Fecha</Label>
-                    <Input
-                      type="date"
+                    <DateInput
                       value={filterDay}
-                      onChange={(e) => setFilterDay(e.target.value)}
+                      onChange={setFilterDay}
                       className="w-40"
                     />
                   </div>
@@ -960,19 +960,17 @@ export default function VendedoresPage() {
                   <>
                     <div className="space-y-1">
                       <Label className="text-xs text-muted-foreground">Desde</Label>
-                      <Input
-                        type="date"
+                      <DateInput
                         value={filterFrom}
-                        onChange={(e) => setFilterFrom(e.target.value)}
+                        onChange={setFilterFrom}
                         className="w-40"
                       />
                     </div>
                     <div className="space-y-1">
                       <Label className="text-xs text-muted-foreground">Hasta</Label>
-                      <Input
-                        type="date"
+                      <DateInput
                         value={filterTo}
-                        onChange={(e) => setFilterTo(e.target.value)}
+                        onChange={setFilterTo}
                         className="w-40"
                       />
                     </div>

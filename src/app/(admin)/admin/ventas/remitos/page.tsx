@@ -10,6 +10,7 @@ import { VentaDetailDialog } from "@/components/venta-detail-dialog";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { DateInput } from "@/components/ui/date-input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -462,11 +463,11 @@ export default function RemitosPage() {
             </div>
             <div className="space-y-1.5">
               <Label className="text-xs text-muted-foreground">Desde</Label>
-              <Input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} className="h-9" />
+              <DateInput value={dateFrom} onChange={setDateFrom} className="h-9" />
             </div>
             <div className="space-y-1.5">
               <Label className="text-xs text-muted-foreground">Hasta</Label>
-              <Input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} className="h-9" />
+              <DateInput value={dateTo} onChange={setDateTo} className="h-9" />
             </div>
           </div>
         </CardContent>

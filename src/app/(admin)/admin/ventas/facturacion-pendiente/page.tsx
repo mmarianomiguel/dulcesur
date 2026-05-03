@@ -6,6 +6,7 @@ import { todayARG, formatCurrency } from "@/lib/formatters";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { DateInput } from "@/components/ui/date-input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -203,11 +204,11 @@ export default function FacturacionPendientePage() {
             </div>
             <div className="space-y-2">
               <Label className="text-xs text-muted-foreground">Desde</Label>
-              <Input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} />
+              <DateInput value={dateFrom} onChange={setDateFrom} />
             </div>
             <div className="space-y-2">
               <Label className="text-xs text-muted-foreground">Hasta</Label>
-              <Input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} />
+              <DateInput value={dateTo} onChange={setDateTo} />
             </div>
           </div>
         </CardContent>

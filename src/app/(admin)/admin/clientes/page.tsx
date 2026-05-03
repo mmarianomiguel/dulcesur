@@ -11,6 +11,7 @@ import type { Cliente, ZonaEntrega } from "@/types/database";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { DateInput } from "@/components/ui/date-input";
 import { MoneyInput } from "@/components/ui/money-input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
@@ -1981,11 +1982,11 @@ export default function ClientesPage() {
               </div>
               <div className="flex-1 min-w-[120px]">
                 <label className="text-[10px] text-muted-foreground font-medium uppercase tracking-wider block mb-1">Desde</label>
-                <Input type="date" value={movDesde} onChange={(e) => setMovDesde(e.target.value)} className="h-8 text-xs" />
+                <DateInput value={movDesde} onChange={setMovDesde} className="h-8 text-xs" />
               </div>
               <div className="flex-1 min-w-[120px]">
                 <label className="text-[10px] text-muted-foreground font-medium uppercase tracking-wider block mb-1">Hasta</label>
-                <Input type="date" value={movHasta} onChange={(e) => setMovHasta(e.target.value)} className="h-8 text-xs" />
+                <DateInput value={movHasta} onChange={setMovHasta} className="h-8 text-xs" />
               </div>
               <Button size="sm" className="h-8" onClick={() => movClient && fetchMovimientos(movClient.id, movDesde, movHasta)}>
                 Filtrar

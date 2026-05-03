@@ -16,6 +16,7 @@ interface FooterConfig {
   facebook_url: string;
   whatsapp_url: string;
   direccion: string;
+  maps_url: string;
   telefono: string;
   email: string;
   badges: string[];
@@ -28,6 +29,7 @@ const DEFAULT_CONFIG: FooterConfig = {
   facebook_url: "",
   whatsapp_url: "",
   direccion: "",
+  maps_url: "",
   telefono: "",
   email: "",
   badges: ["Envío a domicilio", "Compra segura", "Múltiples medios de pago", "Atención personalizada"],
@@ -91,6 +93,7 @@ interface TiendaFooterProps {
     facebook_url?: string;
     whatsapp_url?: string;
     direccion?: string;
+    maps_url?: string;
     telefono?: string;
     email?: string;
     badges?: string[];
@@ -108,6 +111,7 @@ export default function TiendaFooter({ initial }: TiendaFooterProps = {}) {
           facebook_url: initial.facebook_url || "",
           whatsapp_url: initial.whatsapp_url || "",
           direccion: initial.direccion || "",
+          maps_url: initial.maps_url || "",
           telefono: initial.telefono || "",
           email: initial.email || "",
           badges: initial.badges && initial.badges.length > 0 ? initial.badges : DEFAULT_CONFIG.badges,
@@ -227,7 +231,7 @@ export default function TiendaFooter({ initial }: TiendaFooterProps = {}) {
               <h4 className="mb-4 text-sm font-semibold uppercase tracking-wider text-white">Contacto</h4>
               <div className="space-y-4">
                 {config.direccion && (
-                  <a href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(config.direccion)}`} target="_blank" rel="noopener noreferrer" className="flex items-start gap-3 group">
+                  <a href={config.maps_url || `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(config.direccion)}`} target="_blank" rel="noopener noreferrer" className="flex items-start gap-3 group">
                     <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-gray-800">
                       <MapPin className="h-4 w-4 text-primary/80" />
                     </div>

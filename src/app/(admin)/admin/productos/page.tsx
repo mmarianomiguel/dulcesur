@@ -9,6 +9,7 @@ import type { Producto, Categoria } from "@/types/database";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { DateInput } from "@/components/ui/date-input";
 import { MoneyInput } from "@/components/ui/money-input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
@@ -3942,10 +3943,9 @@ export default function ProductosPage() {
                       </div>
                       <div className="space-y-1.5">
                         <Label className="text-xs text-muted-foreground">Válido hasta (vacío = permanente)</Label>
-                        <Input
-                          type="date"
+                        <DateInput
                           value={form.precio_oferta_hasta || ""}
-                          onChange={(e) => setForm({ ...form, precio_oferta_hasta: e.target.value || undefined })}
+                          onChange={(v) => setForm({ ...form, precio_oferta_hasta: v || undefined })}
                           className="h-9"
                         />
                       </div>
@@ -4091,8 +4091,8 @@ export default function ProductosPage() {
                         </div>
                       )}
                       <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 items-end">
-                        <div><Label className="text-[10px] text-muted-foreground">Desde</Label><Input type="date" value={discountForm.fecha_inicio} onChange={(e) => setDiscountForm({ ...discountForm, fecha_inicio: e.target.value })} className="h-8 text-xs" /></div>
-                        <div><Label className="text-[10px] text-muted-foreground">Hasta (opcional)</Label><Input type="date" value={discountForm.fecha_fin} onChange={(e) => setDiscountForm({ ...discountForm, fecha_fin: e.target.value })} className="h-8 text-xs" /></div>
+                        <div><Label className="text-[10px] text-muted-foreground">Desde</Label><DateInput value={discountForm.fecha_inicio} onChange={(v) => setDiscountForm({ ...discountForm, fecha_inicio: v })} className="h-8 text-xs" /></div>
+                        <div><Label className="text-[10px] text-muted-foreground">Hasta (opcional)</Label><DateInput value={discountForm.fecha_fin} onChange={(v) => setDiscountForm({ ...discountForm, fecha_fin: v })} className="h-8 text-xs" /></div>
                         <Button type="button" size="sm" className="h-8 text-xs bg-orange-600 hover:bg-orange-700" onClick={saveProductDiscount} disabled={savingDiscount || !discountForm.nombre || (discountForm.modalidad === "precio_fijo" ? discountForm.precio_fijo <= 0 : discountForm.porcentaje <= 0)}>
                           {savingDiscount ? <Loader2 className="w-3 h-3 animate-spin mr-1" /> : null}
                           Crear descuento

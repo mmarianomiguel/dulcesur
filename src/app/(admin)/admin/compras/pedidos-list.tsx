@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { DateInput } from "@/components/ui/date-input";
 import { Badge } from "@/components/ui/badge";
 import {
   Select,
@@ -278,7 +279,7 @@ export function PedidosList({
           </div>
 
           {pedFilterMode === "day" && (
-            <Input type="date" value={pedFilterDay} onChange={(e) => setPedFilterDay(e.target.value)} className="w-40 h-9" />
+            <DateInput value={pedFilterDay} onChange={setPedFilterDay} className="w-40 h-9" />
           )}
           {pedFilterMode === "month" && (
             <div className="flex items-center gap-1.5">
@@ -295,9 +296,9 @@ export function PedidosList({
           )}
           {pedFilterMode === "range" && (
             <div className="flex items-center gap-1.5">
-              <Input type="date" value={pedFilterFrom} onChange={(e) => setPedFilterFrom(e.target.value)} className="w-36 h-9" />
+              <DateInput value={pedFilterFrom} onChange={setPedFilterFrom} className="w-36 h-9" />
               <span className="text-xs text-muted-foreground">a</span>
-              <Input type="date" value={pedFilterTo} onChange={(e) => setPedFilterTo(e.target.value)} className="w-36 h-9" />
+              <DateInput value={pedFilterTo} onChange={setPedFilterTo} className="w-36 h-9" />
             </div>
           )}
 

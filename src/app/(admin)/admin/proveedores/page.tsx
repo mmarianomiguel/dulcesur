@@ -7,6 +7,7 @@ import { norm } from "@/lib/utils";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { DateInput } from "@/components/ui/date-input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
@@ -895,11 +896,11 @@ export default function ProveedoresPage() {
                     <div className="flex flex-wrap items-end gap-2">
                       <div className="space-y-1">
                         <Label className="text-xs text-gray-500">Desde</Label>
-                        <Input type="date" value={ccDesde} onChange={(e) => setCcDesde(e.target.value)} className="h-8 text-sm w-36" />
+                        <DateInput value={ccDesde} onChange={setCcDesde} className="h-8 text-sm w-36" />
                       </div>
                       <div className="space-y-1">
                         <Label className="text-xs text-gray-500">Hasta</Label>
-                        <Input type="date" value={ccHasta} onChange={(e) => setCcHasta(e.target.value)} className="h-8 text-sm w-36" />
+                        <DateInput value={ccHasta} onChange={setCcHasta} className="h-8 text-sm w-36" />
                       </div>
                       <Button size="sm" className="h-8" onClick={() => ccDialog.data && fetchCuentaCorriente(ccDialog.data.id, ccDesde, ccHasta)}>
                         <Search className="w-3.5 h-3.5 mr-1" />Filtrar

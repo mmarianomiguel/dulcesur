@@ -495,12 +495,31 @@ function ProductosContent({ initialData }: { initialData?: InitialProductosData 
       let finalProds = prods;
       let finalCount = count || 0;
       if (searchQuery && finalCount === 0) {
-        const { data: allData } = await supabase
+        // Replicar los mismos filtros restrictivos que la query principal en el fallback fuzzy.
+        let fuzzyQuery = supabase
           .from("productos")
-          .select("id, nombre, precio, imagen_url, stock, activo, visibilidad, es_combo, precio_anterior, fecha_actualizacion, updated_at, created_at, categorias(id, nombre, restringida), marcas(id, nombre)")
+          .select("id, nombre, precio, precio_oferta, precio_oferta_hasta, imagen_url, categoria_id, subcategoria_id, marca_id, stock, activo, visibilidad, es_combo, precio_anterior, fecha_actualizacion, updated_at, created_at, fecha_sin_stock, tags, categorias(id, nombre, restringida), marcas(id, nombre)")
           .eq("activo", true)
-          .eq("visibilidad", "visible")
-          .limit(500);
+          .eq("visibilidad", "visible");
+        if (restrictedIds.length > 0 && !categoriaId) fuzzyQuery = fuzzyQuery.not("categoria_id", "in", `(${restrictedIds.join(",")})`);
+        if (categoriaId) fuzzyQuery = fuzzyQuery.eq("categoria_id", categoriaId);
+        if (subcategoriaId) fuzzyQuery = fuzzyQuery.eq("subcategoria_id", subcategoriaId);
+        if (marcaParam) fuzzyQuery = fuzzyQuery.eq("marca_id", marcaParam);
+        if (precioMin) fuzzyQuery = fuzzyQuery.gte("precio", Number(precioMin));
+        if (precioMax) fuzzyQuery = fuzzyQuery.lte("precio", Number(precioMax));
+        if (disponibilidad === "" && diasOcultarSinStock > 0) {
+          const cutoff = cutoffARG(diasOcultarSinStock);
+          fuzzyQuery = fuzzyQuery.or(`stock.gt.0,fecha_sin_stock.gt.${cutoff},fecha_sin_stock.is.null,es_combo.eq.true`);
+        }
+        if (disponibilidad === "en_stock") fuzzyQuery = fuzzyQuery.gt("stock", 0);
+        if (disponibilidad === "sin_stock") fuzzyQuery = fuzzyQuery.eq("stock", 0).eq("es_combo", false);
+        if (tagFilter) fuzzyQuery = fuzzyQuery.contains("tags", [tagFilter]);
+        if (tipoFilter === "combos") fuzzyQuery = fuzzyQuery.eq("es_combo", true);
+        if (tipoFilter === "precio_actualizado") {
+          const threeDaysAgo = cutoffARG(3);
+          fuzzyQuery = fuzzyQuery.gt("precio_anterior", 0).gt("fecha_actualizacion", threeDaysAgo);
+        }
+        const { data: allData } = await fuzzyQuery.limit(500);
         const fuzzyFiltered = ((allData as any[]) || []).filter((p: any) => fuzzyMatch(p.nombre, searchQuery));
         finalProds = fuzzyFiltered as unknown as Producto[];
         finalCount = fuzzyFiltered.length;

@@ -6,6 +6,7 @@ import { supabase } from "@/lib/supabase";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { DateInput } from "@/components/ui/date-input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -284,19 +285,17 @@ export default function PercepcionesPage() {
             <div className="flex gap-2">
               <div className="space-y-1.5">
                 <Label className="text-xs text-muted-foreground">Desde</Label>
-                <Input
-                  type="date"
+                <DateInput
                   value={fechaDesde}
-                  onChange={(e) => setFechaDesde(e.target.value)}
+                  onChange={setFechaDesde}
                   className="w-[160px]"
                 />
               </div>
               <div className="space-y-1.5">
                 <Label className="text-xs text-muted-foreground">Hasta</Label>
-                <Input
-                  type="date"
+                <DateInput
                   value={fechaHasta}
-                  onChange={(e) => setFechaHasta(e.target.value)}
+                  onChange={setFechaHasta}
                   className="w-[160px]"
                 />
               </div>

@@ -5,6 +5,7 @@ import { useState, useMemo, useCallback, useEffect, useRef } from "react";
 import { supabase } from "@/lib/supabase";
 import { norm, productSlug } from "@/lib/utils";
 import { formatCurrency } from "@/lib/formatters";
+import { DateInput } from "@/components/ui/date-input";
 
 import {
   ArrowLeft,
@@ -2721,11 +2722,11 @@ export default function ListaPreciosPage() {
               <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-3">
                 <div>
                   <label className="block text-xs font-medium text-muted-foreground mb-1.5 uppercase tracking-wider">Precio modif. desde</label>
-                  <input type="date" value={filters.fechaDesde} onChange={(e) => updateFilter("fechaDesde", e.target.value)} className="w-full border border-border rounded-lg px-3 py-2 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary" />
+                  <DateInput value={filters.fechaDesde} onChange={(v) => updateFilter("fechaDesde", v)} className="w-full" />
                 </div>
                 <div>
                   <label className="block text-xs font-medium text-muted-foreground mb-1.5 uppercase tracking-wider">Precio modif. hasta</label>
-                  <input type="date" value={filters.fechaHasta} onChange={(e) => updateFilter("fechaHasta", e.target.value)} className="w-full border border-border rounded-lg px-3 py-2 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary" />
+                  <DateInput value={filters.fechaHasta} onChange={(v) => updateFilter("fechaHasta", v)} className="w-full" />
                 </div>
                 <Toggle label="Con stock" value={filters.hayStock} onChange={(v) => updateFilter("hayStock", v)} />
                 <div>

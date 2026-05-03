@@ -10,6 +10,7 @@ import type { Cliente, Producto, Usuario } from "@/types/database";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { DateInput } from "@/components/ui/date-input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
@@ -2624,11 +2625,10 @@ export default function VentasPage() {
               </button>
               <div className="flex items-center gap-1.5 px-2.5 h-full border-l shrink-0">
                 <CalendarDays className="w-3.5 h-3.5 text-muted-foreground" />
-                <Input
-                  type="date"
+                <DateInput
                   value={fechaVenta}
-                  onChange={(e) => setFechaVenta(e.target.value)}
-                  className="h-5 text-xs border-0 p-0 w-[110px] bg-transparent shadow-none focus-visible:ring-0"
+                  onChange={setFechaVenta}
+                  className="h-7 text-xs border-0 p-0 w-[110px] bg-transparent shadow-none hover:bg-transparent"
                 />
                 {fechaVenta !== todayARG() && (
                   <button onClick={() => setFechaVenta(todayARG())} className="text-[10px] text-primary hover:underline font-medium">Hoy</button>

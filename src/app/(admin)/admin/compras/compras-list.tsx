@@ -2,6 +2,7 @@ import { useState, useMemo } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { DateInput } from "@/components/ui/date-input";
 import { Badge } from "@/components/ui/badge";
 import {
   Select,
@@ -367,10 +368,9 @@ export function ComprasList({
                   </SelectContent>
                 </Select>
                 {purchaseFilterMode === "day" && (
-                  <Input
-                    type="date"
+                  <DateInput
                     value={purchaseFilterDay}
-                    onChange={(e) => setPurchaseFilterDay(e.target.value)}
+                    onChange={setPurchaseFilterDay}
                     className="w-full sm:w-40"
                   />
                 )}
@@ -414,17 +414,15 @@ export function ComprasList({
                 )}
                 {purchaseFilterMode === "range" && (
                   <>
-                    <Input
-                      type="date"
+                    <DateInput
                       value={purchaseFilterFrom}
-                      onChange={(e) => setPurchaseFilterFrom(e.target.value)}
+                      onChange={setPurchaseFilterFrom}
                       className="w-full sm:w-40"
                     />
                     <span className="text-muted-foreground text-sm">a</span>
-                    <Input
-                      type="date"
+                    <DateInput
                       value={purchaseFilterTo}
-                      onChange={(e) => setPurchaseFilterTo(e.target.value)}
+                      onChange={setPurchaseFilterTo}
                       className="w-full sm:w-40"
                     />
                   </>

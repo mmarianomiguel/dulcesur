@@ -6,7 +6,31 @@ import { Select as SelectPrimitive } from "@base-ui/react/select"
 import { cn } from "@/lib/utils"
 import { ChevronDownIcon, CheckIcon, ChevronUpIcon } from "lucide-react"
 
-const Select = SelectPrimitive.Root
+// Auto-deriva el mapa value→label caminando los children.
+// base-ui Select.Root requiere una prop `items` para que SelectValue resuelva el label
+// del item seleccionado. Sin esto, el trigger muestra el value crudo (ej. "all" en vez de "Todos").
+function walkForItems(node: React.ReactNode, acc: Record<string, React.ReactNode>) {
+  React.Children.forEach(node, (child) => {
+    if (!React.isValidElement(child)) return;
+    const props = child.props as any;
+    if (props && "value" in props && props.value != null) {
+      acc[String(props.value)] = props.children;
+    }
+    if (props && props.children) {
+      walkForItems(props.children, acc);
+    }
+  });
+}
+
+const Select = <Value,>(props: SelectPrimitive.Root.Props<Value>) => {
+  const derivedItems = React.useMemo(() => {
+    if ((props as any).items) return (props as any).items;
+    const map: Record<string, React.ReactNode> = {};
+    walkForItems(props.children, map);
+    return map;
+  }, [props.children, (props as any).items]);
+  return <SelectPrimitive.Root items={derivedItems as any} {...props} />;
+};
 
 function SelectGroup({ className, ...props }: SelectPrimitive.Group.Props) {
   return (
@@ -61,9 +85,9 @@ function SelectContent({
   children,
   side = "bottom",
   sideOffset = 4,
-  align = "center",
+  align = "start",
   alignOffset = 0,
-  alignItemWithTrigger = true,
+  alignItemWithTrigger = false,
   ...props
 }: SelectPrimitive.Popup.Props &
   Pick<

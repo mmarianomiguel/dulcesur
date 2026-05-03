@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { Loader2, Package, Clock, CheckCircle2, AlertTriangle, Download } from "lucide-react";
 import type { PedidoConArmado } from "@/types/equipo";
+import { DateInput } from "@/components/ui/date-input";
 
 function formatDuration(ms: number | null): string {
   if (ms === null || ms <= 0) return "—";
@@ -163,12 +164,11 @@ export function HistorialTab() {
             ))}
             <div className="flex items-center gap-2">
               <span className="text-xs text-[#6B7080]">Otra fecha:</span>
-              <input
-                type="date"
+              <DateInput
                 value={fecha}
-                onChange={(e) => setFecha(e.target.value)}
+                onChange={setFecha}
                 max={getToday()}
-                className="border border-gray-200 rounded-xl px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#FF2D6B] focus:border-transparent"
+                className="rounded-xl"
               />
             </div>
           </div>

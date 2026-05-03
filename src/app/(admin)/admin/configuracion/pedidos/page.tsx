@@ -34,6 +34,8 @@ interface TiendaConfig {
   dias_max_programacion: number;
   horario_atencion_inicio: string;
   horario_atencion_fin: string;
+  horario_entrega_inicio: string | null;
+  horario_entrega_fin: string | null;
   dias_atencion: string[];
   minimo_unidades_mayorista: number;
   dias_ocultar_sin_stock: number;
@@ -112,6 +114,8 @@ export default function PedidosConfigPage() {
         dias_max_programacion: config.dias_max_programacion,
         horario_atencion_inicio: config.horario_atencion_inicio,
         horario_atencion_fin: config.horario_atencion_fin,
+        horario_entrega_inicio: config.horario_entrega_inicio,
+        horario_entrega_fin: config.horario_entrega_fin,
         dias_atencion: config.dias_atencion,
         minimo_unidades_mayorista: config.minimo_unidades_mayorista,
         dias_ocultar_sin_stock: config.dias_ocultar_sin_stock,
@@ -325,6 +329,30 @@ export default function PedidosConfigPage() {
                   onChange={(e) => update("horario_atencion_fin", e.target.value)}
                   className="h-9"
                 />
+              </div>
+            </div>
+            <div className="space-y-2 pt-2 border-t">
+              <Label className="text-xs text-muted-foreground font-normal">Horario de entrega a domicilio</Label>
+              <p className="text-xs text-muted-foreground -mt-1">Franja horaria en la que reparten los pedidos. Se muestra en la sección "Envíos" de la tienda. Si lo dejás vacío usa el horario del local.</p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-1">
+                <div className="space-y-1">
+                  <Label className="text-[11px] text-muted-foreground">Desde</Label>
+                  <Input
+                    type="time"
+                    value={(config?.horario_entrega_inicio ?? "")?.slice(0, 5)}
+                    onChange={(e) => update("horario_entrega_inicio", e.target.value || null)}
+                    className="h-9"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-[11px] text-muted-foreground">Hasta</Label>
+                  <Input
+                    type="time"
+                    value={(config?.horario_entrega_fin ?? "")?.slice(0, 5)}
+                    onChange={(e) => update("horario_entrega_fin", e.target.value || null)}
+                    className="h-9"
+                  />
+                </div>
               </div>
             </div>
             <div className="space-y-2">

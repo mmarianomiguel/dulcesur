@@ -7,6 +7,7 @@ import { supabase } from "@/lib/supabase";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { DateInput } from "@/components/ui/date-input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
@@ -531,18 +532,16 @@ export default function DescuentosPage() {
                 <div className="grid grid-cols-2 gap-3">
                   <div>
                     <Label className="text-xs">Desde *</Label>
-                    <Input
-                      type="date"
+                    <DateInput
                       value={fechaInicio}
-                      onChange={(e) => setFechaInicio(e.target.value)}
+                      onChange={setFechaInicio}
                     />
                   </div>
                   <div>
                     <Label className="text-xs">Hasta (vacío = permanente)</Label>
-                    <Input
-                      type="date"
+                    <DateInput
                       value={fechaFin}
-                      onChange={(e) => setFechaFin(e.target.value)}
+                      onChange={setFechaFin}
                     />
                   </div>
                 </div>

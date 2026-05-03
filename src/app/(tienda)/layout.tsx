@@ -90,6 +90,7 @@ export default async function TiendaLayout({ children }: { children: React.React
     facebook_url: fc.facebook_url || "",
     whatsapp_url: fc.whatsapp_url || "",
     direccion: fc.direccion || "",
+    maps_url: fc.maps_url || "",
     telefono: fc.telefono || "",
     email: fc.email || "",
     badges: fc.badges || undefined,

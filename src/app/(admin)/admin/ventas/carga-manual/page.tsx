@@ -11,6 +11,7 @@ import type { Cliente, Producto, Usuario, Venta } from "@/types/database";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { DateInput } from "@/components/ui/date-input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
@@ -503,10 +504,9 @@ export default function CargaManualPage() {
                 </div>
                 <div className="space-y-2">
                   <Label className="text-xs text-muted-foreground">Fecha</Label>
-                  <Input
-                    type="date"
+                  <DateInput
                     value={fecha}
-                    onChange={(e) => setFecha(e.target.value)}
+                    onChange={setFecha}
                     max={todayARG()}
                   />
                 </div>

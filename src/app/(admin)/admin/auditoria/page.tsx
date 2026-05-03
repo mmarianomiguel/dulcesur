@@ -6,6 +6,7 @@ import { supabase } from "@/lib/supabase";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { DateInput } from "@/components/ui/date-input";
 import { Badge } from "@/components/ui/badge";
 import {
   Select,
@@ -189,18 +190,16 @@ export default function AuditoriaPage() {
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
             <div>
               <label className="text-xs text-muted-foreground mb-1 block">Desde</label>
-              <Input
-                type="date"
+              <DateInput
                 value={fechaDesde}
-                onChange={(e) => setFechaDesde(e.target.value)}
+                onChange={setFechaDesde}
               />
             </div>
             <div>
               <label className="text-xs text-muted-foreground mb-1 block">Hasta</label>
-              <Input
-                type="date"
+              <DateInput
                 value={fechaHasta}
-                onChange={(e) => setFechaHasta(e.target.value)}
+                onChange={setFechaHasta}
               />
             </div>
             <SearchableSelect
