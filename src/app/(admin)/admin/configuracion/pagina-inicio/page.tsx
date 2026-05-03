@@ -499,83 +499,115 @@ function PreviewCategoriasDestacadas({ config, onConfigChange }: { config: Recor
 function PreviewProductosDestacados({ config, onConfigChange }: { config: Record<string, unknown>; onConfigChange?: (key: string, value: unknown) => void }) {
   const titulo = (config.titulo_seccion as string) || "Productos Destacados";
   const max = (config.max_items as number) || 8;
+
   const TAB_META: Record<string, { label: string; shortLabel: string; Icon: LucideIcon }> = {
     destacados: { label: "Destacados", shortLabel: "Dest.", Icon: Star },
-    mas_vendidos: { label: "Más vendidos", shortLabel: "Top", Icon: TrendingUp },
     nuevos: { label: "Nuevos ingresos", shortLabel: "Nuevos", Icon: Zap },
+    reingresos: { label: "De vuelta en stock", shortLabel: "Vuelve", Icon: RefreshCw },
+    ofertas: { label: "Ofertas", shortLabel: "Ofertas", Icon: DollarSign },
+    mas_vendidos: { label: "Más vendidos", shortLabel: "Top", Icon: TrendingUp },
   };
+
   const rawTabs = (config.tabs as Array<{ key: string; activo: boolean }> | undefined);
   const defaultTabs = [
     { key: "destacados", activo: true },
-    { key: "mas_vendidos", activo: true },
     { key: "nuevos", activo: true },
+    { key: "reingresos", activo: true },
+    { key: "ofertas", activo: true },
+    { key: "mas_vendidos", activo: true },
   ];
   const tabsSource = Array.isArray(rawTabs) && rawTabs.length > 0 ? rawTabs : defaultTabs;
-  const visibleTabs = tabsSource.filter((t) => t && t.activo && TAB_META[t.key]);
+  const visibleTabs = tabsSource.filter((t) => t && t.activo && TAB_META[t.key as string]);
   const defaultTab = (config.tab_defecto as string) ?? visibleTabs[0]?.key ?? "destacados";
-  const activeKey = visibleTabs.some((t) => t.key === defaultTab) ? defaultTab : (visibleTabs[0]?.key ?? "destacados");
+  const resolvedDefault = visibleTabs.some((t) => t.key === defaultTab) ? defaultTab : (visibleTabs[0]?.key ?? "destacados");
+
+  const [activeTab, setActiveTab] = useState(resolvedDefault);
+  const [productos, setProductos] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => { setActiveTab(resolvedDefault); }, [resolvedDefault]);
+
+  useEffect(() => {
+    setLoading(true);
+    supabase
+      .from("productos")
+      .select("id, nombre, precio, imagen_url, stock, categorias(nombre)")
+      .eq("activo", true)
+      .eq("visibilidad", "visible")
+      .eq("destacado", true)
+      .limit(max)
+      .then(({ data }) => { setProductos(data || []); setLoading(false); });
+  }, [max]);
+
+  const displayProds = loading
+    ? Array.from({ length: Math.min(max, 4) }).map((_, i) => ({ id: `ph-${i}`, placeholder: true }))
+    : productos.length > 0
+    ? productos
+    : Array.from({ length: Math.min(max, 4) }).map((_, i) => ({ id: `ph-${i}`, placeholder: true }));
+
   return (
-    <section className="py-8 md:py-10 bg-gray-50/50">
+    <section className="py-8 bg-gray-50/50">
       <div className="max-w-7xl mx-auto px-4">
-        <div className="flex items-center justify-between mb-4">
+        <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
           {onConfigChange ? (
             <EditableText tag="h2" className="text-xl font-bold text-gray-900" value={titulo} onChange={(v) => onConfigChange("titulo_seccion", v)} />
           ) : (
             <h2 className="text-xl font-bold text-gray-900">{titulo}</h2>
           )}
           {visibleTabs.length > 1 && (
-            <div className="flex items-center gap-1 bg-white border border-gray-200 rounded-xl p-1">
+            <div className="flex flex-wrap items-center gap-1 bg-white border border-gray-200 rounded-xl p-1">
               {visibleTabs.map((t) => {
-                const meta = TAB_META[t.key];
+                const meta = TAB_META[t.key as string];
                 const Icon = meta.Icon;
-                const isActive = t.key === activeKey;
+                const isActive = t.key === activeTab;
                 return (
-                  <div
+                  <button
                     key={t.key}
-                    className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold ${isActive ? "bg-gray-900 text-white" : "text-gray-500"}`}
+                    onClick={() => setActiveTab(t.key as string)}
+                    className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-colors ${isActive ? "bg-gray-900 text-white" : "text-gray-500 hover:bg-gray-100"}`}
                   >
                     <Icon className="w-3 h-3" />
-                    <span className="hidden sm:inline">{meta.label}</span>
-                    <span className="sm:hidden">{meta.shortLabel}</span>
-                  </div>
+                    <span>{meta.label}</span>
+                  </button>
                 );
               })}
             </div>
           )}
         </div>
         <div className="w-12 h-0.5 bg-primary rounded-full mb-4" />
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-5">
-          {Array.from({ length: Math.min(max, 8) }).map((_, i) => (
-            <div
-              key={i}
-              className="group relative overflow-hidden rounded-2xl border border-gray-100 bg-white transition-all duration-300 hover:shadow-xl hover:border-gray-200"
-            >
-              <div className="relative aspect-[4/3] bg-gray-50 overflow-hidden flex items-center justify-center">
-                <Package className="w-12 h-12 text-gray-300" />
-                <div className="absolute inset-0 bg-gradient-to-t from-black/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+        <div className="grid grid-cols-2 @md:grid-cols-4 gap-3">
+          {displayProds.map((p: any) => (
+            <div key={p.id} className="rounded-xl border border-gray-100 bg-white overflow-hidden">
+              <div className="aspect-[4/3] bg-gray-50 flex items-center justify-center overflow-hidden">
+                {p.placeholder || !p.imagen_url ? (
+                  <Package className={`w-10 h-10 ${p.placeholder ? "text-gray-200 animate-pulse" : "text-gray-300"}`} />
+                ) : (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={p.imagen_url} alt={p.nombre} className="w-full h-full object-contain p-2" />
+                )}
               </div>
-              <div className="p-4">
-                <span className="inline-block text-[11px] font-medium text-pink-600 bg-pink-50 rounded-full px-2.5 py-0.5">
-                  Categoría
-                </span>
-                <p className="text-sm font-medium text-gray-800 line-clamp-2 mt-1.5 min-h-[2.5rem]">
-                  Producto de ejemplo {i + 1}
-                </p>
-                <p className="text-xl font-bold text-gray-900 mt-2">$1.500</p>
-              </div>
-              <div className="px-4 pb-4">
-                <button className="w-full mt-3 bg-pink-600 hover:bg-pink-700 text-white py-2.5 rounded-xl text-sm font-semibold flex items-center justify-center gap-2 transition-all hover:shadow-md">
-                  <ShoppingCart className="w-4 h-4" />
-                  Agregar al carrito
-                </button>
+              <div className="p-3">
+                {p.placeholder ? (
+                  <>
+                    <div className="h-3 bg-gray-100 rounded animate-pulse w-16 mb-2" />
+                    <div className="h-3 bg-gray-100 rounded animate-pulse w-full mb-1" />
+                    <div className="h-3 bg-gray-100 rounded animate-pulse w-3/4 mb-2" />
+                    <div className="h-5 bg-gray-100 rounded animate-pulse w-20" />
+                  </>
+                ) : (
+                  <>
+                    <span className="text-[10px] font-medium text-pink-600 bg-pink-50 rounded-full px-2 py-0.5">
+                      {(p.categorias as any)?.nombre ?? "Sin categoría"}
+                    </span>
+                    <p className="text-xs font-medium text-gray-800 line-clamp-2 mt-1.5">{p.nombre}</p>
+                    <p className="text-base font-bold text-gray-900 mt-1">
+                      ${Number(p.precio).toLocaleString("es-AR")}
+                    </p>
+                  </>
+                )}
               </div>
             </div>
           ))}
-        </div>
-        <div className="text-center mt-10">
-          <span className="inline-block border-2 border-pink-600 text-pink-600 hover:bg-pink-600 hover:text-white rounded-full px-8 py-3 font-semibold transition-all cursor-pointer">
-            Ver todos los productos
-          </span>
         </div>
       </div>
     </section>
@@ -1169,7 +1201,7 @@ export default function PaginaInicioEditor() {
         {/* ── Left: Live Preview (inline rendering) ────────────────── */}
         <div className="flex-1 bg-gray-200 overflow-hidden flex items-start justify-center p-4">
           <div
-            className="bg-white shadow-xl rounded-lg overflow-y-auto transition-all duration-300 h-full"
+            className="@container bg-white shadow-xl rounded-lg overflow-y-auto transition-all duration-300 h-full"
             style={{ maxWidth: previewWidths[device], width: "100%" }}
           >
             <div className="min-h-full bg-white">
