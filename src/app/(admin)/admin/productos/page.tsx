@@ -850,8 +850,10 @@ export default function ProductosPage() {
       let productId: string;
 
       if (editingProduct) {
-        // Only update fecha_actualizacion when price actually changed
-        if (editingProduct.precio !== form.precio) {
+        // Only update fecha_actualizacion when price actually changed (tolerancia 1cent)
+        const precioCambio = Math.abs((editingProduct.precio || 0) - (form.precio || 0)) > 0.01;
+        const costoCambio = Math.abs((editingProduct.costo || 0) - (form.costo || 0)) > 0.01;
+        if (precioCambio) {
           (payload as any).precio_anterior = editingProduct.precio;
           payload.fecha_actualizacion = new Date().toISOString();
         }
@@ -873,7 +875,7 @@ export default function ProductosPage() {
         productId = editingProduct.id;
 
         // Log price change to precio_historial
-        if (editingProduct.precio !== form.precio || editingProduct.costo !== form.costo) {
+        if (precioCambio || costoCambio) {
           try {
             await supabase.from("precio_historial").insert({
               producto_id: editingProduct.id,
@@ -888,7 +890,7 @@ export default function ProductosPage() {
         }
 
         // Sync Unidad presentation price/cost with product
-        if (editingProduct.precio !== form.precio || editingProduct.costo !== form.costo) {
+        if (precioCambio || costoCambio) {
           await supabase.from("presentaciones")
             .update({ precio: form.precio, costo: form.costo })
             .eq("producto_id", editingProduct.id)
@@ -1380,12 +1382,12 @@ export default function ProductosPage() {
               const changes: string[] = [];
               const updatePayload: Record<string, unknown> = {};
 
-              if (precio > 0 && precio !== existing.precio) {
+              if (precio > 0 && Math.abs(precio - (existing.precio || 0)) > 0.01) {
                 updatePayload.precio = precio;
                 updatePayload.precio_anterior = existing.precio;
                 changes.push(`Precio: ${existing.precio} → ${precio}`);
               }
-              if (costo > 0 && costo !== existing.costo) {
+              if (costo > 0 && Math.abs(costo - (existing.costo || 0)) > 0.01) {
                 updatePayload.costo = costo;
                 changes.push(`Costo: ${existing.costo} → ${costo}`);
               }
@@ -1970,7 +1972,7 @@ export default function ProductosPage() {
       const historyInserts = massEditPreview
         .filter((item) => {
           const prod = products.find((p) => p.id === item.id);
-          return prod && (getFinalPrecio(item.newPrecio, item.id) !== prod.precio || item.newCosto !== prod.costo);
+          return prod && (Math.abs((getFinalPrecio(item.newPrecio, item.id) || 0) - (prod.precio || 0)) > 0.01 || Math.abs((item.newCosto || 0) - (prod.costo || 0)) > 0.01);
         })
         .map((item) => {
           const prod = products.find((p) => p.id === item.id)!;
@@ -1995,7 +1997,7 @@ export default function ProductosPage() {
           const preview = massEditPreview.find((i) => i.id === p.id);
           if (!preview) return p;
           const fp = getFinalPrecio(preview.newPrecio, preview.id);
-          const precioChanged = fp !== p.precio;
+          const precioChanged = Math.abs((fp || 0) - (p.precio || 0)) > 0.01;
           const base = (massTarget === "costo" || massTarget === "fijar_costo")
             ? { ...p, costo: preview.newCosto, precio: fp, precio_anterior: p.precio }
             : { ...p, precio: fp, precio_anterior: p.precio };
@@ -3973,7 +3975,7 @@ export default function ProductosPage() {
               {/* Recalc box prices suggestion (1.12) */}
               {presentaciones.some((p) => !p._deleted && p.cantidad > 1) &&
                 editingProduct &&
-                editingProduct.precio !== form.precio && (
+                Math.abs((editingProduct.precio || 0) - (form.precio || 0)) > 0.01 && (
                 <div className="flex items-center justify-between gap-3 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 text-xs text-amber-700">
                   <span>El precio unitario cambió. ¿Actualizar los precios de caja proporcionalmente?</span>
                   <Button type="button" size="sm" variant="outline" className="h-7 text-xs border-amber-300 text-amber-700 hover:bg-amber-100 shrink-0" onClick={recalcBoxPrices}>

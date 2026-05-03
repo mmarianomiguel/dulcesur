@@ -462,8 +462,10 @@ export default function NuevaCompra({
   );
   const totalUnidades = useMemo(() => items.reduce((a, i) => a + i.cantidad, 0), [items]);
 
+  // Tolerancia 1 centavo: evita falsos positivos por precisión flotante
+  const COSTO_DIFF_TOL = 0.01;
   const itemsWithPriceChange = useMemo(
-    () => items.filter((i) => i.costo_unitario !== i.costo_original && i.costo_original > 0),
+    () => items.filter((i) => Math.abs((i.costo_unitario || 0) - (i.costo_original || 0)) > COSTO_DIFF_TOL && i.costo_original > 0),
     [items]
   );
   const itemsWillUpdatePvp = useMemo(
@@ -627,7 +629,7 @@ export default function NuevaCompra({
 
           // Actualización de costo y/o precio del producto maestro — solo si el usuario optó explícitamente.
           // actualizarCosto y actualizarPrecio son independientes: cualquier combinación es válida.
-          const costoCambio = item.costo_unitario !== item.costo_original;
+          const costoCambio = Math.abs((item.costo_unitario || 0) - (item.costo_original || 0)) > 0.01;
           const aplicarCosto = item.actualizarCosto && costoCambio;
           const aplicarPrecio = item.actualizarPrecio && item.costo_original > 0;
           if (aplicarCosto || aplicarPrecio) {
@@ -1264,7 +1266,7 @@ export default function NuevaCompra({
               {/* ── Mobile items cards ── */}
               <div className="sm:hidden divide-y">
                 {items.map((item, idx) => {
-                  const costoChanged = item.costo_unitario !== item.costo_original;
+                  const costoChanged = Math.abs((item.costo_unitario || 0) - (item.costo_original || 0)) > 0.01;
                   return (
                     <div key={item.producto_id} data-compra-item className="py-3 px-4 space-y-2">
                       {/* Product header */}
@@ -1496,7 +1498,7 @@ export default function NuevaCompra({
                   </thead>
                   <tbody>
                     {items.map((item, idx) => {
-                      const costoChanged = item.costo_unitario !== item.costo_original;
+                      const costoChanged = Math.abs((item.costo_unitario || 0) - (item.costo_original || 0)) > 0.01;
                       const isSelected = selectedItemIdx === idx;
                       return (
                         <tr
@@ -1760,9 +1762,9 @@ export default function NuevaCompra({
                           eliminar
                         </span>
                       )}
-                      {items.filter((i) => i.costo_unitario !== i.costo_original).length > 0 && (
+                      {items.filter((i) => Math.abs((i.costo_unitario || 0) - (i.costo_original || 0)) > 0.01).length > 0 && (
                         <span className="text-amber-600 dark:text-amber-400">
-                          {items.filter((i) => i.costo_unitario !== i.costo_original).length} con
+                          {items.filter((i) => Math.abs((i.costo_unitario || 0) - (i.costo_original || 0)) > 0.01).length} con
                           costo modificado
                         </span>
                       )}
