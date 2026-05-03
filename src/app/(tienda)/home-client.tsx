@@ -698,12 +698,10 @@ function ProductosDestacadosBlock({
     nuevos: { label: "Nuevos ingresos", icon: Zap, count: nuevos.length },
     reingresos: { label: "De vuelta en stock", icon: RotateCw, count: reingresosFiltered.length },
   };
-  // Orden fijo: Destacados → Nuevos → De vuelta → Ofertas → Más vendidos.
-  const ordenTabs: TabKey[] = ["destacados", "nuevos", "reingresos", "ofertas", "mas_vendidos"];
-  const tabs: TabEntry[] = ordenTabs.flatMap((key) => {
-    const meta = allTabsMeta[key];
+  const tabs: TabEntry[] = activeTabsConfig.flatMap(({ key }) => {
+    const meta = allTabsMeta[key as TabKey];
     if (!meta || meta.count <= 0) return [];
-    return [{ key, ...meta }];
+    return [{ key: key as TabKey, ...meta }];
   });
 
   // Resetear grupo al cambiar tab (sin animación cuando viene del selector)
