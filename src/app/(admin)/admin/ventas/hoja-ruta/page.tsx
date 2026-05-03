@@ -2929,14 +2929,24 @@ export default function HojaDeRutaPage() {
                       remaining = Math.round((remaining - pays) * 100) / 100;
                     }
 
+                    // Resolve cuenta bancaria id (if any) — usado para persistir cuenta_transferencia_id en ventas
+                    const cuentaBancariaIdResolved =
+                      cuentasBancariasMapped.find(c => c.id === result.cuentaBancaria || c.alias === result.cuentaBancaria || c.nombre === result.cuentaBancaria)?.id || null;
+
                     // Register caja entries per venta
                     for (const { venta, paid, newTotal } of perVenta) {
                       if (paid <= 0 && result.metodo !== "Cuenta Corriente") continue;
+                      // Persistir splits y cuenta en ventas para que el filtro/listado los vea (bug pre-fix:
+                      // monto_efectivo y monto_transferencia quedaban en 0 incluso pagando Mixto).
+                      let efForVentaUpd = 0;
+                      let trForVentaUpd = 0;
                       if (result.metodo === "Mixto") {
                         // Use original amounts (not proportional ratio) — cap at paid
                         const efForVenta = Math.min(result.efectivo || 0, paid);
                         const trWithSurcharge = (result.transferencia || 0) + (result.surcharge || 0);
                         const trForVenta = Math.min(trWithSurcharge, Math.max(0, paid - efForVenta));
+                        efForVentaUpd = efForVenta;
+                        trForVentaUpd = trForVenta;
                         if (efForVenta > 0) {
                           await supabase.from("caja_movimientos").insert({ fecha: hoy, hora, tipo: "ingreso", descripcion: `Cobro entrega #${venta.numero} (Efectivo) — ${clienteNombre}`, metodo_pago: "Efectivo", monto: efForVenta, referencia_id: venta.id, referencia_tipo: "venta" });
                         }
@@ -2944,11 +2954,14 @@ export default function HojaDeRutaPage() {
                           await supabase.from("caja_movimientos").insert({ fecha: hoy, hora, tipo: "ingreso", descripcion: `Cobro entrega #${venta.numero} (Transferencia${result.surcharge > 0 ? ` +${porcentajeTransferencia}%` : ""}) — ${clienteNombre}${cuentaNombre ? ` → ${cuentaNombre}` : ""}`, metodo_pago: "Transferencia", monto: trForVenta, referencia_id: venta.id, referencia_tipo: "venta", ...(cuentaNombre ? { cuenta_bancaria: cuentaNombre } : {}) });
                         }
                       } else if (result.metodo === "Transferencia") {
+                        trForVentaUpd = paid;
                         // paid = pre-surcharge + surcharge already; don't add trSurcharge again
                         await supabase.from("caja_movimientos").insert({ fecha: hoy, hora, tipo: "ingreso", descripcion: `Cobro entrega #${venta.numero} (Transferencia${result.surcharge > 0 ? ` +${porcentajeTransferencia}%` : ""}) — ${clienteNombre}${cuentaNombre ? ` → ${cuentaNombre}` : ""}`, metodo_pago: "Transferencia", monto: paid, referencia_id: venta.id, referencia_tipo: "venta", ...(cuentaNombre ? { cuenta_bancaria: cuentaNombre } : {}) });
                       } else if (result.metodo === "Cuenta Corriente") {
                         // CC does NOT go to caja — it's handled below in the CC section (cuenta_corriente)
                       } else {
+                        // Efectivo
+                        efForVentaUpd = paid;
                         await supabase.from("caja_movimientos").insert({ fecha: hoy, hora, tipo: "ingreso", descripcion: `Cobro entrega #${venta.numero} (${result.metodo}) — ${clienteNombre}`, metodo_pago: result.metodo, monto: paid, referencia_id: venta.id, referencia_tipo: "venta" });
                       }
                       // Update venta
@@ -2962,8 +2975,11 @@ export default function HojaDeRutaPage() {
                         forma_pago: result.metodo,
                         monto_pagado: realPagadoPrev + paid,
                         total: realPagadoPrev + newTotal,
+                        monto_efectivo: efForVentaUpd,
+                        monto_transferencia: trForVentaUpd,
                       };
                       if (cuentaNombre) ventaUpd.cuenta_transferencia_alias = cuentaNombre;
+                      if (cuentaBancariaIdResolved && trForVentaUpd > 0) ventaUpd.cuenta_transferencia_id = cuentaBancariaIdResolved;
                       await supabase.from("ventas").update(ventaUpd).eq("id", venta.id);
                     }
 
