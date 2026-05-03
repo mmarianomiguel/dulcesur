@@ -524,11 +524,11 @@ function ProductosDestacadosBlock({
   const titulo = config.titulo_seccion || "Productos";
   const maxItems = 24;
 
-  // Tabs disponibles. "destacados" se reemplazó por "ofertas" (autollenado con productos en descuento).
-  const VALID_TABS = ["ofertas", "mas_vendidos", "nuevos", "reingresos"] as const;
+  const VALID_TABS = ["destacados", "ofertas", "mas_vendidos", "nuevos", "reingresos"] as const;
   type TabKeyValid = typeof VALID_TABS[number];
   const rawTabsConfig = (config.tabs as Array<{ key: string; activo: boolean }> | undefined);
   const defaultTabsConfig = [
+    { key: "destacados", activo: true },
     { key: "nuevos", activo: true },
     { key: "reingresos", activo: true },
     { key: "ofertas", activo: true },
@@ -536,9 +536,7 @@ function ProductosDestacadosBlock({
   ];
   const tabsConfig = Array.isArray(rawTabsConfig) && rawTabsConfig.length > 0
     ? (() => {
-        // Migrar config vieja: "destacados" → "ofertas".
-        const remapped = rawTabsConfig.map((t) => t && t.key === "destacados" ? { ...t, key: "ofertas" } : t);
-        const filtered = remapped.filter((t) => t && (VALID_TABS as readonly string[]).includes(t.key));
+        const filtered = rawTabsConfig.filter((t) => t && (VALID_TABS as readonly string[]).includes(t.key));
         // Asegurar que estén todos los tabs en la config (los faltantes se agregan activos).
         for (const k of VALID_TABS) {
           if (!filtered.some((t) => t.key === k)) filtered.push({ key: k, activo: true });
@@ -547,7 +545,7 @@ function ProductosDestacadosBlock({
       })()
     : defaultTabsConfig;
   const activeTabsConfig = tabsConfig.filter((t) => t.activo);
-  const rawTabDefecto = ((config.tab_defecto === "destacados" ? "ofertas" : config.tab_defecto) as TabKeyValid) ?? "nuevos";
+  const rawTabDefecto = (config.tab_defecto as TabKeyValid) ?? "destacados";
   const tabDefecto = (activeTabsConfig.some((t) => t.key === rawTabDefecto)
     ? rawTabDefecto
     : (activeTabsConfig[0]?.key ?? "nuevos")) as TabKeyValid;
@@ -675,6 +673,7 @@ function ProductosDestacadosBlock({
     .slice(0, 24);
 
   const activeProds: any[] =
+    activeTab === "destacados" ? filterCats(productos) :
     activeTab === "ofertas" ? ofertas :
     activeTab === "mas_vendidos" ? vendidos :
     activeTab === "reingresos" ? reingresosFiltered :
@@ -693,13 +692,14 @@ function ProductosDestacadosBlock({
   type TabKey = TabKeyValid;
   type TabEntry = { key: TabKey; label: string; icon: typeof Star; count: number };
   const allTabsMeta: Record<TabKey, { label: string; icon: typeof Star; count: number }> = {
+    destacados: { label: "Destacados", icon: Star, count: filterCats(productos).length },
     ofertas: { label: "Ofertas", icon: Sparkles, count: ofertas.length },
     mas_vendidos: { label: "Más vendidos", icon: TrendingUp, count: vendidos.length },
     nuevos: { label: "Nuevos ingresos", icon: Zap, count: nuevos.length },
     reingresos: { label: "De vuelta en stock", icon: RotateCw, count: reingresosFiltered.length },
   };
-  // Orden fijo: Nuevos → De vuelta → Ofertas → Más vendidos.
-  const ordenTabs: TabKey[] = ["nuevos", "reingresos", "ofertas", "mas_vendidos"];
+  // Orden fijo: Destacados → Nuevos → De vuelta → Ofertas → Más vendidos.
+  const ordenTabs: TabKey[] = ["destacados", "nuevos", "reingresos", "ofertas", "mas_vendidos"];
   const tabs: TabEntry[] = ordenTabs.flatMap((key) => {
     const meta = allTabsMeta[key];
     if (!meta || meta.count <= 0) return [];
