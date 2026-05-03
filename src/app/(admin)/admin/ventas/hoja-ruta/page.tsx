@@ -4,6 +4,7 @@ import { nowTimeARG, formatCurrency } from "@/lib/formatters";
 import { norm } from "@/lib/utils";
 import { useEffect, useState, useCallback, useRef, useMemo } from "react";
 import { supabase } from "@/lib/supabase";
+import { createCobroRecibo } from "@/lib/cobros";
 import { formatCuentaCanonica } from "@/lib/cuenta-bancaria";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -2949,20 +2950,32 @@ export default function HojaDeRutaPage() {
                         trForVentaUpd = trForVenta;
                         if (efForVenta > 0) {
                           await supabase.from("caja_movimientos").insert({ fecha: hoy, hora, tipo: "ingreso", descripcion: `Cobro entrega #${venta.numero} (Efectivo) — ${clienteNombre}`, metodo_pago: "Efectivo", monto: efForVenta, referencia_id: venta.id, referencia_tipo: "venta" });
+                          if (payVenta.cliente_id) {
+                            await createCobroRecibo({ clienteId: payVenta.cliente_id, monto: efForVenta, formaPago: "Efectivo", fecha: hoy, hora, cuentaBancariaId: null, observacion: `Cobro entrega #${venta.numero}`, allocations: [{ venta_id: venta.id, monto_aplicado: efForVenta }] });
+                          }
                         }
                         if (trForVenta > 0) {
                           await supabase.from("caja_movimientos").insert({ fecha: hoy, hora, tipo: "ingreso", descripcion: `Cobro entrega #${venta.numero} (Transferencia${result.surcharge > 0 ? ` +${porcentajeTransferencia}%` : ""}) — ${clienteNombre}${cuentaNombre ? ` → ${cuentaNombre}` : ""}`, metodo_pago: "Transferencia", monto: trForVenta, referencia_id: venta.id, referencia_tipo: "venta", ...(cuentaNombre ? { cuenta_bancaria: cuentaNombre } : {}) });
+                          if (payVenta.cliente_id) {
+                            await createCobroRecibo({ clienteId: payVenta.cliente_id, monto: trForVenta, formaPago: "Transferencia", fecha: hoy, hora, cuentaBancariaId: cuentaBancariaIdResolved || null, observacion: `Cobro entrega #${venta.numero}`, allocations: [{ venta_id: venta.id, monto_aplicado: trForVenta }] });
+                          }
                         }
                       } else if (result.metodo === "Transferencia") {
                         trForVentaUpd = paid;
                         // paid = pre-surcharge + surcharge already; don't add trSurcharge again
                         await supabase.from("caja_movimientos").insert({ fecha: hoy, hora, tipo: "ingreso", descripcion: `Cobro entrega #${venta.numero} (Transferencia${result.surcharge > 0 ? ` +${porcentajeTransferencia}%` : ""}) — ${clienteNombre}${cuentaNombre ? ` → ${cuentaNombre}` : ""}`, metodo_pago: "Transferencia", monto: paid, referencia_id: venta.id, referencia_tipo: "venta", ...(cuentaNombre ? { cuenta_bancaria: cuentaNombre } : {}) });
+                        if (payVenta.cliente_id) {
+                          await createCobroRecibo({ clienteId: payVenta.cliente_id, monto: paid, formaPago: "Transferencia", fecha: hoy, hora, cuentaBancariaId: cuentaBancariaIdResolved || null, observacion: `Cobro entrega #${venta.numero}`, allocations: [{ venta_id: venta.id, monto_aplicado: paid }] });
+                        }
                       } else if (result.metodo === "Cuenta Corriente") {
                         // CC does NOT go to caja — it's handled below in the CC section (cuenta_corriente)
                       } else {
                         // Efectivo
                         efForVentaUpd = paid;
                         await supabase.from("caja_movimientos").insert({ fecha: hoy, hora, tipo: "ingreso", descripcion: `Cobro entrega #${venta.numero} (${result.metodo}) — ${clienteNombre}`, metodo_pago: result.metodo, monto: paid, referencia_id: venta.id, referencia_tipo: "venta" });
+                        if (payVenta.cliente_id) {
+                          await createCobroRecibo({ clienteId: payVenta.cliente_id, monto: paid, formaPago: result.metodo, fecha: hoy, hora, cuentaBancariaId: null, observacion: `Cobro entrega #${venta.numero}`, allocations: [{ venta_id: venta.id, monto_aplicado: paid }] });
+                        }
                       }
                       // Update venta
                       // pagadoPorVenta includes NC as "payment" — use only real payments for monto_pagado

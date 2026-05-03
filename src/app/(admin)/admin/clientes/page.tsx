@@ -156,6 +156,19 @@ export default function ClientesPage() {
     topProductos: { nombre: string; cantidad: number }[];
   } | null>(null);
   const [cobrosCliente, setCobrosCliente] = useState<any[]>([]);
+  // Conciliación de CC
+  type ConciliarItem = {
+    id: string;
+    nombre: string;
+    saldoCliente: number;
+    saldoCC: number;
+    saldoVentas: number;
+    diagnostico: "sin_deuda_real" | "saldo_desactualizado" | "cc_desbalanceado" | "ventas_mal" | "inconsistencia_profunda";
+  };
+  const [conciliarOpen, setConciliarOpen] = useState(false);
+  const [conciliarLoading, setConciliarLoading] = useState(false);
+  const [conciliarItems, setConciliarItems] = useState<ConciliarItem[]>([]);
+  const [conciliarFixing, setConciliarFixing] = useState<string | null>(null);
   const [movCCFilter, setMovCCFilter] = useState("all");
   const [ventaGroupMap, setVentaGroupMap] = useState<Map<string, any>>(new Map());
   const [expandedVentaIds, setExpandedVentaIds] = useState<Set<string>>(new Set());
@@ -799,7 +812,7 @@ export default function ClientesPage() {
     const saldoCalculado = Math.round((totalPendiente - totalCobrado) * 100) / 100;
     setMovCCTotals({ debe: totalPendiente, haber: totalCobrado, saldo: saldoCalculado, saldoInicial: 0 });
 
-    // === Tab Cobros ===
+    // === Tab Cobros (unificado: recibos formales + cobros desde POS/entrega) ===
     let cobrosQuery = supabase
       .from("cobros")
       .select("id, numero, fecha, hora, monto, forma_pago, observacion, cuenta_bancaria_id, cobro_items(venta_id, monto_aplicado, ventas(numero, total))")
@@ -809,7 +822,135 @@ export default function ClientesPage() {
     if (desde) cobrosQuery = cobrosQuery.gte("fecha", desde);
     if (hasta) cobrosQuery = cobrosQuery.lte("fecha", hasta);
     const { data: cobrosData } = await cobrosQuery.range(0, 9999);
-    setCobrosCliente(cobrosData || []);
+
+    // Fetch caja_movimientos directos sobre ventas del cliente (pagos en POS / entrega)
+    const ventaIdsForCobros = (ventas || []).map((v: any) => v.id);
+    const posMovs: any[] = [];
+    if (ventaIdsForCobros.length > 0) {
+      for (let i = 0; i < ventaIdsForCobros.length; i += 100) {
+        const batch = ventaIdsForCobros.slice(i, i + 100);
+        let mq = supabase.from("caja_movimientos")
+          .select("id, fecha, hora, monto, metodo_pago, cuenta_bancaria, descripcion, referencia_id, referencia_tipo, created_at")
+          .in("referencia_id", batch)
+          .eq("referencia_tipo", "venta")
+          .eq("tipo", "ingreso");
+        if (desde) mq = mq.gte("fecha", desde);
+        if (hasta) mq = mq.lte("fecha", hasta);
+        const { data } = await mq.range(0, 9999);
+        posMovs.push(...(data || []));
+      }
+    }
+
+    // Fetch cuenta_corriente.haber (cobros aplicados a CC) — fuente canónica para
+    // pagos a deuda (incluye legacy data donde no hay caja_movimiento)
+    let ccQuery = supabase.from("cuenta_corriente")
+      .select("id, fecha, hora, comprobante, descripcion, haber, forma_pago, venta_id")
+      .eq("cliente_id", clienteId)
+      .gt("haber", 0);
+    if (desde) ccQuery = ccQuery.gte("fecha", desde);
+    if (hasta) ccQuery = ccQuery.lte("fecha", hasta);
+    const { data: ccHaberEntries } = await ccQuery.range(0, 9999);
+    const ventaInfo = new Map<string, { numero: string; total: number }>(
+      (ventas || []).map((v: any) => [v.id, { numero: v.numero, total: v.total }])
+    );
+    // Dedupe: si un mov sintético (POS/Entrega) tiene un recibo formal con misma venta + monto,
+    // ocultamos el sintético y dejamos solo el recibo formal.
+    const formalKeys = new Set<string>();
+    for (const c of cobrosData || []) {
+      for (const it of ((c as any).cobro_items || [])) {
+        formalKeys.add(`${it.venta_id}|${Math.round(Number(it.monto_aplicado) * 100)}`);
+      }
+    }
+    // Entries POS / entrega (dedupe contra recibos formales por venta+monto)
+    const posSynth = posMovs
+      .filter((m: any) => !formalKeys.has(`${m.referencia_id}|${Math.round(Number(m.monto) * 100)}`))
+      .map((m: any) => {
+        const v = ventaInfo.get(m.referencia_id);
+        const isEntrega = (m.descripcion || "").toLowerCase().includes("entrega");
+        return {
+          id: `mov-${m.id}`,
+          numero: v?.numero || "—",
+          fecha: m.fecha,
+          hora: m.hora,
+          created_at: m.created_at,
+          monto: m.monto,
+          forma_pago: m.metodo_pago,
+          cuenta_bancaria_id: null,
+          cuenta_bancaria_label: m.cuenta_bancaria || null,
+          observacion: m.descripcion || "",
+          cobro_items: v ? [{ venta_id: m.referencia_id, monto_aplicado: m.monto, ventas: { numero: v.numero, total: v.total } }] : [],
+          _source: isEntrega ? "entrega" : "pos",
+        };
+      });
+
+    // Entries cobro_saldo desde cuenta_corriente.haber, dedupeando los que ya son
+    // recibos formales (comprobante = cobros.numero)
+    const formalNumeros = new Set((cobrosData || []).map((c: any) => c.numero));
+    const ccSynth = (ccHaberEntries || [])
+      .filter((cc: any) => !formalNumeros.has(cc.comprobante))
+      .map((cc: any) => ({
+        id: `cc-${cc.id}`,
+        numero: cc.comprobante || "Cobro saldo",
+        fecha: cc.fecha,
+        hora: cc.hora || null,
+        created_at: cc.fecha,
+        monto: Number(cc.haber),
+        forma_pago: cc.forma_pago || "Efectivo",
+        cuenta_bancaria_id: null,
+        cuenta_bancaria_label: null,
+        observacion: cc.descripcion || "",
+        cobro_items: [],
+        _source: "cobro_saldo" as const,
+      }));
+
+    const synthCobros = [...posSynth, ...ccSynth];
+    const formalCobros = (cobrosData || []).map((c: any) => ({ ...c, _source: "recibo" }));
+
+    // Calcular accounted-for por venta. Cualquier venta con monto_pagado > sum(accounted)
+    // genera una entry sintética "Pago sin registro" para que el total cuadre con compras.
+    const accountedByVenta = new Map<string, number>();
+    const addAcc = (vid: string | null, amt: number) => {
+      if (!vid) return;
+      accountedByVenta.set(vid, (accountedByVenta.get(vid) || 0) + amt);
+    };
+    for (const m of posMovs) addAcc(m.referencia_id, Number(m.monto));
+    for (const cc of (ccHaberEntries || []) as any[]) {
+      // Solo cuenta si tiene venta_id (sino es un cobro general)
+      if ((cc as any).venta_id) addAcc((cc as any).venta_id, Number((cc as any).haber));
+    }
+    for (const c of cobrosData || []) {
+      for (const it of ((c as any).cobro_items || [])) {
+        addAcc(it.venta_id, Number(it.monto_aplicado));
+      }
+    }
+    const gapSynth: any[] = [];
+    for (const v of (ventas || []) as any[]) {
+      const paid = Number(v.monto_pagado || 0);
+      const acc = accountedByVenta.get(v.id) || 0;
+      const gap = paid - acc;
+      if (gap > 0.01) {
+        gapSynth.push({
+          id: `gap-${v.id}`,
+          numero: v.numero,
+          fecha: v.fecha,
+          hora: null,
+          created_at: v.fecha,
+          monto: gap,
+          forma_pago: "—",
+          cuenta_bancaria_id: null,
+          cuenta_bancaria_label: null,
+          observacion: "Pago aplicado sin registro de caja (legacy)",
+          cobro_items: [{ venta_id: v.id, monto_aplicado: gap, ventas: { numero: v.numero, total: v.total } }],
+          _source: "gap",
+        });
+      }
+    }
+
+    const allCobros = [...formalCobros, ...synthCobros, ...gapSynth].sort((a: any, b: any) => {
+      if (a.fecha !== b.fecha) return (b.fecha || "").localeCompare(a.fecha || "");
+      return ((b.created_at || b.hora) || "").localeCompare((a.created_at || a.hora) || "");
+    });
+    setCobrosCliente(allCobros);
 
     setMovLoading(false);
   };
@@ -1699,20 +1840,46 @@ export default function ClientesPage() {
                     </SelectContent>
                   </Select>
                 </div>
-                <Button variant="outline" size="sm" onClick={async () => {
+                <Button variant="outline" size="sm" disabled={conciliarLoading} onClick={async () => {
+                  setConciliarLoading(true);
+                  setConciliarOpen(true);
                   const { data: allClients } = await supabase.from("clientes").select("id, nombre, saldo").eq("activo", true).range(0, 49999);
-                  const issues: string[] = [];
+                  const items: ConciliarItem[] = [];
                   for (const c of allClients || []) {
-                    const { data: ccRows } = await supabase.from("cuenta_corriente").select("debe, haber").eq("cliente_id", c.id).range(0, 99999);
-                    const ccSaldo = (ccRows || []).reduce((a: number, r: any) => a + (r.debe || 0) - (r.haber || 0), 0);
-                    const diff = Math.abs(Math.round(c.saldo) - Math.round(ccSaldo));
-                    if (diff > 1) issues.push(`${c.nombre}: saldo ${formatCurrency(c.saldo)} vs CC ${formatCurrency(ccSaldo)} (dif: ${formatCurrency(diff)})`);
+                    const [{ data: ccRows }, { data: vRows }] = await Promise.all([
+                      supabase.from("cuenta_corriente").select("debe, haber").eq("cliente_id", c.id).range(0, 99999),
+                      supabase.from("ventas").select("total, monto_pagado, estado, tipo_comprobante").eq("cliente_id", c.id).range(0, 49999),
+                    ]);
+                    const saldoCC = (ccRows || []).reduce((a: number, r: any) => a + Number(r.debe || 0) - Number(r.haber || 0), 0);
+                    const PENDING_NOT_DELIVERED = new Set(["pendiente", "armado", "confirmado"]);
+                    const saldoVentas = (vRows || [])
+                      .filter((v: any) =>
+                        v.estado !== "anulada"
+                        && !PENDING_NOT_DELIVERED.has(String(v.estado || "").toLowerCase())
+                        && !String(v.tipo_comprobante || "").includes("Nota de Crédito")
+                      )
+                      .reduce((a: number, v: any) => a + Math.max(0, Number(v.total || 0) - Number(v.monto_pagado || 0)), 0);
+                    const sCli = Math.round(Number(c.saldo || 0));
+                    const sCC = Math.round(saldoCC);
+                    const sV = Math.round(saldoVentas);
+                    const cliVsV = Math.abs(sCli - sV);
+                    const cliVsCC = Math.abs(sCli - sCC);
+                    const ccVsV = Math.abs(sCC - sV);
+                    if (cliVsV <= 1 && cliVsCC <= 1 && ccVsV <= 1) continue; // todo coincide
+                    const cliCcAgree = cliVsCC <= 1;
+                    const cliVAgree = cliVsV <= 1;
+                    const ccVAgree = ccVsV <= 1;
+                    let diagnostico: ConciliarItem["diagnostico"];
+                    if (sV <= 1 && sCli > 1 && cliCcAgree) diagnostico = "sin_deuda_real";
+                    else if (cliCcAgree && !cliVAgree) diagnostico = "ventas_mal";
+                    else if (cliVAgree && !cliCcAgree) diagnostico = "cc_desbalanceado";
+                    else if (ccVAgree && !cliVAgree) diagnostico = "saldo_desactualizado";
+                    else diagnostico = "inconsistencia_profunda";
+                    items.push({ id: c.id, nombre: c.nombre, saldoCliente: sCli, saldoCC: sCC, saldoVentas: sV, diagnostico });
                   }
-                  if (issues.length === 0) {
-                    showAdminToast("Todos los saldos coinciden con la cuenta corriente.", "success");
-                  } else {
-                    showAdminToast(`Inconsistencias encontradas (${issues.length}): ${issues.slice(0, 10).join(" | ")}${issues.length > 10 ? ` ...y ${issues.length - 10} más` : ""}`, "error");
-                  }
+                  items.sort((a, b) => Math.abs(b.saldoCliente - b.saldoVentas) - Math.abs(a.saldoCliente - a.saldoVentas));
+                  setConciliarItems(items);
+                  setConciliarLoading(false);
                 }}>
                   Conciliar CC
                 </Button>
@@ -2649,21 +2816,35 @@ export default function ClientesPage() {
               ) : (
                 <div className="space-y-2">
                   {cobrosCliente.map((c) => {
+                    const source = (c as any)._source || "recibo";
                     const cuenta = c.cuenta_bancaria_id ? cuentasBancarias.find((cb: any) => cb.id === c.cuenta_bancaria_id) : null;
+                    const cuentaLabel = cuenta?.nombre || (c as any).cuenta_bancaria_label || "";
+                    const cuentaAlias = cuenta?.alias || "";
                     const items: any[] = (c as any).cobro_items || [];
                     const fechaFmt = new Date(c.fecha + "T12:00:00").toLocaleDateString("es-AR", { day: "2-digit", month: "2-digit", year: "numeric" });
                     const phone = movClient?.telefono || "";
                     const digits = phone.replace(/\D/g, "");
                     const wa = digits.startsWith("54") ? digits : `54${digits.startsWith("0") ? digits.slice(1) : digits}`;
                     const msg = encodeURIComponent(`Hola ${movClient?.nombre}! Te enviamos el recibo de cobro N° ${c.numero} del ${fechaFmt}.\nMonto cobrado: ${formatCurrency(c.monto)}\n\nGracias por tu pago!`);
+                    const sourceBadge =
+                      source === "recibo"
+                        ? { label: "Recibo", cls: "bg-blue-100 text-blue-700 dark:bg-blue-950/50 dark:text-blue-400" }
+                        : source === "entrega"
+                        ? { label: "Entrega", cls: "bg-orange-100 text-orange-700 dark:bg-orange-950/50 dark:text-orange-400" }
+                        : source === "cobro_saldo"
+                        ? { label: "Cobro saldo", cls: "bg-purple-100 text-purple-700 dark:bg-purple-950/50 dark:text-purple-400" }
+                        : source === "gap"
+                        ? { label: "Sin registro", cls: "bg-amber-100 text-amber-700 dark:bg-amber-950/50 dark:text-amber-400" }
+                        : { label: "POS", cls: "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300" };
                     return (
                       <div key={c.id} className="rounded-lg border p-3 text-sm flex items-start justify-between gap-3">
                         <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2 mb-1">
-                            <span className="font-mono font-semibold text-xs">{c.numero}</span>
+                          <div className="flex items-center gap-2 mb-1 flex-wrap">
+                            <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded ${sourceBadge.cls}`}>{sourceBadge.label}</span>
+                            <span className="font-mono font-semibold text-xs">{source === "recibo" ? c.numero : source === "cobro_saldo" ? "Saldo anterior" : source === "gap" ? `Venta ${c.numero}` : `Venta ${c.numero}`}</span>
                             <span className="text-muted-foreground text-xs">{fechaFmt}</span>
                             <span className="text-xs px-1.5 py-0.5 rounded bg-muted">{c.forma_pago}</span>
-                            {cuenta && <span className="text-xs text-muted-foreground">{cuenta.nombre}</span>}
+                            {cuentaLabel && <span className="text-xs text-muted-foreground">{cuentaLabel}</span>}
                           </div>
                           <p className="font-bold text-base text-emerald-700">{formatCurrency(c.monto)}</p>
                           {items.length > 0 && (
@@ -2695,8 +2876,8 @@ export default function ClientesPage() {
                               empresaCuit: empresa?.cuit || "",
                               empresaDomicilio: empresa?.domicilio || "",
                               empresaTelefono: empresa?.telefono || "",
-                              cuentaBancaria: cuenta?.nombre || "",
-                              cuentaAlias: cuenta?.alias || "",
+                              cuentaBancaria: cuentaLabel,
+                              cuentaAlias: cuentaAlias,
                               observacion: c.observacion || "",
                               numero: c.numero,
                               comprobantes: items.map((i: any) => ({
@@ -3520,6 +3701,156 @@ export default function ClientesPage() {
             <Button variant="outline" onClick={() => setConfirmDialog(prev => ({ ...prev, open: false }))}>Cancelar</Button>
             <Button onClick={() => { confirmDialog.onConfirm(); setConfirmDialog(prev => ({ ...prev, open: false })); }}>Confirmar</Button>
           </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Dialog Conciliar CC — compara saldo cliente vs ventas vs cuenta_corriente */}
+      <Dialog open={conciliarOpen} onOpenChange={setConciliarOpen}>
+        <DialogContent className="max-w-4xl max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Conciliación de Cuenta Corriente</DialogTitle>
+          </DialogHeader>
+          {conciliarLoading ? (
+            <div className="flex items-center justify-center py-10"><Loader2 className="w-5 h-5 animate-spin text-muted-foreground" /></div>
+          ) : conciliarItems.length === 0 ? (
+            <p className="text-center py-10 text-sm text-muted-foreground">Todos los saldos coinciden ✓</p>
+          ) : (
+            <div className="space-y-3">
+              <p className="text-xs text-muted-foreground">
+                Compara 3 fuentes: <strong>Cliente</strong> (campo <code>clientes.saldo</code>), <strong>CC</strong> (sum de <code>cuenta_corriente.debe − haber</code>), <strong>Ventas</strong> (sum <code>total − monto_pagado</code> — la fuente de verdad). Si Ventas dice 0, el cliente NO debe.
+              </p>
+              <div className="border rounded-lg overflow-hidden">
+                <table className="w-full text-xs">
+                  <thead>
+                    <tr className="border-b bg-muted/50">
+                      <th className="text-left py-2 px-3">Cliente</th>
+                      <th className="text-right py-2 px-3">Cliente</th>
+                      <th className="text-right py-2 px-3">CC</th>
+                      <th className="text-right py-2 px-3">Ventas</th>
+                      <th className="text-left py-2 px-3">Diagnóstico</th>
+                      <th className="text-right py-2 px-3">Acción</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {conciliarItems.map((it) => {
+                      const diag = it.diagnostico === "sin_deuda_real"
+                        ? { label: "Ya está pagado", cls: "bg-emerald-100 text-emerald-700" }
+                        : it.diagnostico === "ventas_mal"
+                        ? { label: "Ventas con monto_pagado mal", cls: "bg-purple-100 text-purple-700" }
+                        : it.diagnostico === "saldo_desactualizado"
+                        ? { label: "Cliente.saldo desactualizado", cls: "bg-amber-100 text-amber-700" }
+                        : it.diagnostico === "cc_desbalanceado"
+                        ? { label: "CC desbalanceado", cls: "bg-blue-100 text-blue-700" }
+                        : { label: "Inconsistencia profunda", cls: "bg-red-100 text-red-700" };
+                      return (
+                        <tr key={it.id} className="border-b last:border-0">
+                          <td className="py-2 px-3 font-medium">{it.nombre}</td>
+                          <td className="py-2 px-3 text-right font-mono">{formatCurrency(it.saldoCliente)}</td>
+                          <td className="py-2 px-3 text-right font-mono">{formatCurrency(it.saldoCC)}</td>
+                          <td className="py-2 px-3 text-right font-mono font-semibold">{formatCurrency(it.saldoVentas)}</td>
+                          <td className="py-2 px-3">
+                            <span className={`text-[10px] px-1.5 py-0.5 rounded ${diag.cls}`}>{diag.label}</span>
+                          </td>
+                          <td className="py-2 px-3 text-right">
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="h-7 text-xs"
+                              disabled={conciliarFixing === it.id}
+                              onClick={async () => {
+                                setConciliarFixing(it.id);
+                                try {
+                                  const hoy = new Date().toLocaleDateString("en-CA", { timeZone: "America/Argentina/Buenos_Aires" });
+                                  let targetSaldo = 0;
+                                  let logMsg = "";
+
+                                  if (it.diagnostico === "ventas_mal") {
+                                    // Cliente y CC dicen $0 (no debe), ventas tienen monto_pagado<total por NC/transf no registradas.
+                                    // Marcar todas las ventas pendientes como pagadas (monto_pagado=total).
+                                    const { data: vAjuste } = await supabase
+                                      .from("ventas")
+                                      .select("id, total, monto_pagado, estado, tipo_comprobante")
+                                      .eq("cliente_id", it.id)
+                                      .range(0, 9999);
+                                    const PENDING = new Set(["pendiente", "armado", "confirmado"]);
+                                    let count = 0;
+                                    for (const v of vAjuste || []) {
+                                      if (v.estado === "anulada") continue;
+                                      if (PENDING.has(String(v.estado || "").toLowerCase())) continue;
+                                      if (String(v.tipo_comprobante || "").includes("Nota de Crédito")) continue;
+                                      const gap = Number(v.total || 0) - Number(v.monto_pagado || 0);
+                                      if (gap > 0.01) {
+                                        await supabase.from("ventas").update({ monto_pagado: v.total }).eq("id", v.id);
+                                        count++;
+                                      }
+                                    }
+                                    targetSaldo = it.saldoCliente; // sin cambio
+                                    logMsg = `${count} venta(s) marcadas como pagas (NC/transf no registradas). Saldo: ${formatCurrency(targetSaldo)}`;
+                                  } else if (it.diagnostico === "sin_deuda_real") {
+                                    // Cliente y CC dicen >0 pero ventas dicen 0 → cliente ya pagó, hay que zero out.
+                                    targetSaldo = it.saldoVentas; // = 0
+                                    await supabase.from("clientes").update({ saldo: targetSaldo }).eq("id", it.id);
+                                    const ajusteCC = targetSaldo - it.saldoCC;
+                                    if (Math.abs(ajusteCC) > 1) {
+                                      await supabase.from("cuenta_corriente").insert({
+                                        cliente_id: it.id, fecha: hoy,
+                                        comprobante: "Conciliación",
+                                        descripcion: `Ajuste por conciliación (cliente ya pagó según ventas)`,
+                                        debe: ajusteCC > 0 ? ajusteCC : 0,
+                                        haber: ajusteCC < 0 ? Math.abs(ajusteCC) : 0,
+                                        saldo: targetSaldo, forma_pago: "Ajuste", venta_id: null,
+                                      });
+                                    }
+                                    logMsg = `Saldo cliente ${formatCurrency(it.saldoCliente)} → ${formatCurrency(targetSaldo)}`;
+                                  } else if (it.diagnostico === "saldo_desactualizado") {
+                                    // CC y ventas coinciden, cliente.saldo desactualizado → actualizar cliente.saldo
+                                    targetSaldo = it.saldoVentas;
+                                    await supabase.from("clientes").update({ saldo: targetSaldo }).eq("id", it.id);
+                                    logMsg = `Saldo cliente ${formatCurrency(it.saldoCliente)} → ${formatCurrency(targetSaldo)}`;
+                                  } else if (it.diagnostico === "cc_desbalanceado") {
+                                    // Cliente y ventas coinciden, CC desbalanceado → agregar entry de ajuste en CC
+                                    targetSaldo = it.saldoCliente;
+                                    const ajusteCC = targetSaldo - it.saldoCC;
+                                    if (Math.abs(ajusteCC) > 1) {
+                                      await supabase.from("cuenta_corriente").insert({
+                                        cliente_id: it.id, fecha: hoy,
+                                        comprobante: "Conciliación",
+                                        descripcion: `Ajuste por conciliación (CC desbalanceado)`,
+                                        debe: ajusteCC > 0 ? ajusteCC : 0,
+                                        haber: ajusteCC < 0 ? Math.abs(ajusteCC) : 0,
+                                        saldo: targetSaldo, forma_pago: "Ajuste", venta_id: null,
+                                      });
+                                    }
+                                    logMsg = `CC ajustado por ${formatCurrency(ajusteCC)}, saldo ${formatCurrency(targetSaldo)}`;
+                                  } else {
+                                    // Inconsistencia profunda — no auto-fix, pedir intervención manual
+                                    showAdminToast(`${it.nombre}: inconsistencia profunda, requiere revisión manual`, "error");
+                                    setConciliarFixing(null);
+                                    return;
+                                  }
+                                  showAdminToast(`${it.nombre} conciliado: ${logMsg}`, "success");
+                                  setConciliarItems((prev) => prev.filter((x) => x.id !== it.id));
+                                } catch (err: any) {
+                                  showAdminToast(`Error: ${err?.message || err}`, "error");
+                                } finally {
+                                  setConciliarFixing(null);
+                                }
+                              }}
+                            >
+                              {conciliarFixing === it.id ? <Loader2 className="w-3 h-3 animate-spin" /> : "Corregir"}
+                            </Button>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+              <p className="text-[11px] text-muted-foreground">
+                <strong>Corregir</strong> usa <em>ventas.monto_pagado</em> como verdad: actualiza <code>clientes.saldo</code> al saldo real y agrega una entry "Conciliación" en CC si hace falta.
+              </p>
+            </div>
+          )}
         </DialogContent>
       </Dialog>
     </div>

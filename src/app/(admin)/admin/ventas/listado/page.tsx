@@ -6,6 +6,7 @@ import { buildStockUpdate } from "@/lib/stock-utils";
 import { norm } from "@/lib/utils";
 import { todayARG, nowTimeARG, formatCurrency, formatDatePDF, currentMonthPadded } from "@/lib/formatters";
 import { recalcFromVenta, calcTotalConNC } from "@/lib/order-calc";
+import { createCobroRecibo } from "@/lib/cobros";
 import { logAudit } from "@/lib/audit";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -1051,6 +1052,27 @@ export default function ListadoVentasPage() {
     }
     if (entries.length > 0) await supabase.from("caja_movimientos").insert(entries);
 
+    // Generar recibos formales por cada porción cobrada
+    if (clienteId) {
+      const cuentaIdResolved = result.cuentaBancaria
+        ? (cuentasBancarias.find((c: any) => c.nombre === result.cuentaBancaria || c.alias === result.cuentaBancaria)?.id || null)
+        : null;
+      if (result.metodo === "Mixto") {
+        if (result.efectivo > 0) {
+          await createCobroRecibo({ clienteId, monto: result.efectivo, formaPago: "Efectivo", fecha: hoy, hora, cuentaBancariaId: null, observacion: `Cobro #${poSelectedPedido.numero}`, allocations: [{ venta_id: ventaId, monto_aplicado: result.efectivo }] });
+        }
+        if (result.transferencia > 0) {
+          const trMonto = result.transferencia + (result.surcharge || 0);
+          await createCobroRecibo({ clienteId, monto: trMonto, formaPago: "Transferencia", fecha: hoy, hora, cuentaBancariaId: cuentaIdResolved, observacion: `Cobro #${poSelectedPedido.numero}`, allocations: [{ venta_id: ventaId, monto_aplicado: trMonto }] });
+        }
+      } else if (result.metodo === "Efectivo" || result.metodo === "Transferencia") {
+        if (result.monto > 0) {
+          const monto = result.metodo === "Transferencia" ? result.monto + (result.surcharge || 0) : result.monto;
+          await createCobroRecibo({ clienteId, monto, formaPago: result.metodo, fecha: hoy, hora, cuentaBancariaId: result.metodo === "Transferencia" ? cuentaIdResolved : null, observacion: `Cobro #${poSelectedPedido.numero}`, allocations: [{ venta_id: ventaId, monto_aplicado: monto }] });
+        }
+      }
+    }
+
     // CC portion (Mixto remainder or full CC) — atomic saldo update
     const ccAmount = result.cuentaCorriente;
     if (ccAmount > 0 && clienteId) {
@@ -2081,14 +2103,49 @@ export default function ListadoVentasPage() {
           : null);
 
       if (ventaId) {
-        const { data: ventaData } = await supabase.from("ventas").select("total, cliente_id, forma_pago").eq("id", ventaId).single();
+        const { data: ventaData } = await supabase.from("ventas").select("total, cliente_id, forma_pago, monto_pagado, monto_efectivo, monto_transferencia").eq("id", ventaId).single();
         const totalAnterior = ventaData?.total || 0;
         const diferencia = nuevoTotal - totalAnterior;
 
-        const { error: ventaErr } = await supabase.from("ventas").update({
+        // Ajustar monto_pagado y montos por método si la venta ya estaba pagada
+        // (sino, se setean cuando se cobra)
+        const ventaUpdate: Record<string, any> = {
           subtotal: nuevoSubtotal,
           total: nuevoTotal,
-        }).eq("id", ventaId);
+        };
+        const wasPaid = ((ventaData?.monto_pagado || 0) >= totalAnterior * 0.99) && totalAnterior > 0;
+        if (wasPaid && Math.abs(diferencia) > 0.01) {
+          // Detectar método predominante de la venta (de la primera caja entry)
+          const { data: cajaFirst } = await supabase
+            .from("caja_movimientos")
+            .select("metodo_pago")
+            .eq("referencia_id", ventaId)
+            .eq("referencia_tipo", "venta")
+            .eq("tipo", "ingreso")
+            .limit(1);
+          const metodoExistente = cajaFirst?.[0]?.metodo_pago || ventaData?.forma_pago || "Efectivo";
+          const newPagado = Math.max(0, (ventaData?.monto_pagado || 0) + diferencia);
+          ventaUpdate.monto_pagado = newPagado;
+          if (metodoExistente === "Efectivo") {
+            ventaUpdate.monto_efectivo = Math.max(0, (ventaData?.monto_efectivo || 0) + diferencia);
+          } else if (metodoExistente === "Transferencia") {
+            ventaUpdate.monto_transferencia = Math.max(0, (ventaData?.monto_transferencia || 0) + diferencia);
+          } else if (metodoExistente === "Mixto") {
+            // Distribuir proporcionalmente sobre los campos existentes
+            const ef = ventaData?.monto_efectivo || 0;
+            const tr = ventaData?.monto_transferencia || 0;
+            const sumExistente = ef + tr;
+            if (sumExistente > 0) {
+              const ratioEf = ef / sumExistente;
+              ventaUpdate.monto_efectivo = Math.max(0, ef + diferencia * ratioEf);
+              ventaUpdate.monto_transferencia = Math.max(0, tr + diferencia * (1 - ratioEf));
+            } else {
+              ventaUpdate.monto_efectivo = Math.max(0, ef + diferencia);
+            }
+          }
+        }
+
+        const { error: ventaErr } = await supabase.from("ventas").update(ventaUpdate).eq("id", ventaId);
         if (ventaErr) errores.push(`Error sync venta: ${ventaErr.message}`);
 
         // Recuperar costos originales de venta_items antes de eliminarlos

@@ -4,6 +4,7 @@ import { useEffect, useLayoutEffect, useState, useCallback, useRef, useMemo } fr
 import { useRouter } from "next/navigation";
 import { todayARG, nowTimeARG, formatCurrency } from "@/lib/formatters";
 import { supabase } from "@/lib/supabase";
+import { createCobroRecibo } from "@/lib/cobros";
 import { showAdminToast } from "@/components/admin-toast";
 import { logAudit } from "@/lib/audit";
 import type { Cliente, Producto, Usuario } from "@/types/database";
@@ -2264,6 +2265,14 @@ export default function VentasPage() {
                   referencia_id: venta.id, referencia_tipo: "venta",
                   ...(mixCuenta ? { cuenta_bancaria: mixCuenta.nombre } : {}),
                 });
+                if (clientId) {
+                  await createCobroRecibo({
+                    clienteId: clientId, monto: ventaAmt, formaPago: entry.metodo,
+                    fecha: hoy, hora, cuentaBancariaId: mixCuenta?.id || null,
+                    observacion: `Cobro venta #${numero}`,
+                    allocations: [{ venta_id: venta.id, monto_aplicado: ventaAmt }],
+                  });
+                }
               }
               if (saldoAmt > 0) {
                 await supabase.from("caja_movimientos").insert({
@@ -2293,6 +2302,14 @@ export default function VentasPage() {
             referencia_tipo: "venta",
             ...(selectedCuenta ? { cuenta_bancaria: selectedCuenta.nombre } : {}),
           });
+          if (clientId) {
+            await createCobroRecibo({
+              clienteId: clientId, monto: total, formaPago,
+              fecha: hoy, hora, cuentaBancariaId: selectedCuenta?.id || null,
+              observacion: `Cobro venta #${numero}`,
+              allocations: [{ venta_id: venta.id, monto_aplicado: total }],
+            });
+          }
         }
 
         // Collect pending balance if toggled

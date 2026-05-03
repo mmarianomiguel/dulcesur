@@ -45,6 +45,7 @@ import {
 } from "lucide-react";
 
 import { formatCurrency, todayARG, nowTimeARG, formatDatePDF } from "@/lib/formatters";
+import { formatCuentaCanonica, type CuentaMasterRef } from "@/lib/cuenta-bancaria";
 
 import { VentaDetailDialog } from "@/components/venta-detail-dialog";
 import { useAsyncData } from "@/hooks/use-async-data";
@@ -158,6 +159,142 @@ async function cerrarTurno(
   return data as TurnoCaja;
 }
 
+// ─── Resumen del día (compartido entre modal y PDF) ───
+type ResumenDia = {
+  totalVentas: number;
+  cobradoTotal: number;
+  cobradoEfectivo: number;
+  cobradoTransf: number;
+  cobradoOtros: number;
+  ccGenerada: number;
+  cobrosCCAnterior: number;
+  cobrosCCEfvo: number;
+  cobrosCCTransf: number;
+  devolucionesNC: number;
+  devolucionesAnul: number;
+  devolucionesEfvo: number;
+  devolucionesTransf: number;
+  egresos: number;
+  egresosEfvo: number;
+  egresosTransf: number;
+  efectivoFinal: number;
+  transferenciaFinal: number;
+  deudores: Array<{ numero: string; cliente: string; monto: number }>;
+};
+
+function calcResumenDia(
+  ventas: Venta[],
+  movs: CajaMovimiento[],
+  cobroItems: Array<{ cobro_id: string; venta_id: string; monto_aplicado: number }> = []
+): ResumenDia {
+  const ventasConMov = new Set(movs.filter((m) => m.referencia_tipo === "venta" && m.tipo === "ingreso").map((m) => m.referencia_id));
+  const ventasSinMov = ventas.filter((v) => !ventasConMov.has(v.id));
+
+  // Para cada cobro, qué fracción de su monto aplica a ventas DEL TURNO
+  // (esos cobros son intra-turno y deben contar como "Cobrado en caja", no como "CC anterior")
+  const turnoVentaIds = new Set(ventas.map((v) => v.id));
+  const cobroIntraRatio = new Map<string, number>(); // cobro_id -> fraccion (0-1) de monto aplicado a ventas del turno
+  const itemsByCobro = new Map<string, Array<{ venta_id: string; monto_aplicado: number }>>();
+  for (const it of cobroItems) {
+    if (!itemsByCobro.has(it.cobro_id)) itemsByCobro.set(it.cobro_id, []);
+    itemsByCobro.get(it.cobro_id)!.push({ venta_id: it.venta_id, monto_aplicado: it.monto_aplicado });
+  }
+  for (const [cobroId, items] of itemsByCobro.entries()) {
+    const totalApp = items.reduce((a, x) => a + (x.monto_aplicado || 0), 0);
+    const intraApp = items.filter((x) => turnoVentaIds.has(x.venta_id)).reduce((a, x) => a + (x.monto_aplicado || 0), 0);
+    if (totalApp > 0) cobroIntraRatio.set(cobroId, intraApp / totalApp);
+  }
+
+  // Breakdown literal: movs reales + campos de la venta (monto_efectivo / monto_transferencia)
+  let cobradoEfectivo = movs.filter((m) => m.tipo === "ingreso" && m.referencia_tipo === "venta" && m.metodo_pago === "Efectivo").reduce((a, m) => a + m.monto, 0)
+    + ventasSinMov.filter((v) => v.forma_pago === "Efectivo").reduce((a, v) => a + v.total, 0)
+    + ventasSinMov.filter((v) => v.forma_pago === "Mixto").reduce((a, v) => a + ((v as any).monto_efectivo || 0), 0);
+  let cobradoTransf = movs.filter((m) => m.tipo === "ingreso" && m.referencia_tipo === "venta" && m.metodo_pago === "Transferencia").reduce((a, m) => a + m.monto, 0)
+    + ventasSinMov.filter((v) => v.forma_pago === "Transferencia").reduce((a, v) => a + v.total, 0)
+    + ventasSinMov.filter((v) => v.forma_pago === "Mixto").reduce((a, v) => a + ((v as any).monto_transferencia || 0), 0);
+
+  const totalVentas = ventas.reduce((a, v) => a + v.total, 0);
+
+  const deudores: Array<{ numero: string; cliente: string; monto: number }> = [];
+  let ccGenerada = 0;
+  for (const v of ventas) {
+    const pagado = (v as any).monto_pagado || 0;
+    const deuda = Math.max(0, v.total - pagado);
+    if (deuda > 0.01) {
+      deudores.push({
+        numero: v.numero || "-",
+        cliente: (v as any).clientes?.nombre || "Sin cliente",
+        monto: deuda,
+      });
+      ccGenerada += deuda;
+    }
+  }
+  deudores.sort((a, b) => b.monto - a.monto);
+
+  // Cobrado total derivado del breakdown: cobradoEfvo + cobradoTransf (post-reclasificación
+  // de cobros intra-turno). Se completa después del bloque de cobros más abajo.
+  let cobradoTotal = 0;
+  let cobradoOtros = 0;
+
+  const isCobroCC = (m: CajaMovimiento) =>
+    m.tipo === "ingreso" && (
+      (m.referencia_tipo !== "venta" && (m.descripcion || "").includes("Cobro CC")) ||
+      m.referencia_tipo === "cobro_saldo" ||
+      m.referencia_tipo === "cobro"
+    );
+  // Reclasificar la porción intra-turno: si un cobro paga ventas de este turno,
+  // esa porción es "Cobrado en caja" (no "CC anterior")
+  let cobrosCCAnterior = 0;
+  let cobrosCCEfvo = 0;
+  let cobrosCCTransf = 0;
+  for (const m of movs.filter(isCobroCC)) {
+    const intraRatio = m.referencia_id ? (cobroIntraRatio.get(m.referencia_id) || 0) : 0;
+    const intraAmt = m.monto * intraRatio;
+    const ccAmt = m.monto - intraAmt;
+    if (m.metodo_pago === "Efectivo") {
+      cobradoEfectivo += intraAmt;
+      cobrosCCEfvo += ccAmt;
+    } else if (m.metodo_pago === "Transferencia") {
+      cobradoTransf += intraAmt;
+      cobrosCCTransf += ccAmt;
+    } else {
+      // método raro/null: tratar como efectivo por default
+      cobradoEfectivo += intraAmt;
+      cobrosCCEfvo += ccAmt;
+    }
+    cobrosCCAnterior += ccAmt;
+  }
+
+  // Total cobrado en caja = breakdown final (post-reclasificación). Cuadra exacto.
+  cobradoTotal = cobradoEfectivo + cobradoTransf;
+  cobradoOtros = 0;
+
+  const ncMovs = movs.filter((m) => m.tipo === "cancelacion" && m.referencia_tipo === "nota_credito");
+  const anulMovs = movs.filter((m) => m.tipo === "cancelacion" && m.referencia_tipo === "anulacion");
+  const devolucionesNC = ncMovs.reduce((a, m) => a + Math.abs(m.monto), 0);
+  const devolucionesAnul = anulMovs.reduce((a, m) => a + Math.abs(m.monto), 0);
+  const devolMovs = [...ncMovs, ...anulMovs];
+  const devolucionesEfvo = devolMovs.filter((m) => (m.metodo_pago || "Efectivo") === "Efectivo").reduce((a, m) => a + Math.abs(m.monto), 0);
+  const devolucionesTransf = devolMovs.filter((m) => m.metodo_pago === "Transferencia").reduce((a, m) => a + Math.abs(m.monto), 0);
+
+  const egMovs = movs.filter((m) => m.tipo === "egreso");
+  const egresos = egMovs.reduce((a, m) => a + Math.abs(m.monto), 0);
+  const egresosEfvo = egMovs.filter((m) => (m.metodo_pago || "Efectivo") === "Efectivo").reduce((a, m) => a + Math.abs(m.monto), 0);
+  const egresosTransf = egMovs.filter((m) => m.metodo_pago === "Transferencia").reduce((a, m) => a + Math.abs(m.monto), 0);
+
+  // Saldo final por método: cobrado del día + cobros CC anterior - egresos - devoluciones
+  const efectivoFinal = cobradoEfectivo + cobrosCCEfvo - egresosEfvo - devolucionesEfvo;
+  const transferenciaFinal = cobradoTransf + cobrosCCTransf - egresosTransf - devolucionesTransf;
+
+  return {
+    totalVentas, cobradoTotal, cobradoEfectivo, cobradoTransf, cobradoOtros,
+    ccGenerada, cobrosCCAnterior, cobrosCCEfvo, cobrosCCTransf,
+    devolucionesNC, devolucionesAnul, devolucionesEfvo, devolucionesTransf,
+    egresos, egresosEfvo, egresosTransf,
+    efectivoFinal, transferenciaFinal, deudores,
+  };
+}
+
 // ─── Turno Historial Dialog (extracted to avoid duplication) ───
 
 function TurnoHistorialDialog({
@@ -171,6 +308,8 @@ function TurnoHistorialDialog({
   openHistDetail,
   setHistDetail,
   exportTurnoPDF,
+  cuentasMaster,
+  histCobroItems,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -181,11 +320,13 @@ function TurnoHistorialDialog({
   histVentas: Venta[];
   openHistDetail: (t: TurnoCaja) => void;
   setHistDetail: (t: TurnoCaja | null) => void;
-  exportTurnoPDF: (t: TurnoCaja, ventas: Venta[], movs: CajaMovimiento[]) => void;
+  exportTurnoPDF: (t: TurnoCaja, ventas: Venta[], movs: CajaMovimiento[], cobroItems: Array<{ cobro_id: string; venta_id: string; monto_aplicado: number }>) => void;
+  cuentasMaster: CuentaMasterRef[];
+  histCobroItems: Array<{ cobro_id: string; venta_id: string; monto_aplicado: number }>;
 }) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-3xl max-h-[85vh] overflow-y-auto">
+      <DialogContent className="max-w-5xl max-h-[85vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <History className="w-5 h-5" />
@@ -199,53 +340,313 @@ function TurnoHistorialDialog({
               <Button variant="ghost" size="sm" onClick={() => setHistDetail(null)} className="text-xs">
                 ← Volver al listado
               </Button>
-              <Button variant="outline" size="sm" onClick={() => exportTurnoPDF(histDetail, histVentas, histMovs)}>
+              <Button variant="outline" size="sm" onClick={() => exportTurnoPDF(histDetail, histVentas, histMovs, histCobroItems)}>
                 Descargar PDF
               </Button>
             </div>
 
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-sm">
-              <div className="rounded-lg border p-3">
-                <p className="text-xs text-muted-foreground">Turno</p>
-                <p className="font-bold">#{histDetail.numero}</p>
-              </div>
-              <div className="rounded-lg border p-3">
-                <p className="text-xs text-muted-foreground">Fecha</p>
-                <p className="font-bold">{new Date(histDetail.fecha_apertura + "T12:00:00").toLocaleDateString("es-AR", { day: "2-digit", month: "2-digit", year: "numeric" })}</p>
-              </div>
-              <div className="rounded-lg border p-3">
-                <p className="text-xs text-muted-foreground">Operador</p>
-                <p className="font-bold">{histDetail.operador}</p>
-              </div>
-              <div className="rounded-lg border p-3">
-                <p className="text-xs text-muted-foreground">Horario</p>
-                <p className="font-bold">{histDetail.hora_apertura?.substring(0, 5)} - {histDetail.hora_cierre?.substring(0, 5) || "?"}</p>
-              </div>
+            {/* Identificación compacta en una línea */}
+            <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-muted-foreground border-b pb-3">
+              <span className="font-semibold text-foreground">Turno #{histDetail.numero}</span>
+              <span>·</span>
+              <span>{new Date(histDetail.fecha_apertura + "T12:00:00").toLocaleDateString("es-AR", { day: "2-digit", month: "2-digit", year: "numeric" })}</span>
+              <span>·</span>
+              <span>Operador <span className="text-foreground font-medium">{histDetail.operador}</span></span>
+              <span>·</span>
+              <span>{histDetail.hora_apertura?.substring(0, 5)} — {histDetail.hora_cierre?.substring(0, 5) || "?"}</span>
             </div>
 
-            <div className="grid grid-cols-3 gap-2 sm:gap-3">
-              <div className="rounded-lg border p-2 sm:p-3 bg-emerald-50 dark:bg-emerald-950/20">
-                <p className="text-[10px] sm:text-xs text-muted-foreground">Ef. inicial</p>
-                <p className="font-bold text-sm sm:text-base">{formatCurrency(histDetail.efectivo_inicial)}</p>
-              </div>
-              <div className="rounded-lg border p-2 sm:p-3 bg-blue-50 dark:bg-blue-950/20">
-                <p className="text-[10px] sm:text-xs text-muted-foreground">Ef. real</p>
-                <p className="font-bold text-sm sm:text-base">{formatCurrency(histDetail.efectivo_real || 0)}</p>
-              </div>
-              <div className={`rounded-lg border p-3 ${(histDetail.diferencia || 0) === 0 ? "bg-muted/30" : (histDetail.diferencia || 0) > 0 ? "bg-emerald-50 dark:bg-emerald-950/20" : "bg-red-50 dark:bg-red-950/20"}`}>
-                <p className="text-xs text-muted-foreground">Diferencia</p>
-                <p className={`font-bold ${(histDetail.diferencia || 0) > 0 ? "text-emerald-600" : (histDetail.diferencia || 0) < 0 ? "text-red-500" : ""}`}>
-                  {formatCurrency(histDetail.diferencia || 0)}
-                </p>
-              </div>
-            </div>
+            {(() => {
+              const real = histDetail.efectivo_real || 0;
+              const diff = histDetail.diferencia || 0;
+              const esperado = real - diff;
+              return (
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-3">
+                  <div className="rounded-lg border p-2 sm:p-3 bg-emerald-50 dark:bg-emerald-950/20">
+                    <p className="text-[10px] sm:text-xs text-muted-foreground">Ef. inicial</p>
+                    <p className="font-bold text-sm sm:text-base">{formatCurrency(histDetail.efectivo_inicial)}</p>
+                  </div>
+                  <div className="rounded-lg border p-2 sm:p-3 bg-muted/30">
+                    <p className="text-[10px] sm:text-xs text-muted-foreground">Esperado</p>
+                    <p className="font-bold text-sm sm:text-base">{formatCurrency(esperado)}</p>
+                  </div>
+                  <div className="rounded-lg border p-2 sm:p-3 bg-blue-50 dark:bg-blue-950/20">
+                    <p className="text-[10px] sm:text-xs text-muted-foreground">Ef. real (contado)</p>
+                    <p className="font-bold text-sm sm:text-base">{formatCurrency(real)}</p>
+                  </div>
+                  <div className={`rounded-lg border p-2 sm:p-3 ${diff === 0 ? "bg-muted/30" : diff > 0 ? "bg-emerald-50 dark:bg-emerald-950/20" : "bg-red-50 dark:bg-red-950/20"}`}>
+                    <p className="text-[10px] sm:text-xs text-muted-foreground">Diferencia</p>
+                    <p className={`font-bold text-sm sm:text-base ${diff > 0 ? "text-emerald-600" : diff < 0 ? "text-red-500" : ""}`}>
+                      {formatCurrency(diff)}
+                    </p>
+                  </div>
+                </div>
+              );
+            })()}
 
-            {histDetail.notas && (
+            {histDetail.notas && histDetail.notas.trim().length > 1 && (
               <div className="rounded-lg border p-3">
                 <p className="text-xs text-muted-foreground mb-1">Notas</p>
                 <p className="text-sm">{histDetail.notas}</p>
               </div>
             )}
+
+            {/* Resumen del día — agrupado en 3 secciones para guiar la lectura */}
+            {(() => {
+              const r = calcResumenDia(histVentas, histMovs, histCobroItems);
+              return (
+                <div className="space-y-5">
+                  {/* SECCIÓN 1: VENTAS DEL DÍA */}
+                  <div>
+                    <p className="text-[11px] uppercase tracking-wide text-muted-foreground font-semibold mb-2">Ventas del día</p>
+                    <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+                      <div className="flex-1 rounded-lg border p-3.5">
+                        <p className="text-xs text-muted-foreground">Total ventas</p>
+                        <p className="font-bold text-lg sm:text-xl mt-0.5">{formatCurrency(r.totalVentas)}</p>
+                        <p className="text-[11px] text-muted-foreground mt-1">{histVentas.length} ventas</p>
+                      </div>
+                      <span className="hidden sm:block text-2xl text-muted-foreground font-light">=</span>
+                      <div className="flex-1 rounded-lg border p-3.5">
+                        <p className="text-xs text-muted-foreground">Cobrado en caja</p>
+                        <p className="font-bold text-lg sm:text-xl text-emerald-600 mt-0.5">{formatCurrency(r.cobradoTotal)}</p>
+                        <p className="text-[11px] text-muted-foreground mt-1 truncate">
+                          Efvo {formatCurrency(r.cobradoEfectivo)} · Tr {formatCurrency(r.cobradoTransf)}
+                          {r.cobradoOtros > 0 && ` · Otros ${formatCurrency(r.cobradoOtros)}`}
+                        </p>
+                      </div>
+                      <span className="hidden sm:block text-2xl text-muted-foreground font-light">+</span>
+                      <div className="flex-1 rounded-lg border p-3.5">
+                        <p className="text-xs text-muted-foreground">CC generada</p>
+                        <p className={`font-bold text-lg sm:text-xl mt-0.5 ${r.ccGenerada > 0 ? "text-orange-600" : "text-muted-foreground"}`}>{formatCurrency(r.ccGenerada)}</p>
+                        <p className="text-[11px] text-muted-foreground mt-1">{r.deudores.length === 0 ? "sin deudas nuevas" : `${r.deudores.length} ${r.deudores.length === 1 ? "deudor" : "deudores"}`}</p>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* SECCIÓN 2: OTROS MOVIMIENTOS */}
+                  <div>
+                    <p className="text-[11px] uppercase tracking-wide text-muted-foreground font-semibold mb-2">
+                      Otros movimientos <span className="normal-case font-normal">(no son parte de las ventas de hoy)</span>
+                    </p>
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                      <div className="rounded-lg border p-3.5">
+                        <p className="text-xs text-muted-foreground">Cobros CC anterior</p>
+                        <p className={`font-bold text-lg sm:text-xl mt-0.5 ${r.cobrosCCAnterior > 0 ? "text-emerald-600" : "text-muted-foreground"}`}>{formatCurrency(r.cobrosCCAnterior)}</p>
+                        <p className="text-[11px] text-muted-foreground mt-1">deuda vieja saldada</p>
+                      </div>
+                      <div className="rounded-lg border p-3.5">
+                        <p className="text-xs text-muted-foreground">Egresos</p>
+                        <p className={`font-bold text-lg sm:text-xl mt-0.5 ${r.egresos > 0 ? "text-red-500" : "text-muted-foreground"}`}>{formatCurrency(r.egresos)}</p>
+                        <p className="text-[11px] text-muted-foreground mt-1">retiros y gastos</p>
+                      </div>
+                      <div className="rounded-lg border p-3.5">
+                        <p className="text-xs text-muted-foreground">Devoluciones</p>
+                        <p className={`font-bold text-lg sm:text-xl mt-0.5 ${(r.devolucionesNC + r.devolucionesAnul) > 0 ? "text-red-500" : "text-muted-foreground"}`}>{formatCurrency(r.devolucionesNC + r.devolucionesAnul)}</p>
+                        <p className="text-[11px] text-muted-foreground mt-1">NC y anulaciones</p>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* SECCIÓN 3: EN CAJA AL CIERRE */}
+                  <div>
+                    <p className="text-[11px] uppercase tracking-wide text-muted-foreground font-semibold mb-2">
+                      En caja al cierre <span className="normal-case font-normal">(plata que efectivamente quedó hoy)</span>
+                    </p>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div className="rounded-lg border-2 border-emerald-200 dark:border-emerald-900 p-4 bg-emerald-50/50 dark:bg-emerald-950/20">
+                        <p className="text-sm text-muted-foreground">Efectivo del día</p>
+                        <p className="font-bold text-2xl text-emerald-700 dark:text-emerald-400 mt-1">{formatCurrency(r.efectivoFinal)}</p>
+                        <p className="text-[11px] text-muted-foreground mt-2 leading-tight">
+                          Cobrado {formatCurrency(r.cobradoEfectivo)} + CC anterior {formatCurrency(r.cobrosCCEfvo)}
+                          {r.egresosEfvo > 0 && ` − Egresos ${formatCurrency(r.egresosEfvo)}`}
+                          {r.devolucionesEfvo > 0 && ` − Devoluciones ${formatCurrency(r.devolucionesEfvo)}`}
+                        </p>
+                      </div>
+                      <div className="rounded-lg border-2 border-blue-200 dark:border-blue-900 p-4 bg-blue-50/50 dark:bg-blue-950/20">
+                        <p className="text-sm text-muted-foreground">Transferencias del día</p>
+                        <p className="font-bold text-2xl text-blue-700 dark:text-blue-400 mt-1">{formatCurrency(r.transferenciaFinal)}</p>
+                        <p className="text-[11px] text-muted-foreground mt-2 leading-tight">
+                          Cobrado {formatCurrency(r.cobradoTransf)} + CC anterior {formatCurrency(r.cobrosCCTransf)}
+                          {r.egresosTransf > 0 && ` − Egresos ${formatCurrency(r.egresosTransf)}`}
+                          {r.devolucionesTransf > 0 && ` − Devoluciones ${formatCurrency(r.devolucionesTransf)}`}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              );
+            })()}
+
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+              {/* Desglose por método de pago — separado en Ventas + Cobros CC */}
+              {(() => {
+                const hVentasConMov = new Set(histMovs.filter((m) => m.referencia_tipo === "venta" && m.tipo === "ingreso").map((m) => m.referencia_id));
+                const hVentasSinMov = histVentas.filter((v) => !hVentasConMov.has(v.id));
+                const hEfectivo = histMovs.filter((m) => m.tipo === "ingreso" && m.referencia_tipo === "venta" && m.metodo_pago === "Efectivo").reduce((a, m) => a + m.monto, 0)
+                  + hVentasSinMov.filter((v) => v.forma_pago === "Efectivo").reduce((a, v) => a + v.total, 0)
+                  + hVentasSinMov.filter((v) => v.forma_pago === "Mixto").reduce((a, v) => a + ((v as any).monto_efectivo || 0), 0);
+                const hTransf = histMovs.filter((m) => m.tipo === "ingreso" && m.referencia_tipo === "venta" && m.metodo_pago === "Transferencia").reduce((a, m) => a + m.monto, 0)
+                  + hVentasSinMov.filter((v) => v.forma_pago === "Transferencia").reduce((a, v) => a + v.total, 0)
+                  + hVentasSinMov.filter((v) => v.forma_pago === "Mixto").reduce((a, v) => a + ((v as any).monto_transferencia || 0), 0);
+                const hPorCuenta: Record<string, number> = {};
+                histMovs.filter((m) => m.tipo === "ingreso" && m.referencia_tipo === "venta" && m.metodo_pago === "Transferencia")
+                  .forEach((m) => { const c = formatCuentaCanonica((m as any).cuenta_bancaria, cuentasMaster) || "Sin asignar"; hPorCuenta[c] = (hPorCuenta[c] || 0) + m.monto; });
+                for (const v of hVentasSinMov) {
+                  const ef = (v as any).monto_efectivo || 0;
+                  const cc = (v as any).monto_cuenta_corriente || 0;
+                  const tr = (v as any).monto_transferencia || 0;
+                  let mt = 0;
+                  if (v.forma_pago === "Transferencia") mt = v.total;
+                  else if (v.forma_pago === "Mixto") mt = tr > 0 ? tr : Math.max(0, v.total - ef - cc);
+                  if (mt > 0) { const c = formatCuentaCanonica((v as any).cuenta_transferencia_alias, cuentasMaster) || "Sin asignar"; hPorCuenta[c] = (hPorCuenta[c] || 0) + mt; }
+                }
+
+                // Cobros CC anterior por método/cuenta
+                const isCobroCC = (m: CajaMovimiento) =>
+                  m.tipo === "ingreso" && (
+                    (m.referencia_tipo !== "venta" && (m.descripcion || "").includes("Cobro CC")) ||
+                    m.referencia_tipo === "cobro_saldo" ||
+                    m.referencia_tipo === "cobro"
+                  );
+                const ccEfvo = histMovs.filter((m) => isCobroCC(m) && m.metodo_pago === "Efectivo").reduce((a, m) => a + m.monto, 0);
+                const ccTr = histMovs.filter((m) => isCobroCC(m) && m.metodo_pago === "Transferencia").reduce((a, m) => a + m.monto, 0);
+                const ccPorCuenta: Record<string, number> = {};
+                histMovs.filter((m) => isCobroCC(m) && m.metodo_pago === "Transferencia")
+                  .forEach((m) => { const c = formatCuentaCanonica((m as any).cuenta_bancaria, cuentasMaster) || "Sin asignar"; ccPorCuenta[c] = (ccPorCuenta[c] || 0) + m.monto; });
+
+                if (hEfectivo === 0 && hTransf === 0 && ccEfvo === 0 && ccTr === 0) return <div />;
+                return (
+                  <div>
+                    <h4 className="text-sm font-semibold mb-2">Desglose por Método</h4>
+                    <div className="rounded-lg border divide-y">
+                      {(hEfectivo > 0 || hTransf > 0) && (
+                        <div className="p-3 space-y-2">
+                          <p className="text-[11px] uppercase tracking-wide text-muted-foreground font-medium">Ventas del día</p>
+                          {hEfectivo > 0 && (
+                            <div className="flex justify-between text-sm">
+                              <span className="text-muted-foreground">Efectivo</span>
+                              <span className="font-semibold">{formatCurrency(hEfectivo)}</span>
+                            </div>
+                          )}
+                          {hTransf > 0 && (
+                            <>
+                              <div className="flex justify-between text-sm">
+                                <span className="text-muted-foreground">Transferencia</span>
+                                <span className="font-semibold">{formatCurrency(hTransf)}</span>
+                              </div>
+                              {Object.entries(hPorCuenta).sort((a, b) => b[1] - a[1]).map(([cuenta, monto]) => (
+                                <div key={cuenta} className="flex justify-between text-xs pl-3">
+                                  <span className="text-muted-foreground truncate mr-2">→ {cuenta}</span>
+                                  <span className="font-medium shrink-0">{formatCurrency(monto)}</span>
+                                </div>
+                              ))}
+                            </>
+                          )}
+                        </div>
+                      )}
+                      {(ccEfvo > 0 || ccTr > 0) && (
+                        <div className="p-3 space-y-2">
+                          <p className="text-[11px] uppercase tracking-wide text-muted-foreground font-medium">Cobros CC anterior</p>
+                          {ccEfvo > 0 && (
+                            <div className="flex justify-between text-sm">
+                              <span className="text-muted-foreground">Efectivo</span>
+                              <span className="font-semibold">{formatCurrency(ccEfvo)}</span>
+                            </div>
+                          )}
+                          {ccTr > 0 && (
+                            <>
+                              <div className="flex justify-between text-sm">
+                                <span className="text-muted-foreground">Transferencia</span>
+                                <span className="font-semibold">{formatCurrency(ccTr)}</span>
+                              </div>
+                              {Object.entries(ccPorCuenta).sort((a, b) => b[1] - a[1]).map(([cuenta, monto]) => (
+                                <div key={cuenta} className="flex justify-between text-xs pl-3">
+                                  <span className="text-muted-foreground truncate mr-2">→ {cuenta}</span>
+                                  <span className="font-medium shrink-0">{formatCurrency(monto)}</span>
+                                </div>
+                              ))}
+                            </>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })()}
+
+              {/* Devoluciones: Notas de crédito + Anulaciones (apiladas) */}
+              <div className="space-y-3">
+                {(() => {
+                  const ncMovs = histMovs.filter((m) => m.tipo === "cancelacion" && m.referencia_tipo === "nota_credito");
+                  if (ncMovs.length === 0) return null;
+                  const totalNC = ncMovs.reduce((a, m) => a + Math.abs(m.monto), 0);
+                  const porMetodo: Record<string, number> = {};
+                  ncMovs.forEach((m) => { const k = m.metodo_pago || "Efectivo"; porMetodo[k] = (porMetodo[k] || 0) + Math.abs(m.monto); });
+                  return (
+                    <div>
+                      <h4 className="text-sm font-semibold mb-2">Notas de Crédito (devoluciones)</h4>
+                      <div className="rounded-lg border p-3 bg-red-50 dark:bg-red-950/20 space-y-1">
+                        <p className="font-bold text-lg text-red-600">-{formatCurrency(totalNC)}</p>
+                        {Object.entries(porMetodo).map(([metodo, monto]) => (
+                          <div key={metodo} className="flex justify-between text-xs text-red-500">
+                            <span>→ {metodo}</span>
+                            <span>-{formatCurrency(monto)}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })()}
+
+                {(() => {
+                  const anulMovs = histMovs.filter((m) => m.tipo === "cancelacion" && m.referencia_tipo === "anulacion");
+                  if (anulMovs.length === 0) return null;
+                  const totalAnul = anulMovs.reduce((a, m) => a + Math.abs(m.monto), 0);
+                  return (
+                    <div>
+                      <h4 className="text-sm font-semibold mb-2">Anulaciones</h4>
+                      <div className="rounded-lg border p-3 bg-orange-50 dark:bg-orange-950/20 space-y-1">
+                        <p className="font-bold text-lg text-orange-600">-{formatCurrency(totalAnul)}</p>
+                        {anulMovs.map((m) => (
+                          <div key={m.id} className="flex justify-between text-xs text-orange-600">
+                            <span className="truncate mr-2">{m.descripcion} ({m.metodo_pago || "Efectivo"})</span>
+                            <span className="shrink-0">-{formatCurrency(Math.abs(m.monto))}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })()}
+              </div>
+            </div>
+
+            {/* Deudores del día */}
+            {(() => {
+              const r = calcResumenDia(histVentas, histMovs, histCobroItems);
+              if (r.deudores.length === 0) return null;
+              return (
+                <div>
+                  <h4 className="text-sm font-semibold mb-2">Deudores del día <span className="text-xs text-muted-foreground font-normal">({r.deudores.length})</span></h4>
+                  <div className="border rounded-lg overflow-hidden bg-orange-50 dark:bg-orange-950/20">
+                    <table className="w-full text-xs">
+                      <thead><tr className="border-b border-orange-200 dark:border-orange-900"><th className="text-left py-2 px-3">N°</th><th className="text-left py-2 px-3">Cliente</th><th className="text-right py-2 px-3">Adeuda</th></tr></thead>
+                      <tbody>
+                        {r.deudores.map((d) => (
+                          <tr key={d.numero} className="border-b last:border-0 border-orange-100 dark:border-orange-900/50">
+                            <td className="py-1.5 px-3 font-mono">{d.numero}</td>
+                            <td className="py-1.5 px-3">{d.cliente}</td>
+                            <td className="py-1.5 px-3 text-right font-semibold text-orange-700 dark:text-orange-400">{formatCurrency(d.monto)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                    <div className="border-t border-orange-200 dark:border-orange-900 px-3 py-1.5 text-right text-xs font-bold text-orange-700 dark:text-orange-400">
+                      Total adeudado: {formatCurrency(r.ccGenerada)}
+                    </div>
+                  </div>
+                </div>
+              );
+            })()}
 
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
               <div>
@@ -272,135 +673,28 @@ function TurnoHistorialDialog({
                   </div>
                 )}
               </div>
-
-              <div className="space-y-4">
-                {/* Desglose por método de pago */}
-                {(() => {
-                  const hVentasConMov = new Set(histMovs.filter((m) => m.referencia_tipo === "venta" && m.tipo === "ingreso").map((m) => m.referencia_id));
-                  const hVentasSinMov = histVentas.filter((v) => !hVentasConMov.has(v.id));
-                  const hEfectivo = histMovs.filter((m) => m.tipo === "ingreso" && m.referencia_tipo === "venta" && m.metodo_pago === "Efectivo").reduce((a, m) => a + m.monto, 0)
-                    + hVentasSinMov.filter((v) => v.forma_pago === "Efectivo").reduce((a, v) => a + v.total, 0)
-                    + hVentasSinMov.filter((v) => v.forma_pago === "Mixto").reduce((a, v) => a + ((v as any).monto_efectivo || 0), 0);
-                  const hTransf = histMovs.filter((m) => m.tipo === "ingreso" && m.referencia_tipo === "venta" && m.metodo_pago === "Transferencia").reduce((a, m) => a + m.monto, 0)
-                    + hVentasSinMov.filter((v) => v.forma_pago === "Transferencia").reduce((a, v) => a + v.total, 0)
-                    + hVentasSinMov.filter((v) => v.forma_pago === "Mixto").reduce((a, v) => {
-                      const tr = (v as any).monto_transferencia || 0;
-                      if (tr > 0) return a + tr;
-                      const ef = (v as any).monto_efectivo || 0;
-                      const cc = (v as any).monto_cuenta_corriente || 0;
-                      const rest = v.total - ef - cc;
-                      return a + (rest > 0 ? rest : 0);
-                    }, 0);
-                  // Per-account
-                  const hPorCuenta: Record<string, number> = {};
-                  histMovs.filter((m) => m.tipo === "ingreso" && m.referencia_tipo === "venta" && m.metodo_pago === "Transferencia")
-                    .forEach((m) => { const c = (m as any).cuenta_bancaria || "Sin asignar"; hPorCuenta[c] = (hPorCuenta[c] || 0) + m.monto; });
-                  for (const v of hVentasSinMov) {
-                    const ef = (v as any).monto_efectivo || 0;
-                    const cc = (v as any).monto_cuenta_corriente || 0;
-                    const tr = (v as any).monto_transferencia || 0;
-                    let mt = 0;
-                    if (v.forma_pago === "Transferencia") mt = v.total;
-                    else if (v.forma_pago === "Mixto") mt = tr > 0 ? tr : Math.max(0, v.total - ef - cc);
-                    if (mt > 0) { const c = (v as any).cuenta_transferencia_alias || "Sin asignar"; hPorCuenta[c] = (hPorCuenta[c] || 0) + mt; }
-                  }
-                  if (hEfectivo === 0 && hTransf === 0) return null;
-                  return (
-                    <div>
-                      <h4 className="text-sm font-semibold mb-2">Desglose por Método</h4>
-                      <div className="rounded-lg border p-3 space-y-2">
-                        {hEfectivo > 0 && (
-                          <div className="flex justify-between text-sm">
-                            <span className="text-muted-foreground">Efectivo</span>
-                            <span className="font-semibold">{formatCurrency(hEfectivo)}</span>
-                          </div>
-                        )}
-                        {hTransf > 0 && (
-                          <>
-                            <div className="flex justify-between text-sm">
-                              <span className="text-muted-foreground">Transferencia</span>
-                              <span className="font-semibold">{formatCurrency(hTransf)}</span>
-                            </div>
-                            {Object.entries(hPorCuenta).sort((a, b) => b[1] - a[1]).map(([cuenta, monto]) => (
-                              <div key={cuenta} className="flex justify-between text-xs pl-3">
-                                <span className="text-muted-foreground">→ {cuenta}</span>
-                                <span className="font-medium">{formatCurrency(monto)}</span>
-                              </div>
-                            ))}
-                          </>
-                        )}
-                      </div>
-                    </div>
-                  );
-                })()}
-
-                {/* Notas de crédito */}
-                {(() => {
-                  const ncMovs = histMovs.filter((m) => m.tipo === "cancelacion" && m.referencia_tipo === "nota_credito");
-                  if (ncMovs.length === 0) return null;
-                  const totalNC = ncMovs.reduce((a, m) => a + Math.abs(m.monto), 0);
-                  const porMetodo: Record<string, number> = {};
-                  ncMovs.forEach((m) => { const k = m.metodo_pago || "Efectivo"; porMetodo[k] = (porMetodo[k] || 0) + Math.abs(m.monto); });
-                  return (
-                    <div>
-                      <h4 className="text-sm font-semibold mb-2">Notas de Crédito (devoluciones)</h4>
-                      <div className="rounded-lg border p-3 bg-red-50 dark:bg-red-950/20 space-y-1">
-                        <p className="font-bold text-lg text-red-600">-{formatCurrency(totalNC)}</p>
-                        {Object.entries(porMetodo).map(([metodo, monto]) => (
-                          <div key={metodo} className="flex justify-between text-xs text-red-500">
-                            <span>→ {metodo}</span>
-                            <span>-{formatCurrency(monto)}</span>
-                          </div>
+              <div>
+                <h4 className="text-sm font-semibold mb-2">Movimientos ({histMovs.length})</h4>
+                {histMovs.length === 0 ? (
+                  <p className="text-xs text-muted-foreground">Sin movimientos</p>
+                ) : (
+                  <div className="border rounded-lg overflow-hidden">
+                    <table className="w-full text-xs">
+                      <thead><tr className="border-b bg-muted/50"><th className="text-left py-2 px-3">Hora</th><th className="text-left py-2 px-3">Desc</th><th className="text-right py-2 px-3">Monto</th></tr></thead>
+                      <tbody>
+                        {histMovs.map((m) => (
+                          <tr key={m.id} className="border-b last:border-0">
+                            <td className="py-1.5 px-3 text-muted-foreground">{m.hora?.substring(0, 5)}</td>
+                            <td className="py-1.5 px-3">{m.descripcion}</td>
+                            <td className={`py-1.5 px-3 text-right font-semibold ${m.tipo === "ingreso" ? "text-emerald-600" : "text-red-500"}`}>
+                              {m.tipo === "ingreso" ? "+" : "-"}{formatCurrency(Math.abs(m.monto))}
+                            </td>
+                          </tr>
                         ))}
-                      </div>
-                    </div>
-                  );
-                })()}
-
-                {/* Anulaciones */}
-                {(() => {
-                  const anulMovs = histMovs.filter((m) => m.tipo === "cancelacion" && m.referencia_tipo === "anulacion");
-                  if (anulMovs.length === 0) return null;
-                  const totalAnul = anulMovs.reduce((a, m) => a + Math.abs(m.monto), 0);
-                  return (
-                    <div>
-                      <h4 className="text-sm font-semibold mb-2">Anulaciones</h4>
-                      <div className="rounded-lg border p-3 bg-orange-50 dark:bg-orange-950/20 space-y-1">
-                        <p className="font-bold text-lg text-orange-600">-{formatCurrency(totalAnul)}</p>
-                        {anulMovs.map((m) => (
-                          <div key={m.id} className="flex justify-between text-xs text-orange-600">
-                            <span className="truncate mr-2">{m.descripcion} ({m.metodo_pago || "Efectivo"})</span>
-                            <span className="shrink-0">-{formatCurrency(Math.abs(m.monto))}</span>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  );
-                })()}
-
-                <div>
-                  <h4 className="text-sm font-semibold mb-2">Movimientos ({histMovs.length})</h4>
-                  {histMovs.length === 0 ? (
-                    <p className="text-xs text-muted-foreground">Sin movimientos</p>
-                  ) : (
-                    <div className="border rounded-lg overflow-hidden">
-                      <table className="w-full text-xs">
-                        <thead><tr className="border-b bg-muted/50"><th className="text-left py-2 px-3">Hora</th><th className="text-left py-2 px-3">Desc</th><th className="text-right py-2 px-3">Monto</th></tr></thead>
-                        <tbody>
-                          {histMovs.map((m) => (
-                            <tr key={m.id} className="border-b last:border-0">
-                              <td className="py-1.5 px-3 text-muted-foreground">{m.hora?.substring(0, 5)}</td>
-                              <td className="py-1.5 px-3">{m.descripcion}</td>
-                              <td className={`py-1.5 px-3 text-right font-semibold ${m.tipo === "ingreso" ? "text-emerald-600" : "text-red-500"}`}>
-                                {m.tipo === "ingreso" ? "+" : "-"}{formatCurrency(Math.abs(m.monto))}
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  )}
-                </div>
+                      </tbody>
+                    </table>
+                  </div>
+                )}
               </div>
             </div>
           </div>
@@ -679,6 +973,7 @@ export default function CajaPage() {
   const [histDetail, setHistDetail] = useState<TurnoCaja | null>(null);
   const [histMovs, setHistMovs] = useState<CajaMovimiento[]>([]);
   const [histVentas, setHistVentas] = useState<Venta[]>([]);
+  const [histCobroItems, setHistCobroItems] = useState<Array<{ cobro_id: string; venta_id: string; monto_aplicado: number }>>([]);
 
   // ─── Load turno on mount ───
   const loadTurno = useCallback(async () => {
@@ -808,6 +1103,14 @@ export default function CajaPage() {
       supabase.from("ventas").select("id, numero, fecha, total, subtotal, descuento_porcentaje, recargo_porcentaje, forma_pago, tipo_comprobante, vendedor_id, origen, estado, created_at, monto_efectivo, monto_transferencia, monto_pagado, cuenta_transferencia_alias, clientes(nombre)").gte("fecha", fecha).lte("fecha", fechaCierre).not("tipo_comprobante", "ilike", "Nota de Crédito%").neq("estado", "anulada").order("created_at", { ascending: false }).range(0, 49999),
     ]);
 
+    // Cobro items para detectar cobros que aplican a ventas del mismo turno
+    const cobroIds = (movs || []).filter((m: any) => m.referencia_tipo === "cobro" && m.referencia_id).map((m: any) => m.referencia_id);
+    let cobroItemsList: Array<{ cobro_id: string; venta_id: string; monto_aplicado: number }> = [];
+    if (cobroIds.length > 0) {
+      const { data: items } = await supabase.from("cobro_items").select("cobro_id, venta_id, monto_aplicado").in("cobro_id", cobroIds).range(0, 9999);
+      cobroItemsList = (items || []) as any;
+    }
+
     // Filter by turno time range using Date comparison
     const filteredMovs = (movs || []).filter((m: any) => {
       const d = new Date(m.created_at);
@@ -829,16 +1132,25 @@ export default function CajaPage() {
     });
     setHistMovs(filteredMovs as CajaMovimiento[]);
     setHistVentas(filteredVts as unknown as Venta[]);
+    setHistCobroItems(cobroItemsList);
   };
 
   // ─── Export turno to PDF ───
-  const exportTurnoPDF = async (t: TurnoCaja, tvts: Venta[], tmovs: CajaMovimiento[]) => {
+  const exportTurnoPDF = async (
+    t: TurnoCaja,
+    tvts: Venta[],
+    tmovs: CajaMovimiento[],
+    cobroItems: Array<{ cobro_id: string; venta_id: string; monto_aplicado: number }> = []
+  ) => {
     const { jsPDF } = await import("jspdf");
     const pdf = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
     const w = pdf.internal.pageSize.getWidth();
     const margin = 15;
     let y = 20;
     const fmtCur = formatCurrency;
+    // jsPDF Helvetica embebido no soporta U+2192 (→) ni U+2014 (—) limpiamente:
+    // los renderiza como bytes sueltos espaciados ("V e n t a"). Reemplazamos a ASCII.
+    const sanitize = (s: string) => s.replace(/→/g, ">").replace(/[—–]/g, "-");
 
     // Header
     pdf.setFontSize(18);
@@ -847,11 +1159,11 @@ export default function CajaPage() {
     y += 8;
     pdf.setFontSize(10);
     pdf.setFont("helvetica", "normal");
-    pdf.text(`Turno #${t.numero} — ${formatDatePDF(t.fecha_apertura)}`, margin, y);
+    pdf.text(`Turno #${t.numero} - ${formatDatePDF(t.fecha_apertura)}`, margin, y);
     y += 5;
     pdf.text(`Operador: ${t.operador}`, margin, y);
     y += 5;
-    pdf.text(`Horario: ${t.hora_apertura?.substring(0, 5)} — ${t.hora_cierre?.substring(0, 5) || "En curso"}`, margin, y);
+    pdf.text(`Horario: ${t.hora_apertura?.substring(0, 5)} - ${t.hora_cierre?.substring(0, 5) || "En curso"}`, margin, y);
     y += 10;
 
     // Efectivo summary
@@ -862,24 +1174,235 @@ export default function CajaPage() {
     pdf.setFontSize(10);
     pdf.setFont("helvetica", "normal");
 
-    const efRows = [
-      ["Efectivo Inicial", fmtCur(t.efectivo_inicial)],
-      ["Efectivo Real Contado", fmtCur(t.efectivo_real || 0)],
-      ["Diferencia", fmtCur(t.diferencia || 0)],
+    const efReal = t.efectivo_real || 0;
+    const efDiff = t.diferencia || 0;
+    const efEsperado = efReal - efDiff;
+    const efRows: Array<[string, string, [number, number, number] | null]> = [
+      ["Efectivo Inicial", fmtCur(t.efectivo_inicial), null],
+      ["Esperado", fmtCur(efEsperado), null],
+      ["Efectivo Real Contado", fmtCur(efReal), null],
+      ["Diferencia", fmtCur(efDiff), efDiff < 0 ? [220, 38, 38] : efDiff > 0 ? [22, 163, 74] : null],
     ];
-    for (const [label, val] of efRows) {
+    for (const [label, val, color] of efRows) {
       pdf.text(label, margin, y);
+      if (color) pdf.setTextColor(color[0], color[1], color[2]);
       pdf.text(val, w - margin, y, { align: "right" });
+      pdf.setTextColor(0, 0, 0);
       y += 5;
     }
     if (t.notas) {
       y += 2;
       pdf.setFont("helvetica", "italic");
-      pdf.text(`Notas: ${t.notas}`, margin, y);
+      pdf.text(`Notas: ${sanitize(t.notas)}`, margin, y);
       pdf.setFont("helvetica", "normal");
       y += 7;
     } else {
       y += 5;
+    }
+
+    // Resumen del día — agrupado en 3 secciones para guiar la lectura
+    const resumen = calcResumenDia(tvts, tmovs, cobroItems);
+    const sectionTitle = (text: string) => {
+      pdf.setFontSize(8);
+      pdf.setFont("helvetica", "bold");
+      pdf.setTextColor(110);
+      pdf.text(text.toUpperCase(), margin, y);
+      pdf.setTextColor(0, 0, 0);
+      pdf.setFontSize(10);
+      pdf.setFont("helvetica", "normal");
+      y += 4;
+    };
+    const drawRow = (label: string, val: number, color: [number, number, number] | null, indent = 5) => {
+      pdf.text(label, margin + indent, y);
+      if (color) pdf.setTextColor(color[0], color[1], color[2]);
+      pdf.text(fmtCur(val), w - margin, y, { align: "right" });
+      pdf.setTextColor(0, 0, 0);
+      y += 5;
+    };
+
+    pdf.setDrawColor(200);
+    pdf.line(margin, y, w - margin, y);
+    y += 5;
+
+    // SECCIÓN 1: VENTAS DEL DÍA
+    sectionTitle("Ventas del dia");
+    drawRow(`Total ventas (${tvts.length})`, resumen.totalVentas, null);
+    pdf.setFontSize(8); pdf.setTextColor(140);
+    pdf.text("=", margin + 1, y - 4);
+    pdf.setTextColor(0, 0, 0); pdf.setFontSize(10);
+    drawRow("Cobrado en caja", resumen.cobradoTotal, [22, 163, 74]);
+    pdf.setFontSize(8); pdf.setTextColor(140);
+    pdf.text("+", margin + 1, y - 4);
+    pdf.setTextColor(0, 0, 0); pdf.setFontSize(10);
+    drawRow("CC generada hoy", resumen.ccGenerada, resumen.ccGenerada > 0 ? [234, 88, 12] : null);
+    y += 3;
+
+    // SECCIÓN 2: OTROS MOVIMIENTOS
+    sectionTitle("Otros movimientos (no son parte de las ventas de hoy)");
+    drawRow("Cobros de CC anterior", resumen.cobrosCCAnterior, resumen.cobrosCCAnterior > 0 ? [22, 163, 74] : null);
+    drawRow("Egresos (retiros, gastos, pagos)", resumen.egresos, resumen.egresos > 0 ? [220, 38, 38] : null);
+    drawRow("Devoluciones (NC + anulaciones)", resumen.devolucionesNC + resumen.devolucionesAnul, (resumen.devolucionesNC + resumen.devolucionesAnul) > 0 ? [220, 38, 38] : null);
+    y += 3;
+
+    // SECCIÓN 3: EN CAJA AL CIERRE
+    sectionTitle("En caja al cierre (plata que efectivamente quedo hoy)");
+    pdf.setFont("helvetica", "bold");
+    pdf.text("Efectivo del dia", margin + 5, y);
+    pdf.setTextColor(22, 163, 74);
+    pdf.text(fmtCur(resumen.efectivoFinal), w - margin, y, { align: "right" });
+    pdf.setTextColor(0, 0, 0);
+    y += 4;
+    pdf.setFont("helvetica", "normal");
+    pdf.setFontSize(8);
+    pdf.setTextColor(110);
+    pdf.text(
+      sanitize(`Cobrado ${fmtCur(resumen.cobradoEfectivo)} + CC anterior ${fmtCur(resumen.cobrosCCEfvo)}` +
+        (resumen.egresosEfvo > 0 ? ` - Egresos ${fmtCur(resumen.egresosEfvo)}` : "") +
+        (resumen.devolucionesEfvo > 0 ? ` - Devoluciones ${fmtCur(resumen.devolucionesEfvo)}` : "")),
+      margin + 10, y
+    );
+    pdf.setTextColor(0, 0, 0);
+    pdf.setFontSize(10);
+    y += 6;
+    pdf.setFont("helvetica", "bold");
+    pdf.text("Transferencias del dia", margin + 5, y);
+    pdf.setTextColor(37, 99, 235);
+    pdf.text(fmtCur(resumen.transferenciaFinal), w - margin, y, { align: "right" });
+    pdf.setTextColor(0, 0, 0);
+    y += 4;
+    pdf.setFont("helvetica", "normal");
+    pdf.setFontSize(8);
+    pdf.setTextColor(110);
+    pdf.text(
+      sanitize(`Cobrado ${fmtCur(resumen.cobradoTransf)} + CC anterior ${fmtCur(resumen.cobrosCCTransf)}` +
+        (resumen.egresosTransf > 0 ? ` - Egresos ${fmtCur(resumen.egresosTransf)}` : "") +
+        (resumen.devolucionesTransf > 0 ? ` - Devoluciones ${fmtCur(resumen.devolucionesTransf)}` : "")),
+      margin + 10, y
+    );
+    pdf.setTextColor(0, 0, 0);
+    pdf.setFontSize(10);
+    y += 5;
+
+    // Payment method breakdown
+    pdf.setDrawColor(200);
+    pdf.line(margin, y, w - margin, y);
+    y += 5;
+    pdf.setFontSize(12);
+    pdf.setFont("helvetica", "bold");
+    pdf.text("Desglose por Metodo de Pago", margin, y);
+    y += 7;
+    pdf.setFontSize(10);
+    pdf.setFont("helvetica", "normal");
+
+    const pdfVentasConMov = new Set(
+      tmovs.filter((m) => m.referencia_tipo === "venta" && m.tipo === "ingreso").map((m) => m.referencia_id)
+    );
+    const pdfUnpaidEstados = new Set(["pendiente", "armado", "confirmado"]);
+    const pdfVentasSinMov = tvts.filter((v) => !pdfVentasConMov.has(v.id) && !pdfUnpaidEstados.has((v.estado || "").toLowerCase()));
+    const pdfMovEfectivo = tmovs.filter((m) => m.tipo === "ingreso" && m.referencia_tipo === "venta" && m.metodo_pago === "Efectivo").reduce((a, m) => a + m.monto, 0)
+      + pdfVentasSinMov.filter((v) => v.forma_pago === "Efectivo").reduce((a, v) => a + v.total, 0)
+      + pdfVentasSinMov.filter((v) => v.forma_pago === "Mixto").reduce((a, v) => a + ((v as any).monto_efectivo || 0), 0);
+    const pdfMovTransf = tmovs.filter((m) => m.tipo === "ingreso" && m.referencia_tipo === "venta" && m.metodo_pago === "Transferencia").reduce((a, m) => a + m.monto, 0)
+      + pdfVentasSinMov.filter((v) => v.forma_pago === "Transferencia").reduce((a, v) => a + v.total, 0)
+      + pdfVentasSinMov.filter((v) => v.forma_pago === "Mixto").reduce((a, v) => a + ((v as any).monto_transferencia || 0), 0);
+
+    // Sub-bloque: Ventas del día
+    if (pdfMovEfectivo > 0 || pdfMovTransf > 0) {
+      pdf.setFont("helvetica", "italic");
+      pdf.setTextColor(110);
+      pdf.text("Ventas del dia", margin + 5, y);
+      pdf.setTextColor(0, 0, 0);
+      pdf.setFont("helvetica", "normal");
+      y += 5;
+      if (pdfMovEfectivo > 0) { pdf.text("Efectivo", margin + 8, y); pdf.text(fmtCur(pdfMovEfectivo), w - margin, y, { align: "right" }); y += 5; }
+      if (pdfMovTransf > 0) {
+        pdf.text("Transferencia", margin + 8, y); pdf.text(fmtCur(pdfMovTransf), w - margin, y, { align: "right" }); y += 5;
+        const pdfPorCuenta: Record<string, number> = {};
+        tmovs.filter((m) => m.tipo === "ingreso" && m.referencia_tipo === "venta" && m.metodo_pago === "Transferencia")
+          .forEach((m) => { const c = formatCuentaCanonica((m as any).cuenta_bancaria, cajaCuentasBancarias) || "Sin asignar"; pdfPorCuenta[c] = (pdfPorCuenta[c] || 0) + m.monto; });
+        for (const v of pdfVentasSinMov) {
+          const mt = v.forma_pago === "Transferencia" ? v.total : v.forma_pago === "Mixto" ? ((v as any).monto_transferencia || 0) : 0;
+          if (mt > 0) { const c = formatCuentaCanonica((v as any).cuenta_transferencia_alias, cajaCuentasBancarias) || "Sin asignar"; pdfPorCuenta[c] = (pdfPorCuenta[c] || 0) + mt; }
+        }
+        pdf.setFontSize(9);
+        for (const [cuenta, monto] of Object.entries(pdfPorCuenta).sort((a, b) => b[1] - a[1])) {
+          pdf.text(sanitize(`> ${cuenta}`), margin + 13, y); pdf.text(fmtCur(monto), w - margin, y, { align: "right" }); y += 4;
+        }
+        pdf.setFontSize(10);
+      }
+    }
+
+    // Sub-bloque: Cobros CC anterior
+    if (resumen.cobrosCCEfvo > 0 || resumen.cobrosCCTransf > 0) {
+      y += 1;
+      pdf.setFont("helvetica", "italic");
+      pdf.setTextColor(110);
+      pdf.text("Cobros CC anterior", margin + 5, y);
+      pdf.setTextColor(0, 0, 0);
+      pdf.setFont("helvetica", "normal");
+      y += 5;
+      if (resumen.cobrosCCEfvo > 0) { pdf.text("Efectivo", margin + 8, y); pdf.text(fmtCur(resumen.cobrosCCEfvo), w - margin, y, { align: "right" }); y += 5; }
+      if (resumen.cobrosCCTransf > 0) {
+        pdf.text("Transferencia", margin + 8, y); pdf.text(fmtCur(resumen.cobrosCCTransf), w - margin, y, { align: "right" }); y += 5;
+        const ccPorCuenta: Record<string, number> = {};
+        const isCobroCC = (m: CajaMovimiento) =>
+          m.tipo === "ingreso" && (
+            (m.referencia_tipo !== "venta" && (m.descripcion || "").includes("Cobro CC")) ||
+            m.referencia_tipo === "cobro_saldo" ||
+            m.referencia_tipo === "cobro"
+          );
+        tmovs.filter((m) => isCobroCC(m) && m.metodo_pago === "Transferencia")
+          .forEach((m) => { const c = formatCuentaCanonica((m as any).cuenta_bancaria, cajaCuentasBancarias) || "Sin asignar"; ccPorCuenta[c] = (ccPorCuenta[c] || 0) + m.monto; });
+        pdf.setFontSize(9);
+        for (const [cuenta, monto] of Object.entries(ccPorCuenta).sort((a, b) => b[1] - a[1])) {
+          pdf.text(sanitize(`> ${cuenta}`), margin + 13, y); pdf.text(fmtCur(monto), w - margin, y, { align: "right" }); y += 4;
+        }
+        pdf.setFontSize(10);
+      }
+    }
+    y += 5;
+
+    // Deudores del día
+    if (resumen.deudores.length > 0) {
+      if (y > 250) { pdf.addPage(); y = 20; }
+      pdf.setDrawColor(200);
+      pdf.line(margin, y, w - margin, y);
+      y += 5;
+      pdf.setFontSize(12);
+      pdf.setFont("helvetica", "bold");
+      pdf.setTextColor(234, 88, 12);
+      pdf.text(`Deudores del dia (${resumen.deudores.length})`, margin, y);
+      pdf.setTextColor(0, 0, 0);
+      y += 7;
+      pdf.setFontSize(9);
+      pdf.setFont("helvetica", "bold");
+      pdf.text("N°", margin, y);
+      pdf.text("Cliente", margin + 35, y);
+      pdf.text("Adeuda", w - margin, y, { align: "right" });
+      y += 2;
+      pdf.setDrawColor(220);
+      pdf.line(margin, y, w - margin, y);
+      y += 4;
+      pdf.setFont("helvetica", "normal");
+      for (const d of resumen.deudores) {
+        if (y > 270) { pdf.addPage(); y = 20; }
+        pdf.text(d.numero, margin, y);
+        pdf.text(sanitize(d.cliente.substring(0, 50)), margin + 35, y);
+        pdf.setTextColor(234, 88, 12);
+        pdf.text(fmtCur(d.monto), w - margin, y, { align: "right" });
+        pdf.setTextColor(0, 0, 0);
+        y += 4.5;
+      }
+      y += 2;
+      pdf.setDrawColor(180);
+      pdf.line(margin, y, w - margin, y);
+      y += 4;
+      pdf.setFont("helvetica", "bold");
+      pdf.text("Total adeudado:", margin + 35, y);
+      pdf.setTextColor(234, 88, 12);
+      pdf.text(fmtCur(resumen.ccGenerada), w - margin, y, { align: "right" });
+      pdf.setTextColor(0, 0, 0);
+      y += 8;
     }
 
     // Ventas summary
@@ -900,16 +1423,17 @@ export default function CajaPage() {
       pdf.text("Cliente", margin + 35, y);
       pdf.text("Forma Pago", margin + 85, y);
       pdf.text("Total", w - margin, y, { align: "right" });
-      y += 5;
-      pdf.setFont("helvetica", "normal");
+      y += 2;
       pdf.setDrawColor(220);
-      pdf.line(margin, y - 1, w - margin, y - 1);
+      pdf.line(margin, y, w - margin, y);
+      y += 4;
+      pdf.setFont("helvetica", "normal");
 
       for (const v of tvts) {
         if (y > 270) { pdf.addPage(); y = 20; }
-        pdf.text(v.numero || "—", margin, y);
-        pdf.text(((v as any).clientes?.nombre || "—").substring(0, 25), margin + 35, y);
-        pdf.text(v.forma_pago || "—", margin + 85, y);
+        pdf.text(v.numero || "-", margin, y);
+        pdf.text(sanitize(((v as any).clientes?.nombre || "-").substring(0, 25)), margin + 35, y);
+        pdf.text(v.forma_pago || "-", margin + 85, y);
         pdf.text(fmtCur(v.total), w - margin, y, { align: "right" });
         y += 4.5;
       }
@@ -919,49 +1443,6 @@ export default function CajaPage() {
       pdf.text(fmtCur(tvts.reduce((a, v) => a + v.total, 0)), w - margin, y, { align: "right" });
       y += 8;
     }
-
-    // Payment method breakdown
-    pdf.setDrawColor(200);
-    pdf.line(margin, y, w - margin, y);
-    y += 5;
-    pdf.setFontSize(12);
-    pdf.setFont("helvetica", "bold");
-    pdf.text("Desglose por Método de Pago", margin, y);
-    y += 7;
-    pdf.setFontSize(10);
-    pdf.setFont("helvetica", "normal");
-
-    // Calculate per-method using same logic as live view
-    const pdfVentasConMov = new Set(
-      tmovs.filter((m) => m.referencia_tipo === "venta" && m.tipo === "ingreso").map((m) => m.referencia_id)
-    );
-    const pdfUnpaidEstados = new Set(["pendiente", "armado", "confirmado"]);
-    const pdfVentasSinMov = tvts.filter((v) => !pdfVentasConMov.has(v.id) && !pdfUnpaidEstados.has((v.estado || "").toLowerCase()));
-    const pdfMovEfectivo = tmovs.filter((m) => m.tipo === "ingreso" && m.referencia_tipo === "venta" && m.metodo_pago === "Efectivo").reduce((a, m) => a + m.monto, 0)
-      + pdfVentasSinMov.filter((v) => v.forma_pago === "Efectivo").reduce((a, v) => a + v.total, 0)
-      + pdfVentasSinMov.filter((v) => v.forma_pago === "Mixto").reduce((a, v) => a + ((v as any).monto_efectivo || 0), 0);
-    const pdfMovTransf = tmovs.filter((m) => m.tipo === "ingreso" && m.referencia_tipo === "venta" && m.metodo_pago === "Transferencia").reduce((a, m) => a + m.monto, 0)
-      + pdfVentasSinMov.filter((v) => v.forma_pago === "Transferencia").reduce((a, v) => a + v.total, 0)
-      + pdfVentasSinMov.filter((v) => v.forma_pago === "Mixto").reduce((a, v) => a + ((v as any).monto_transferencia || 0), 0);
-
-    if (pdfMovEfectivo > 0) { pdf.text("Efectivo", margin + 5, y); pdf.text(fmtCur(pdfMovEfectivo), w - margin, y, { align: "right" }); y += 5; }
-    if (pdfMovTransf > 0) {
-      pdf.text("Transferencia", margin + 5, y); pdf.text(fmtCur(pdfMovTransf), w - margin, y, { align: "right" }); y += 5;
-      // Per-account breakdown
-      const pdfPorCuenta: Record<string, number> = {};
-      tmovs.filter((m) => m.tipo === "ingreso" && m.referencia_tipo === "venta" && m.metodo_pago === "Transferencia")
-        .forEach((m) => { const c = (m as any).cuenta_bancaria || "Sin asignar"; pdfPorCuenta[c] = (pdfPorCuenta[c] || 0) + m.monto; });
-      for (const v of pdfVentasSinMov) {
-        const mt = v.forma_pago === "Transferencia" ? v.total : v.forma_pago === "Mixto" ? ((v as any).monto_transferencia || 0) : 0;
-        if (mt > 0) { const c = (v as any).cuenta_transferencia_alias || "Sin asignar"; pdfPorCuenta[c] = (pdfPorCuenta[c] || 0) + mt; }
-      }
-      pdf.setFontSize(9);
-      for (const [cuenta, monto] of Object.entries(pdfPorCuenta).sort((a, b) => b[1] - a[1])) {
-        pdf.text(`→ ${cuenta}`, margin + 10, y); pdf.text(fmtCur(monto), w - margin, y, { align: "right" }); y += 4;
-      }
-      pdf.setFontSize(10);
-    }
-    y += 5;
 
     // Movimientos
     pdf.setDrawColor(200);
@@ -975,24 +1456,73 @@ export default function CajaPage() {
     pdf.setFont("helvetica", "normal");
 
     if (tmovs.length > 0) {
+      // Columnas: Hora 0-18 | Descripcion 18-118 (100mm) | Metodo 120-150 | Monto right
+      const colDesc = margin + 18;
+      const colMetodo = margin + 120;
       pdf.setFont("helvetica", "bold");
       pdf.text("Hora", margin, y);
-      pdf.text("Descripción", margin + 20, y);
-      pdf.text("Método", margin + 100, y);
+      pdf.text("Descripcion", colDesc, y);
+      pdf.text("Metodo", colMetodo, y);
       pdf.text("Monto", w - margin, y, { align: "right" });
-      y += 5;
+      y += 2;
+      pdf.setDrawColor(220);
+      pdf.line(margin, y, w - margin, y);
+      y += 4;
       pdf.setFont("helvetica", "normal");
-      pdf.line(margin, y - 1, w - margin, y - 1);
 
+      // Subtotales en una pasada
+      let totalIng = 0, totalEgr = 0;
+      const ingPorMetodo: Record<string, number> = {};
       for (const m of tmovs) {
         if (y > 270) { pdf.addPage(); y = 20; }
-        pdf.text(m.hora?.substring(0, 5) || "—", margin, y);
-        pdf.text((m.descripcion || "—").substring(0, 45), margin + 20, y);
-        pdf.text(m.metodo_pago || "—", margin + 100, y);
+        pdf.text(m.hora?.substring(0, 5) || "-", margin, y);
+        pdf.text(sanitize((m.descripcion || "-").substring(0, 60)), colDesc, y);
+        pdf.text(m.metodo_pago || "-", colMetodo, y);
         const prefix = m.tipo === "ingreso" ? "+" : "-";
+        if (m.tipo === "ingreso") {
+          pdf.setTextColor(22, 163, 74); // verde-600
+          totalIng += Math.abs(m.monto);
+          const k = m.metodo_pago || "Otro";
+          ingPorMetodo[k] = (ingPorMetodo[k] || 0) + Math.abs(m.monto);
+        } else {
+          pdf.setTextColor(220, 38, 38); // rojo-600
+          totalEgr += Math.abs(m.monto);
+        }
         pdf.text(`${prefix}${fmtCur(Math.abs(m.monto))}`, w - margin, y, { align: "right" });
+        pdf.setTextColor(0, 0, 0);
         y += 4.5;
       }
+
+      // Totales al final
+      if (y > 260) { pdf.addPage(); y = 20; }
+      y += 2;
+      pdf.setDrawColor(180);
+      pdf.line(margin, y, w - margin, y);
+      y += 5;
+      pdf.setFont("helvetica", "bold");
+      pdf.text("Total ingresos:", colDesc, y);
+      pdf.setTextColor(22, 163, 74);
+      pdf.text(`+${fmtCur(totalIng)}`, w - margin, y, { align: "right" });
+      pdf.setTextColor(0, 0, 0);
+      y += 5;
+      // Desglose de ingresos por método (inline, fontSize chico)
+      pdf.setFont("helvetica", "normal");
+      pdf.setFontSize(8);
+      pdf.setTextColor(110);
+      const ingMetodos = Object.entries(ingPorMetodo).sort((a, b) => b[1] - a[1]);
+      if (ingMetodos.length > 0) {
+        const ingLine = ingMetodos.map(([k, v]) => `${k}: ${fmtCur(v)}`).join("  -  ");
+        pdf.text(ingLine, colDesc + 4, y);
+        y += 5;
+      }
+      pdf.setTextColor(0, 0, 0);
+      pdf.setFontSize(9);
+      pdf.setFont("helvetica", "bold");
+      pdf.text("Total egresos:", colDesc, y);
+      pdf.setTextColor(220, 38, 38);
+      pdf.text(`-${fmtCur(totalEgr)}`, w - margin, y, { align: "right" });
+      pdf.setTextColor(0, 0, 0);
+      y += 5;
     }
 
     // Footer
@@ -1365,6 +1895,8 @@ export default function CajaPage() {
           openHistDetail={openHistDetail}
           setHistDetail={setHistDetail}
           exportTurnoPDF={exportTurnoPDF}
+          cuentasMaster={cajaCuentasBancarias}
+          histCobroItems={histCobroItems}
         />
       </div>
     );
@@ -2242,6 +2774,8 @@ export default function CajaPage() {
         openHistDetail={openHistDetail}
         setHistDetail={setHistDetail}
         exportTurnoPDF={exportTurnoPDF}
+        cuentasMaster={cajaCuentasBancarias}
+        histCobroItems={histCobroItems}
       />
 
       {/* ─── Cerrar Turno Dialog ─── */}

@@ -556,11 +556,11 @@ export default function NotaCreditoPage() {
       });
     }
 
-    // Actualizar total de la venta origen recalculando con recargo/descuento
+    // Actualizar total + montos de la venta origen para que queden consistentes con la NC
     if (origenId && origenId !== "none") {
       const { data: ventaOrigenFull } = await supabase
         .from("ventas")
-        .select("total, subtotal, recargo_porcentaje, descuento_porcentaje")
+        .select("total, subtotal, recargo_porcentaje, descuento_porcentaje, monto_pagado, monto_efectivo, monto_transferencia, monto_cuenta_corriente")
         .eq("id", origenId)
         .single();
 
@@ -579,9 +579,32 @@ export default function NotaCreditoPage() {
 
         const nuevoTotal = Math.max(0, baseNeta + recargo);
 
+        // Ajustar campos de método según cómo se devolvió la plata.
+        // Mantiene la invariante: monto_efectivo + monto_transferencia + monto_cuenta_corriente ≈ total
+        const ncAmount = total;
+        const updateOrigen: Record<string, any> = { total: nuevoTotal };
+        const ef = Number(ventaOrigenFull.monto_efectivo || 0);
+        const tr = Number(ventaOrigenFull.monto_transferencia || 0);
+        const cc = Number(ventaOrigenFull.monto_cuenta_corriente || 0);
+        const pag = Number(ventaOrigenFull.monto_pagado || 0);
+
+        if (metodoDev === "Efectivo") {
+          // Cliente recibió efectivo de vuelta → reduce el efvo cobrado
+          updateOrigen.monto_efectivo = Math.max(0, ef - ncAmount);
+          updateOrigen.monto_pagado = Math.max(0, pag - ncAmount);
+        } else if (metodoDev === "Transferencia") {
+          updateOrigen.monto_transferencia = Math.max(0, tr - ncAmount);
+          updateOrigen.monto_pagado = Math.max(0, pag - ncAmount);
+        } else if (metodoDev === "Cuenta Corriente") {
+          // La deuda CC del cliente se reduce — pero el monto_cuenta_corriente
+          // de esta venta refleja deuda generada por ESTA venta. Reducirla.
+          updateOrigen.monto_cuenta_corriente = Math.max(0, cc - ncAmount);
+          // monto_pagado NO se reduce (no se devolvió plata, solo se redujo la deuda)
+        }
+
         await supabase
           .from("ventas")
-          .update({ total: nuevoTotal })
+          .update(updateOrigen)
           .eq("id", origenId);
       }
     }

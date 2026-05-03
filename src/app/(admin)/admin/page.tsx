@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback, lazy, Suspense } from "react";
 import { supabase } from "@/lib/supabase";
+import { createCobroRecibo } from "@/lib/cobros";
 import { showAdminToast } from "@/components/admin-toast";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -877,10 +878,64 @@ export default function DashboardPage() {
 
       if (entries.length > 0) await supabase.from("caja_movimientos").insert(entries);
 
-      // Update forma_pago + monto_pagado + cuenta_transferencia_alias on the venta
+      // Generar recibos formales por cada porción cobrada (efvo / transf)
+      if (clienteId && totalCobrado > 0) {
+        const cuentaId = cobroCuentaBancaria
+          ? (deliveryCuentasBancarias.find((c: any) => c.nombre === cobroCuentaBancaria)?.id || null)
+          : null;
+        if (metodo === "Mixto") {
+          const efAmt = cobroMixtoEf || 0;
+          const trAmt = (cobroMixtoTr || 0) + surchargeAmount;
+          if (efAmt > 0) {
+            await createCobroRecibo({
+              clienteId, monto: efAmt, formaPago: "Efectivo",
+              fecha: hoy, hora, cuentaBancariaId: null,
+              observacion: `Cobro entrega #${venta.numero}`,
+              allocations: [{ venta_id: venta.id, monto_aplicado: efAmt }],
+            });
+          }
+          if (trAmt > 0) {
+            await createCobroRecibo({
+              clienteId, monto: trAmt, formaPago: "Transferencia",
+              fecha: hoy, hora, cuentaBancariaId: cuentaId,
+              observacion: `Cobro entrega #${venta.numero}`,
+              allocations: [{ venta_id: venta.id, monto_aplicado: trAmt }],
+            });
+          }
+        } else if (metodo === "Efectivo" || metodo === "Transferencia") {
+          const monto = metodo === "Transferencia" ? totalCobrado + surchargeAmount : totalCobrado;
+          await createCobroRecibo({
+            clienteId, monto, formaPago: metodo,
+            fecha: hoy, hora, cuentaBancariaId: metodo === "Transferencia" ? cuentaId : null,
+            observacion: `Cobro entrega #${venta.numero}`,
+            allocations: [{ venta_id: venta.id, monto_aplicado: monto }],
+          });
+        }
+      }
+
+      // Update forma_pago + montos por método + monto_pagado + cuenta_transferencia_alias.
+      // IMPORTANTE: si la venta nació con otro método (ej. Efectivo) y se cobró con
+      // otro al entregar, hay que pisar los campos viejos para que queden coherentes
+      // con el caja_movimiento real.
       const ventaUpdate: Record<string, any> = { forma_pago: metodo };
-      if (totalCobrado > 0) {
+      if (metodo === "Mixto") {
+        const efAmt = cobroMixtoEf || 0;
+        const trAmt = (cobroMixtoTr || 0) + surchargeAmount;
+        ventaUpdate.monto_efectivo = efAmt;
+        ventaUpdate.monto_transferencia = trAmt;
+        ventaUpdate.monto_pagado = efAmt + trAmt;
+      } else if (metodo === "Transferencia") {
+        ventaUpdate.monto_efectivo = 0;
+        ventaUpdate.monto_transferencia = totalCobrado + surchargeAmount;
+        ventaUpdate.monto_pagado = totalCobrado + surchargeAmount;
+      } else if (metodo === "Efectivo") {
+        ventaUpdate.monto_efectivo = totalCobrado;
+        ventaUpdate.monto_transferencia = 0;
         ventaUpdate.monto_pagado = totalCobrado;
+      } else if (metodo === "Cuenta Corriente") {
+        ventaUpdate.monto_efectivo = 0;
+        ventaUpdate.monto_transferencia = 0;
+        // monto_pagado se mantiene en 0 (todo a deuda)
       }
       if ((metodo === "Transferencia" || metodo === "Mixto") && cobroCuentaBancaria) {
         ventaUpdate.cuenta_transferencia_alias = cobroCuentaBancaria;
