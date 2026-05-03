@@ -25,6 +25,7 @@ interface Descuento {
 }
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
+import { revalidateTienda } from "@/lib/revalidate-tienda";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -311,6 +312,7 @@ export default function EditarPreciosPage() {
     }
     setSaving(false);
     setRoundOpen(false);
+    revalidateTienda();
 
     const savedInfo = roundPreview.map((item) => {
       const prod = productos.find((p) => p.id === item.id);
@@ -725,6 +727,7 @@ export default function EditarPreciosPage() {
 
       setPriceChanges({});
       setCostoChanges({});
+      revalidateTienda();
 
       // Show post-save dialog
       if (savedInfo.length > 0) {
@@ -1010,6 +1013,7 @@ export default function EditarPreciosPage() {
 
       setMassEditOpen(false);
       setMassAmount("");
+      revalidateTienda();
 
       const savedInfo = massEditPreview.map((item) => {
         const prod = productos.find((p) => p.id === item.id);
@@ -1039,6 +1043,7 @@ export default function EditarPreciosPage() {
       );
       setVisibilityOpen(false);
       setSelectedIds(new Set());
+      revalidateTienda();
     } catch (err) {
       console.error("Error toggling visibility:", err);
     } finally {

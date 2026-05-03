@@ -1,8 +1,7 @@
 import { createServerSupabase } from "@/lib/supabase-server";
+import { unstable_cache } from "next/cache";
 import { notFound } from "next/navigation";
 import ProductoClient from "./producto-client";
-
-export const revalidate = 60;
 
 async function resolveProductId(slug: string): Promise<string | null> {
   const supabase = createServerSupabase();
@@ -20,13 +19,8 @@ async function resolveProductId(slug: string): Promise<string | null> {
   return null;
 }
 
-export default async function ProductoPage({ params }: { params: Promise<{ slug: string }> }) {
+const fetchProductoData = unstable_cache(async (productId: string) => {
   const supabase = createServerSupabase();
-  const { slug } = await params;
-
-  const productId = await resolveProductId(slug);
-  if (!productId) notFound();
-
   const today = new Date().toISOString().split("T")[0];
 
   // Todas las queries en paralelo desde el servidor
@@ -52,7 +46,7 @@ export default async function ProductoPage({ params }: { params: Promise<{ slug:
       .lte("fecha_inicio", today),
   ]);
 
-  if (!prod) notFound();
+  if (!prod) return null;
 
   const activeDiscounts = (discountsRaw || []).filter((d: any) => !d.fecha_fin || d.fecha_fin >= today);
 
@@ -138,15 +132,34 @@ export default async function ProductoPage({ params }: { params: Promise<{ slug:
     }
   }
 
+  return {
+    prod,
+    pres: pres || [],
+    comboComponentes,
+    related,
+    relPresMap,
+    activeDiscounts,
+    reingresoIds,
+  };
+}, ["tienda-producto"], { tags: ["productos"], revalidate: 300 });
+
+export default async function ProductoPage({ params }: { params: Promise<{ slug: string }> }) {
+  const { slug } = await params;
+  const productId = await resolveProductId(slug);
+  if (!productId) notFound();
+
+  const data = await fetchProductoData(productId);
+  if (!data) notFound();
+
   return (
     <ProductoClient
-      producto={prod as any}
-      presentaciones={pres || []}
-      comboComponentes={comboComponentes}
-      relacionados={related}
-      relPresentaciones={relPresMap}
-      activeDiscounts={activeDiscounts}
-      reingresoIds={reingresoIds}
+      producto={data.prod as any}
+      presentaciones={data.pres}
+      comboComponentes={data.comboComponentes}
+      relacionados={data.related}
+      relPresentaciones={data.relPresMap}
+      activeDiscounts={data.activeDiscounts}
+      reingresoIds={data.reingresoIds}
     />
   );
 }

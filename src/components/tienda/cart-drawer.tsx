@@ -208,7 +208,7 @@ function CartDrawer() {
 
   const [showClearConfirm, setShowClearConfirm] = useState(false);
 
-  // Fetch stock for products in cart (refreshes every 15s while open)
+  // Fetch stock for products in cart (refreshes every 60s while open)
   const [stockMap, setStockMap] = useState<Record<string, number>>({});
   useEffect(() => {
     if (!isOpen || items.length === 0) return;
@@ -227,8 +227,7 @@ function CartDrawer() {
         });
     };
     fetchStock();
-    // Refresh stock every 15 seconds while drawer is open
-    const interval = setInterval(fetchStock, 15000);
+    const interval = setInterval(fetchStock, 60000);
     return () => clearInterval(interval);
   }, [isOpen, items]);
 

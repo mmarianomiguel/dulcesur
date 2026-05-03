@@ -1,4 +1,5 @@
 import { supabase } from "@/lib/supabase";
+import { revalidateTienda } from "@/lib/revalidate-tienda";
 import type { Producto, Categoria } from "@/types/database";
 import { BaseService } from "./base";
 
@@ -32,6 +33,7 @@ class ProductoService extends BaseService<Producto> {
   async updatePrecio(id: string, precio: number): Promise<void> {
     const { error } = await supabase.from(this.table).update({ precio }).eq("id", id);
     if (error) { console.error("Error actualizando precio:", error); throw error; }
+    revalidateTienda();
   }
 
   async bulkUpdatePrecios(updates: { id: string; precio: number }[]): Promise<void> {
@@ -43,6 +45,7 @@ class ProductoService extends BaseService<Producto> {
       console.error("Errores actualizando precios:", failed.map((f) => f.error));
       throw new Error(`${failed.length} precio(s) no se pudieron actualizar`);
     }
+    revalidateTienda();
   }
 
   async getLowStock(): Promise<Producto[]> {

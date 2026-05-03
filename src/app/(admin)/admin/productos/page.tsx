@@ -5,6 +5,7 @@ import { todayARG, formatCurrency, formatRelativeDate } from "@/lib/formatters";
 import { norm } from "@/lib/utils";
 import { buildStockUpdate } from "@/lib/stock-utils";
 import { supabase } from "@/lib/supabase";
+import { revalidateTienda } from "@/lib/revalidate-tienda";
 import type { Producto, Categoria } from "@/types/database";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -1018,6 +1019,7 @@ export default function ProductosPage() {
         // New product — need refetch to get the generated ID and relations
         fetchProducts();
       }
+      revalidateTienda();
       showAdminToast("Producto guardado correctamente", "success");
     } catch (err: any) {
       showAdminToast(err.message || "Error al guardar producto", "error");
@@ -1036,6 +1038,7 @@ export default function ProductosPage() {
     try {
       await supabase.from("productos").update({ activo: false, visibilidad: "oculto" }).eq("id", deleteTarget.id);
       setProducts((prev) => prev.filter((p) => p.id !== deleteTarget.id));
+      revalidateTienda();
       showAdminToast("Producto eliminado correctamente", "success");
     } catch (err: any) {
       showAdminToast(err.message || "Error al eliminar producto", "error");
@@ -1528,6 +1531,7 @@ export default function ProductosPage() {
       }
 
       setImportResult({ total: rows.length, imported, updated, skipped, updatedDetails, failed });
+      revalidateTienda();
       await fetchProducts();
       await fetchCategories();
       await fetchSubcategories();
@@ -2005,6 +2009,7 @@ export default function ProductosPage() {
       setMassEditOpen(false);
       setMassAmount("");
       setPriceOverrides({});
+      revalidateTienda();
       showAdminToast(`Se actualizaron ${massEditPreview.length} producto${massEditPreview.length !== 1 ? "s" : ""}`, "success");
     } catch (err) {
       console.error("Error applying mass edit:", err);
@@ -2025,6 +2030,7 @@ export default function ProductosPage() {
       }
       const idSet = new Set(ids);
       setProducts((prev) => prev.map((p) => (idSet.has(p.id) ? ({ ...p, visibilidad: newValue } as any) : p)));
+      revalidateTienda();
       showAdminToast(
         newValue === "visible"
           ? `${selected.size} producto${selected.size > 1 ? "s" : ""} visible${selected.size > 1 ? "s" : ""} en la tienda`
@@ -2050,6 +2056,7 @@ export default function ProductosPage() {
       }
       const deletedIds = new Set(ids);
       setProducts((prev) => prev.filter((p) => !deletedIds.has(p.id)));
+      revalidateTienda();
       showAdminToast(`${selected.size} producto${selected.size > 1 ? "s" : ""} eliminado${selected.size > 1 ? "s" : ""}`, "success");
       setSelected(new Set());
     } catch (err: any) {

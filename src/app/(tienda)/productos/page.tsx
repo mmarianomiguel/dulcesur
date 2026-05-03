@@ -1,13 +1,11 @@
 import { createServerSupabase } from "@/lib/supabase-server";
+import { unstable_cache } from "next/cache";
 import ProductosPage from "./productos-client";
 import type { InitialProductosData, Categoria, Subcategoria, Marca, Producto } from "./productos-client";
 
-// Revalidate every 60 seconds — keeps data fresh while allowing SSR cache
-export const revalidate = 60;
-
 const PER_PAGE = 12;
 
-export default async function ProductosServerPage() {
+const fetchProductosData = unstable_cache(async (): Promise<InitialProductosData> => {
   const supabase = createServerSupabase();
   const today = new Date().toISOString().split("T")[0];
 
@@ -135,5 +133,10 @@ export default async function ProductosServerPage() {
     reingresoIds,
   };
 
+  return initialData;
+}, ["tienda-productos"], { tags: ["productos"], revalidate: 300 });
+
+export default async function ProductosServerPage() {
+  const initialData = await fetchProductosData();
   return <ProductosPage initialData={initialData} />;
 }

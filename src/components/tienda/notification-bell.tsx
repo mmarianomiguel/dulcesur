@@ -52,7 +52,7 @@ export default function NotificationBell({ clienteId }: { clienteId: number }) {
 
   useEffect(() => {
     fetchNotifs();
-    const interval = setInterval(fetchNotifs, 60000);
+    const interval = setInterval(fetchNotifs, 300000);
     return () => clearInterval(interval);
   }, [fetchNotifs]);
 

@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback, useRef, useMemo } from "react";
 import { supabase } from "@/lib/supabase";
+import { revalidateTienda } from "@/lib/revalidate-tienda";
 import { showAdminToast } from "@/components/admin-toast";
 import { todayARG, nowTimeARG, formatCurrency } from "@/lib/formatters";
 import { Card, CardContent } from "@/components/ui/card";
@@ -781,6 +782,7 @@ export default function NuevaCompra({
       }
 
       setSaving(false);
+      revalidateTienda();
 
       if (preciosActualizados.length > 0) {
         setPreciosModificados(preciosActualizados);
@@ -821,6 +823,7 @@ export default function NuevaCompra({
   const handleMakeVisible = async (productIds: string[]) => {
     if (productIds.length === 0) return;
     await supabase.from("productos").update({ visibilidad: "visible" }).in("id", productIds);
+    revalidateTienda();
     showAdminToast(`${productIds.length} producto(s) ahora visibles en la tienda`, "success");
     setShowVisibilidadDialog(false);
     setProductosOcultos([]);

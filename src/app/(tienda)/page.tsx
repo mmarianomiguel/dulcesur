@@ -1,10 +1,8 @@
 import { createServerSupabase } from "@/lib/supabase-server";
+import { unstable_cache } from "next/cache";
 import HomeClient from "./home-client";
 
-// Revalidate every 60 seconds — keeps content fresh while serving cached HTML
-export const revalidate = 60;
-
-export default async function TiendaHomePage() {
+const fetchHomeData = unstable_cache(async () => {
   const supabase = createServerSupabase();
 
   // 1. Fetch blocks + config + programaciones de hero activas en paralelo.
@@ -591,23 +589,44 @@ export default async function TiendaHomePage() {
     }
   }
 
+  return {
+    blocks,
+    categorias,
+    productos,
+    presMap,
+    diasNuevo,
+    aumentos,
+    masVendidosData: masVendidosData || [],
+    ultimasUnidadesData: ultimasUnidadesData || [],
+    topVendidosProds,
+    topPresMap,
+    nuevosIngresos,
+    reingresos,
+    productosOferta,
+    descRows: descRows || [],
+    heroSlides,
+  };
+}, ["tienda-home"], { tags: ["productos"], revalidate: 300 });
+
+export default async function TiendaHomePage() {
+  const data = await fetchHomeData();
   return (
     <HomeClient
-      initialBloques={blocks}
-      initialCategorias={categorias}
-      initialProductos={productos}
-      initialPresMap={presMap}
-      initialDiasNuevo={diasNuevo}
-      initialAumentos={aumentos}
-      initialMasVendidos={masVendidosData || []}
-      initialUltimasUnidades={ultimasUnidadesData || []}
-      initialTopVendidos={topVendidosProds}
-      initialTopPresMap={topPresMap}
-      initialNuevosIngresos={nuevosIngresos}
-      initialReingresos={reingresos}
-      initialOfertas={productosOferta}
-      initialActiveDiscounts={descRows || []}
-      initialHeroSlides={heroSlides}
+      initialBloques={data.blocks}
+      initialCategorias={data.categorias}
+      initialProductos={data.productos}
+      initialPresMap={data.presMap}
+      initialDiasNuevo={data.diasNuevo}
+      initialAumentos={data.aumentos}
+      initialMasVendidos={data.masVendidosData}
+      initialUltimasUnidades={data.ultimasUnidadesData}
+      initialTopVendidos={data.topVendidosProds}
+      initialTopPresMap={data.topPresMap}
+      initialNuevosIngresos={data.nuevosIngresos}
+      initialReingresos={data.reingresos}
+      initialOfertas={data.productosOferta}
+      initialActiveDiscounts={data.descRows}
+      initialHeroSlides={data.heroSlides}
     />
   );
 }
