@@ -149,7 +149,7 @@ export function PedidoCard({ pedido, session, onUpdateEstado }: PedidoCardProps)
             <span className="font-bold text-gray-900 text-[15px] truncate">
               {clienteNombre}
             </span>
-            <span className="font-extrabold text-[#FF2D6B] text-[15px] shrink-0">
+            <span className="font-extrabold text-primary text-[15px] shrink-0">
               {formatCurrency(pedido.total)}
             </span>
           </div>
@@ -162,7 +162,7 @@ export function PedidoCard({ pedido, session, onUpdateEstado }: PedidoCardProps)
               {entregaLabel}
             </span>
             {armado?.urgente && (
-              <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-[#FFF3CD] text-[#7A5200] animate-pulse">
+              <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 animate-pulse">
                 🔥 URGENTE
               </span>
             )}
@@ -195,15 +195,15 @@ export function PedidoCard({ pedido, session, onUpdateEstado }: PedidoCardProps)
             <div className="mt-3">
               <div className="h-1 bg-gray-200 rounded-full overflow-hidden">
                 <div
-                  className="h-full bg-[#FF2D6B] rounded-full transition-all"
+                  className="h-full bg-primary rounded-full transition-all"
                   style={{ width: `${pct}%` }}
                 />
               </div>
               <div className="flex justify-between mt-1">
-                <span className="text-[10px] text-[#6B7080] font-medium">
+                <span className="text-[10px] text-muted-foreground font-medium">
                   {pct === 100 ? "Todo listo ✓" : `${marcados} de ${total} marcados`}
                 </span>
-                <span className="text-[10px] text-[#6B7080] font-medium">{pct}%</span>
+                <span className="text-[10px] text-muted-foreground font-medium">{pct}%</span>
               </div>
             </div>
           )}
@@ -226,7 +226,7 @@ export function PedidoCard({ pedido, session, onUpdateEstado }: PedidoCardProps)
             )}
 
             <div className="px-4 py-3">
-              <p className="text-[10px] font-bold text-[#6B7080] uppercase tracking-wider mb-2">
+              <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider mb-2">
                 Productos a armar
               </p>
 
@@ -262,7 +262,7 @@ export function PedidoCard({ pedido, session, onUpdateEstado }: PedidoCardProps)
                               setChecked(next);
                             }}
                             className={`w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0 mt-0.5 transition-all ${
-                              isChecked ? "bg-[#FF2D6B]" : "bg-[#F4F4F6] border-[1.5px] border-gray-300"
+                              isChecked ? "bg-primary" : "bg-muted/30 border-[1.5px] border-gray-300"
                             }`}
                           >
                             {isChecked && (
@@ -303,7 +303,7 @@ export function PedidoCard({ pedido, session, onUpdateEstado }: PedidoCardProps)
                               if (next.has(i)) next.delete(i); else next.add(i);
                               setComboExpanded(next);
                             }}
-                            className="flex items-center gap-1 text-[10px] text-[#006080] font-semibold mt-2 ml-10"
+                            className="flex items-center gap-1 text-[10px] text-sky-700 font-semibold mt-2 ml-10"
                           >
                             <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
                               {isComboExp ? <polyline points="18 15 12 9 6 15"/> : <polyline points="6 9 12 15 18 9"/>}
@@ -311,10 +311,10 @@ export function PedidoCard({ pedido, session, onUpdateEstado }: PedidoCardProps)
                             {isComboExp ? "Ocultar" : "Ver contenido"}
                           </button>
                           {isComboExp && (
-                            <div className="ml-10 mt-2 bg-[#B3EFFF] rounded-xl border border-[#00BFFF]/20 px-3 py-2">
+                            <div className="ml-10 mt-2 bg-sky-100 rounded-xl border border-sky-400/20 px-3 py-2">
                               {(item as any).combo_items.map((ci: any, ci_i: number) => (
-                                <div key={ci_i} className="flex items-center gap-2 py-1 text-[11px] text-[#006080]">
-                                  <div className="w-1.5 h-1.5 rounded-full bg-[#FF2D6B] shrink-0" />
+                                <div key={ci_i} className="flex items-center gap-2 py-1 text-[11px] text-sky-700">
+                                  <div className="w-1.5 h-1.5 rounded-full bg-primary shrink-0" />
                                   {ci.cantidad}× {ci.nombre}
                                 </div>
                               ))}
@@ -354,14 +354,14 @@ export function PedidoCard({ pedido, session, onUpdateEstado }: PedidoCardProps)
               <button
                 onClick={() => setConfirmSoltar(true)}
                 disabled={saving}
-                className="h-12 flex-1 rounded-2xl bg-[#F4F4F6] border border-gray-200 text-gray-500 font-bold text-[13px] flex items-center justify-center gap-2 active:scale-95 transition-all"
+                className="h-12 flex-1 rounded-2xl bg-muted/30 border border-gray-200 text-gray-500 font-bold text-[13px] flex items-center justify-center gap-2 active:scale-95 transition-all"
               >
                 Soltar
               </button>
               <button
                 onClick={() => setModalOpen(true)}
                 disabled={saving}
-                className="h-12 flex-[2] rounded-2xl bg-[#00BFFF] text-white font-bold text-[13px] flex items-center justify-center gap-2 active:scale-95 transition-all"
+                className="h-12 flex-[2] rounded-2xl bg-sky-400 text-white font-bold text-[13px] flex items-center justify-center gap-2 active:scale-95 transition-all"
               >
                 Marcar como armado
               </button>
@@ -373,7 +373,7 @@ export function PedidoCard({ pedido, session, onUpdateEstado }: PedidoCardProps)
             </div>
           )}
           {estado === "listo" && (
-            <div className="h-10 rounded-2xl bg-[#D4F5E2] text-[#1A7A45] font-semibold text-[13px] flex items-center justify-center">
+            <div className="h-10 rounded-2xl bg-emerald-100 text-emerald-700 font-semibold text-[13px] flex items-center justify-center">
               ✓ Listo
             </div>
           )}
@@ -381,7 +381,7 @@ export function PedidoCard({ pedido, session, onUpdateEstado }: PedidoCardProps)
             <button
               onClick={handleAprobar}
               disabled={saving}
-              className="h-12 rounded-2xl bg-[#FF2D6B] text-white font-bold text-[13px] flex items-center justify-center gap-2 active:scale-95 transition-all shadow-lg shadow-[#FF2D6B]/20 disabled:opacity-50"
+              className="h-12 rounded-2xl bg-primary text-white font-bold text-[13px] flex items-center justify-center gap-2 active:scale-95 transition-all shadow-lg shadow-[#FF2D6B]/20 disabled:opacity-50"
             >
               {saving ? (
                 <Loader2 className="w-4 h-4 animate-spin" />
@@ -411,7 +411,7 @@ export function PedidoCard({ pedido, session, onUpdateEstado }: PedidoCardProps)
             <div className="grid grid-cols-2 gap-3 pt-2">
               <button
                 onClick={() => setConfirmSoltar(false)}
-                className="h-12 rounded-2xl bg-[#F4F4F6] border border-gray-200 text-gray-500 font-bold text-[13px]"
+                className="h-12 rounded-2xl bg-muted/30 border border-gray-200 text-gray-500 font-bold text-[13px]"
               >
                 Cancelar
               </button>
@@ -446,7 +446,7 @@ export function PedidoCard({ pedido, session, onUpdateEstado }: PedidoCardProps)
             {/* Items sin marcar */}
             {sinMarcar.length > 0 && (
               <div className="mb-4">
-                <p className="text-[10px] font-bold text-[#6B7080] uppercase tracking-wider mb-2">
+                <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider mb-2">
                   Items sin marcar
                 </p>
                 <div className="bg-amber-50 border border-amber-200 rounded-2xl px-3 py-3 flex gap-2">
@@ -469,30 +469,30 @@ export function PedidoCard({ pedido, session, onUpdateEstado }: PedidoCardProps)
             )}
 
             {/* Observaciones */}
-            <p className="text-[10px] font-bold text-[#6B7080] uppercase tracking-wider mb-2">
+            <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider mb-2">
               Observaciones del armado
             </p>
             <textarea
               value={notas}
               onChange={(e) => setNotas(e.target.value)}
               placeholder="Ej: lácteos se agregan al cargar, falta 1 unidad..."
-              className="w-full h-20 border border-gray-200 rounded-2xl px-4 py-3 text-[13px] text-gray-800 resize-none bg-[#F4F4F6] placeholder:text-gray-400 focus:outline-none focus:border-[#FF2D6B]"
+              className="w-full h-20 border border-gray-200 rounded-2xl px-4 py-3 text-[13px] text-gray-800 resize-none bg-muted/30 placeholder:text-gray-400 focus:outline-none focus:border-primary"
             />
-            <p className="text-[10px] text-[#6B7080] mt-2 mb-5">
+            <p className="text-[10px] text-muted-foreground mt-2 mb-5">
               Opcional · el admin lo verá al controlar
             </p>
 
             <div className="grid grid-cols-2 gap-3">
               <button
                 onClick={() => setModalOpen(false)}
-                className="h-14 rounded-2xl bg-[#F4F4F6] border border-gray-200 text-gray-500 font-bold text-[14px]"
+                className="h-14 rounded-2xl bg-muted/30 border border-gray-200 text-gray-500 font-bold text-[14px]"
               >
                 Cancelar
               </button>
               <button
                 onClick={handleConfirmarArmado}
                 disabled={saving}
-                className="h-14 rounded-2xl bg-[#FF2D6B] text-white font-bold text-[14px] flex items-center justify-center gap-2 shadow-lg shadow-[#FF2D6B]/20 active:scale-95 transition-all disabled:opacity-50"
+                className="h-14 rounded-2xl bg-primary text-white font-bold text-[14px] flex items-center justify-center gap-2 shadow-lg shadow-[#FF2D6B]/20 active:scale-95 transition-all disabled:opacity-50"
               >
                 {saving ? (
                   <Loader2 className="w-5 h-5 animate-spin" />

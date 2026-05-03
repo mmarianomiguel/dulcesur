@@ -63,10 +63,10 @@ function formatHora(dateStr: string): string {
 type Estado = "pendiente" | "armando" | "armado" | "listo";
 
 const estadoBadge: Record<Estado, string> = {
-  pendiente: "bg-[#FFE0EC] text-[#99003D]",
-  armando: "bg-[#B3EFFF] text-[#006080]",
-  armado: "bg-[#B3EFFF] text-[#006080]",
-  listo: "bg-[#D4F5E2] text-[#1A7A45]",
+  pendiente: "bg-primary/10 text-primary",
+  armando: "bg-sky-100 text-sky-700",
+  armado: "bg-sky-100 text-sky-700",
+  listo: "bg-emerald-100 text-emerald-700",
 };
 
 const estadoLabel: Record<Estado, string> = {
@@ -415,22 +415,22 @@ export function SupervisionTab() {
         <StatCard
           label="Total del día"
           value={stats.total}
-          valueColor="text-[#12131A]"
+          valueColor="text-foreground"
         />
         <StatCard
           label="Pendientes"
           value={stats.pendientes}
-          valueColor="text-[#99003D]"
+          valueColor="text-primary"
         />
         <StatCard
           label="En proceso"
           value={stats.enProceso}
-          valueColor="text-[#006080]"
+          valueColor="text-sky-700"
         />
         <StatCard
           label="Listos"
           value={stats.listos}
-          valueColor="text-[#1A7A45]"
+          valueColor="text-emerald-700"
         />
       </div>
 
@@ -438,19 +438,19 @@ export function SupervisionTab() {
       <div className="h-1.5 rounded-full bg-gray-100 overflow-hidden flex">
         {stats.listos > 0 && (
           <div
-            className="bg-[#FF2D6B] transition-all"
+            className="bg-primary transition-all"
             style={{ width: `${progressPct(stats.listos)}%` }}
           />
         )}
         {stats.enProceso > 0 && (
           <div
-            className="bg-[#00BFFF] transition-all"
+            className="bg-sky-400 transition-all"
             style={{ width: `${progressPct(stats.enProceso)}%` }}
           />
         )}
         {stats.pendientes > 0 && (
           <div
-            className="bg-[#FAC775] transition-all"
+            className="bg-amber-300 transition-all"
             style={{ width: `${progressPct(stats.pendientes)}%` }}
           />
         )}
@@ -462,8 +462,8 @@ export function SupervisionTab() {
           onClick={() => setEntregaFilter(entregaFilter === "envio" ? "todos" : "envio")}
           className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium transition-all ${
             entregaFilter === "envio"
-              ? "bg-[#FF2D6B] text-white"
-              : "bg-white border border-gray-200 text-[#6B7080] hover:border-[#FF2D6B] hover:text-[#FF2D6B]"
+              ? "bg-primary text-white"
+              : "bg-white border border-gray-200 text-muted-foreground hover:border-primary hover:text-primary"
           }`}
         >
           <Truck className="w-4 h-4" />
@@ -482,8 +482,8 @@ export function SupervisionTab() {
           onClick={() => setEntregaFilter(entregaFilter === "retiro" ? "todos" : "retiro")}
           className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium transition-all ${
             entregaFilter === "retiro"
-              ? "bg-[#FF2D6B] text-white"
-              : "bg-white border border-gray-200 text-[#6B7080] hover:border-[#FF2D6B] hover:text-[#FF2D6B]"
+              ? "bg-primary text-white"
+              : "bg-white border border-gray-200 text-muted-foreground hover:border-primary hover:text-primary"
           }`}
         >
           <ShoppingBag className="w-4 h-4" />
@@ -506,20 +506,20 @@ export function SupervisionTab() {
           const isActive = activeEstado === tab;
           const tabColors: Record<Estado, { active: string; inactive: string }> = {
             pendiente: {
-              active: "bg-[#FFE0EC] text-[#99003D] border border-[#FF2D6B]",
-              inactive: "bg-white border border-gray-200 text-[#6B7080]",
+              active: "bg-primary/10 text-primary border border-primary",
+              inactive: "bg-white border border-gray-200 text-muted-foreground",
             },
             armando: {
-              active: "bg-[#B3EFFF] text-[#006080] border border-[#00BFFF]",
-              inactive: "bg-white border border-gray-200 text-[#6B7080]",
+              active: "bg-sky-100 text-sky-700 border border-sky-400",
+              inactive: "bg-white border border-gray-200 text-muted-foreground",
             },
             armado: {
-              active: "bg-[#B3EFFF] text-[#006080] border border-[#00BFFF]",
-              inactive: "bg-white border border-gray-200 text-[#6B7080]",
+              active: "bg-sky-100 text-sky-700 border border-sky-400",
+              inactive: "bg-white border border-gray-200 text-muted-foreground",
             },
             listo: {
-              active: "bg-[#D4F5E2] text-[#1A7A45] border border-[#1A7A45]",
-              inactive: "bg-white border border-gray-200 text-[#6B7080]",
+              active: "bg-emerald-100 text-emerald-700 border border-emerald-700",
+              inactive: "bg-white border border-gray-200 text-muted-foreground",
             },
           };
 
@@ -600,7 +600,7 @@ export function SupervisionTab() {
                         </span>
                         {/* Urgente badge */}
                         {pa?.urgente && (
-                          <span className="text-xs px-2 py-1 rounded-full font-medium bg-[#FFF3CD] text-[#7A5200]">
+                          <span className="text-xs px-2 py-1 rounded-full font-medium bg-amber-100 text-amber-700">
                             Urgente
                           </span>
                         )}
@@ -615,7 +615,7 @@ export function SupervisionTab() {
                           <button
                             onClick={() => handleToggleUrgente(p.id, pa?.urgente ?? false)}
                             disabled={actionLoading === p.id}
-                            className="text-xs px-2 py-1 rounded-full font-medium disabled:opacity-50 bg-[#FFF3CD] text-[#7A5200]"
+                            className="text-xs px-2 py-1 rounded-full font-medium disabled:opacity-50 bg-amber-100 text-amber-700"
                           >
                             {pa?.urgente ? "Quitar urgente" : "Urgente"}
                           </button>
@@ -628,7 +628,7 @@ export function SupervisionTab() {
                       <div className="flex items-center gap-3 text-xs">
                         {pa?.armador_nombre && (
                           <div className="flex items-center gap-1.5">
-                            <div className="w-5 h-5 rounded-full bg-[#FFE0EC] text-[#99003D] flex items-center justify-center font-bold text-[10px] shrink-0">
+                            <div className="w-5 h-5 rounded-full bg-primary/10 text-primary flex items-center justify-center font-bold text-[10px] shrink-0">
                               {pa.armador_nombre.charAt(0).toUpperCase()}
                             </div>
                             <span className="text-gray-600 font-medium">
@@ -658,8 +658,8 @@ export function SupervisionTab() {
 
                     {/* Row 3: time metrics grid */}
                     <div className="grid grid-cols-4 gap-2">
-                      <TimeMetric label="T. Espera" value={estado === "pendiente" ? undefined : formatDuration(tEspera)} liveValue={estado === "pendiente" ? <span className="text-[#99003D]">{formatLiveDuration(p.created_at, tick)}</span> : undefined} />
-                      <TimeMetric label="T. Armado" value={estado === "armando" && pa?.inicio_armado_at ? undefined : formatDuration(tArmado)} liveValue={estado === "armando" && pa?.inicio_armado_at ? <span className="text-[#006080] font-semibold animate-pulse">{formatLiveDuration(pa.inicio_armado_at, tick)}</span> : undefined} />
+                      <TimeMetric label="T. Espera" value={estado === "pendiente" ? undefined : formatDuration(tEspera)} liveValue={estado === "pendiente" ? <span className="text-primary">{formatLiveDuration(p.created_at, tick)}</span> : undefined} />
+                      <TimeMetric label="T. Armado" value={estado === "armando" && pa?.inicio_armado_at ? undefined : formatDuration(tArmado)} liveValue={estado === "armando" && pa?.inicio_armado_at ? <span className="text-sky-700 font-semibold animate-pulse">{formatLiveDuration(pa.inicio_armado_at, tick)}</span> : undefined} />
                       <TimeMetric label="T. Control" value={formatDuration(tControl)} />
                       <TimeMetric label="T. Total" value={formatDuration(tTotal)} bold />
                     </div>
@@ -670,7 +670,7 @@ export function SupervisionTab() {
                         <button
                           onClick={() => handleApprove(p.id)}
                           disabled={actionLoading === p.id}
-                          className="flex-1 flex items-center justify-center gap-1.5 text-xs py-2.5 rounded-xl bg-[#D4F5E2] text-[#1A7A45] font-medium hover:bg-green-100 disabled:opacity-50 transition-colors"
+                          className="flex-1 flex items-center justify-center gap-1.5 text-xs py-2.5 rounded-xl bg-emerald-100 text-emerald-700 font-medium hover:bg-green-100 disabled:opacity-50 transition-colors"
                         >
                           {actionLoading === p.id ? (
                             <Loader2 className="w-3.5 h-3.5 animate-spin" />
@@ -693,7 +693,7 @@ export function SupervisionTab() {
 
                     {/* "Listo" indicator */}
                     {estado === "listo" && (
-                      <div className="flex items-center gap-1.5 text-xs text-[#c94070] font-medium pt-1">
+                      <div className="flex items-center gap-1.5 text-xs text-primary font-medium pt-1">
                         <CheckCircle2 className="w-3.5 h-3.5" />
                         Completado
                       </div>
@@ -722,7 +722,7 @@ export function SupervisionTab() {
 
                   {/* Expanded items list */}
                   {isExpanded && p.venta_items && p.venta_items.length > 0 && (
-                    <div className="border-t border-gray-100 bg-[#fdf5f6]/50">
+                    <div className="border-t border-gray-100 bg-primary/5/50">
                       <div className="divide-y divide-gray-100">
                         {p.venta_items.map((item, idx) => (
                           <div
@@ -778,7 +778,7 @@ export function SupervisionTab() {
                 key={a.nombre}
                 className="bg-white rounded-2xl border border-gray-200 p-4 flex items-center gap-3"
               >
-                <div className="w-10 h-10 rounded-full bg-[#FFE0EC] text-[#99003D] flex items-center justify-center font-bold text-sm shrink-0">
+                <div className="w-10 h-10 rounded-full bg-primary/10 text-primary flex items-center justify-center font-bold text-sm shrink-0">
                   {a.nombre.charAt(0).toUpperCase()}
                 </div>
                 <div className="min-w-0 flex-1">
@@ -818,7 +818,7 @@ export function SupervisionTab() {
               <button
                 onClick={saveOrden}
                 disabled={savingOrden}
-                className="text-xs px-3 py-1.5 rounded-lg bg-[#FF2D6B] text-white font-medium hover:bg-[#E0255E] disabled:opacity-50 flex items-center gap-1.5"
+                className="text-xs px-3 py-1.5 rounded-lg bg-primary text-white font-medium hover:bg-primary/90 disabled:opacity-50 flex items-center gap-1.5"
               >
                 {savingOrden && <Loader2 className="w-3 h-3 animate-spin" />}
                 Guardar orden
@@ -838,12 +838,12 @@ export function SupervisionTab() {
                   dragId === p.id ? "opacity-50 scale-95" : ""
                 } ${
                   dragOverId === p.id && dragId !== p.id
-                    ? "ring-2 ring-[#FF2D6B]"
+                    ? "ring-2 ring-primary"
                     : ""
                 }`}
               >
                 <GripVertical className="w-4 h-4 text-gray-300 shrink-0" />
-                <span className="w-6 h-6 rounded-full bg-[#FFE0EC] text-[#99003D] flex items-center justify-center text-xs font-bold shrink-0">
+                <span className="w-6 h-6 rounded-full bg-primary/10 text-primary flex items-center justify-center text-xs font-bold shrink-0">
                   {idx + 1}
                 </span>
                 <div className="min-w-0 flex-1">
@@ -881,7 +881,7 @@ export function SupervisionTab() {
                 value={rejectMotivo}
                 onChange={(e) => setRejectMotivo(e.target.value)}
                 rows={3}
-                className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#FF2D6B] resize-none"
+                className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary resize-none"
                 placeholder="Describí el motivo del rechazo..."
               />
             </div>
@@ -898,7 +898,7 @@ export function SupervisionTab() {
               <button
                 onClick={handleReject}
                 disabled={actionLoading !== null}
-                className="flex-1 py-2.5 rounded-xl bg-[#FF2D6B] text-white font-medium text-sm flex items-center justify-center gap-1.5 hover:bg-[#E0255E] disabled:opacity-50"
+                className="flex-1 py-2.5 rounded-xl bg-primary text-white font-medium text-sm flex items-center justify-center gap-1.5 hover:bg-primary/90 disabled:opacity-50"
               >
                 {actionLoading && (
                   <Loader2 className="w-4 h-4 animate-spin" />
@@ -922,7 +922,7 @@ function StatCard({ label, value, valueColor }: {
 }) {
   return (
     <div className="bg-white rounded-xl border border-gray-200 p-4">
-      <p className="text-xs text-[#6B7080] mb-1">{label}</p>
+      <p className="text-xs text-muted-foreground mb-1">{label}</p>
       <p className={`text-2xl font-medium ${valueColor}`}>{value}</p>
     </div>
   );
@@ -942,7 +942,7 @@ function TimeMetric({
   liveValue?: React.ReactNode;
 }) {
   return (
-    <div className="bg-[#F4F4F6] rounded-lg px-2 py-1.5 text-center">
+    <div className="bg-muted/30 rounded-lg px-2 py-1.5 text-center">
       <p className="text-[10px] text-gray-400 leading-tight">{label}</p>
       <div
         className={`text-xs mt-0.5 ${

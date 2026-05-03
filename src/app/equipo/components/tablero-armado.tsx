@@ -25,9 +25,9 @@ const ESTADO_LABELS: Record<EstadoTab, string> = {
 
 const TAB_COLORS: Record<EstadoTab, { active: string; inactive: string }> = {
   pendiente: { active: "bg-amber-500 text-white", inactive: "bg-amber-100 text-amber-800" },
-  armando: { active: "bg-[#00BFFF] text-white", inactive: "bg-[#B3EFFF] text-[#006080]" },
-  armado: { active: "bg-[#00BFFF] text-white", inactive: "bg-[#B3EFFF] text-[#006080]" },
-  listo: { active: "bg-[#FF2D6B] text-white", inactive: "bg-[#FFE0EC] text-[#99003D]" },
+  armando: { active: "bg-sky-400 text-white", inactive: "bg-sky-100 text-sky-700" },
+  armado: { active: "bg-sky-400 text-white", inactive: "bg-sky-100 text-sky-700" },
+  listo: { active: "bg-primary text-white", inactive: "bg-primary/10 text-primary" },
 };
 
 export function TableroArmado({ session, onLogout }: TableroArmadoProps) {
@@ -157,7 +157,7 @@ export function TableroArmado({ session, onLogout }: TableroArmadoProps) {
 
   if (loading) {
     return (
-      <div className="flex flex-col items-center justify-center min-h-screen bg-[#12131A]">
+      <div className="flex flex-col items-center justify-center min-h-screen bg-foreground">
         <div className="w-16 h-16 rounded-2xl bg-white/10 border border-white/20 flex items-center justify-center mb-4 overflow-hidden">
           <img
             src="https://res.cloudinary.com/dss3lnovd/image/upload/w_200,h_80,c_fit,q_auto,f_auto/v1775498382/dulcesur/xxzbm0omlakbcgob46ln.png"
@@ -173,18 +173,18 @@ export function TableroArmado({ session, onLogout }: TableroArmadoProps) {
   }
 
   return (
-    <div className="min-h-screen bg-[#F4F4F6]">
+    <div className="min-h-screen bg-muted/30">
       {/* Toast */}
       {toast && (
         <div className={`fixed top-4 left-1/2 -translate-x-1/2 z-50 text-white text-sm px-4 py-2 rounded-full shadow-lg ${
-          toastType === "error" ? "bg-red-500" : toastType === "success" ? "bg-[#FF2D6B]" : "bg-[#12131A]"
+          toastType === "error" ? "bg-red-500" : toastType === "success" ? "bg-primary" : "bg-foreground"
         }`}>
           {toast}
         </div>
       )}
 
       {/* Header */}
-      <div className="bg-[#12131A] px-4 pt-4 pb-5 sticky top-0 z-40">
+      <div className="bg-foreground px-4 pt-4 pb-5 sticky top-0 z-40">
         <div className="flex items-center justify-between mb-3">
           <button
             onClick={onLogout}
@@ -223,7 +223,7 @@ export function TableroArmado({ session, onLogout }: TableroArmadoProps) {
             onClick={() => setEntregaFilter("envio")}
             className={`flex-1 py-2.5 rounded-xl text-sm font-medium flex items-center justify-center gap-1.5 transition-all ${
               entregaFilter === "envio"
-                ? "bg-white text-[#FF2D6B]"
+                ? "bg-white text-primary"
                 : "bg-white/10 text-white/70"
             }`}
           >
@@ -233,7 +233,7 @@ export function TableroArmado({ session, onLogout }: TableroArmadoProps) {
             onClick={() => setEntregaFilter("retiro")}
             className={`flex-1 py-2.5 rounded-xl text-sm font-medium flex items-center justify-center gap-1.5 transition-all ${
               entregaFilter === "retiro"
-                ? "bg-white text-[#FF2D6B]"
+                ? "bg-white text-primary"
                 : "bg-white/10 text-white/70"
             }`}
           >
@@ -267,8 +267,8 @@ export function TableroArmado({ session, onLogout }: TableroArmadoProps) {
       <div className="md:hidden p-4 space-y-3">
         {byEstado(estadoTab).length === 0 ? (
           <div className="text-center py-12">
-            <div className="w-16 h-16 rounded-full bg-[#FFE0EC] flex items-center justify-center mx-auto mb-4">
-              <Star className="w-7 h-7 text-[#FF2D6B]" />
+            <div className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center mx-auto mb-4">
+              <Star className="w-7 h-7 text-primary" />
             </div>
             <p className="font-semibold text-gray-500 mb-1">Todo al día</p>
             <p className="text-sm text-gray-400">No hay pedidos en esta categoría</p>
@@ -303,8 +303,8 @@ export function TableroArmado({ session, onLogout }: TableroArmadoProps) {
               ))}
               {byEstado(tab).length === 0 && (
                 <div className="text-center py-8">
-                  <div className="w-12 h-12 rounded-full bg-[#FFE0EC] flex items-center justify-center mx-auto mb-3">
-                    <Star className="w-5 h-5 text-[#FF2D6B]" />
+                  <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center mx-auto mb-3">
+                    <Star className="w-5 h-5 text-primary" />
                   </div>
                   <p className="text-xs text-gray-400">Sin pedidos</p>
                 </div>

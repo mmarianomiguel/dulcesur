@@ -52,7 +52,7 @@ export function PinScreen({ onAuth }: PinScreenProps) {
   };
 
   return (
-    <div className="min-h-screen flex flex-col bg-[#12131A]">
+    <div className="min-h-screen flex flex-col bg-foreground">
       {/* Top: logo + nombre + dots */}
       <div className="flex-1 flex flex-col items-center justify-center px-8 pt-16 pb-6">
         {/* Logo */}
@@ -75,7 +75,7 @@ export function PinScreen({ onAuth }: PinScreenProps) {
               key={i}
               className={`w-4 h-4 rounded-full transition-all duration-200 ${
                 pin[i]
-                  ? "bg-[#FF2D6B] scale-110 shadow-[0_0_0_3px_rgba(255,45,107,0.3)]"
+                  ? "bg-primary scale-110 shadow-[0_0_0_3px_rgba(255,45,107,0.3)]"
                   : "bg-white/20 scale-100"
               }`}
             />
@@ -92,8 +92,8 @@ export function PinScreen({ onAuth }: PinScreenProps) {
       </div>
 
       {/* Teclado — panel blanco redondeado */}
-      <div className="bg-[#F4F4F6] rounded-t-[32px] px-5 pt-6 pb-10">
-        <p className="text-center text-xs text-[#6B7080] font-medium mb-5 tracking-wide">
+      <div className="bg-muted/30 rounded-t-[32px] px-5 pt-6 pb-10">
+        <p className="text-center text-xs text-muted-foreground font-medium mb-5 tracking-wide">
           Ingresá tu PIN de 4 dígitos
         </p>
 
@@ -105,11 +105,11 @@ export function PinScreen({ onAuth }: PinScreenProps) {
               type="button"
               onClick={() => addDigit(d)}
               disabled={loading}
-              className="flex flex-col items-center justify-center h-[72px] rounded-2xl bg-white border border-gray-200 active:scale-95 active:bg-[#FFE0EC] transition-all disabled:opacity-40"
+              className="flex flex-col items-center justify-center h-[72px] rounded-2xl bg-white border border-gray-200 active:scale-95 active:bg-primary/10 transition-all disabled:opacity-40"
             >
               <span className="text-2xl font-bold text-gray-800 leading-none">{d}</span>
               {LETRAS[d] && (
-                <span className="text-[9px] tracking-[1.5px] text-[#6B7080] uppercase mt-1">{LETRAS[d]}</span>
+                <span className="text-[9px] tracking-[1.5px] text-muted-foreground uppercase mt-1">{LETRAS[d]}</span>
               )}
             </button>
           ))}
@@ -123,13 +123,13 @@ export function PinScreen({ onAuth }: PinScreenProps) {
             disabled={loading || pin.length === 0}
             className="flex items-center justify-center h-[72px] active:scale-95 transition-all disabled:opacity-30"
           >
-            <Delete className="w-6 h-6 text-[#6B7080]" />
+            <Delete className="w-6 h-6 text-muted-foreground" />
           </button>
           <button
             type="button"
             onClick={() => addDigit("0")}
             disabled={loading}
-            className="flex items-center justify-center h-[72px] rounded-2xl bg-white border border-gray-200 active:scale-95 active:bg-[#FFE0EC] transition-all disabled:opacity-40"
+            className="flex items-center justify-center h-[72px] rounded-2xl bg-white border border-gray-200 active:scale-95 active:bg-primary/10 transition-all disabled:opacity-40"
           >
             <span className="text-2xl font-bold text-gray-800">0</span>
           </button>
@@ -139,7 +139,7 @@ export function PinScreen({ onAuth }: PinScreenProps) {
             disabled={loading || pin.length !== 4}
             className={`flex items-center justify-center h-[72px] rounded-2xl transition-all active:scale-95 ${
               pin.length === 4
-                ? "bg-[#FF2D6B] shadow-lg shadow-[#FF2D6B]/30"
+                ? "bg-primary shadow-lg shadow-[#FF2D6B]/30"
                 : "bg-gray-200"
             }`}
           >

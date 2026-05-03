@@ -4,6 +4,32 @@ import { useState, useEffect, useCallback } from "react";
 import { supabase } from "@/lib/supabase";
 import { Plus, Pencil, EyeOff, Eye, Trash2, Loader2 } from "lucide-react";
 import type { Equipo } from "@/types/equipo";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Card } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { ConfirmDialog } from "@/components/confirm-dialog";
+
+const ROL_LABEL: Record<string, string> = {
+  armador: "Armador",
+  repartidor: "Repartidor",
+  admin: "Admin",
+};
 
 export function MiembrosTab() {
   const [miembros, setMiembros] = useState<Equipo[]>([]);
@@ -49,27 +75,17 @@ export function MiembrosTab() {
       setError("PIN debe ser 4 dígitos");
       return;
     }
-
     const existing = miembros.find((m) => m.pin === form.pin && m.id !== editingId);
     if (existing) { setError("Este PIN ya está en uso"); return; }
 
     setSaving(true);
     setError(null);
-
+    const payload = { nombre: form.nombre.trim(), pin: form.pin, rol: form.rol };
     if (editingId) {
-      await supabase.from("equipo").update({
-        nombre: form.nombre.trim(),
-        pin: form.pin,
-        rol: form.rol,
-      }).eq("id", editingId);
+      await supabase.from("equipo").update(payload).eq("id", editingId);
     } else {
-      await supabase.from("equipo").insert({
-        nombre: form.nombre.trim(),
-        pin: form.pin,
-        rol: form.rol,
-      });
+      await supabase.from("equipo").insert(payload);
     }
-
     setSaving(false);
     setModalOpen(false);
     await fetchMiembros();
@@ -80,10 +96,6 @@ export function MiembrosTab() {
     await fetchMiembros();
   };
 
-  const handleDelete = (m: Equipo) => {
-    setDeleteTarget(m);
-  };
-
   const confirmDelete = async () => {
     if (!deleteTarget) return;
     await supabase.from("equipo").delete().eq("id", deleteTarget.id);
@@ -91,197 +103,154 @@ export function MiembrosTab() {
     await fetchMiembros();
   };
 
-  const rolLabel = (rol: string) => {
-    switch (rol) {
-      case "armador": return "Armador";
-      case "repartidor": return "Repartidor";
-      case "admin": return "Admin";
-      default: return rol;
-    }
-  };
-
-  const rolColor = (rol: string) => {
-    switch (rol) {
-      case "armador": return "bg-[#FFE0EC] text-[#99003D]";
-      case "repartidor": return "bg-blue-100 text-blue-700";
-      case "admin": return "bg-violet-100 text-violet-700";
-      default: return "bg-gray-100 text-gray-700";
-    }
-  };
-
   return (
     <>
-      <div className="flex justify-end mb-4">
-        <button
-          onClick={openAdd}
-          className="flex items-center gap-1.5 bg-[#FF2D6B] text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-[#E0255E]"
-        >
-          <Plus className="w-4 h-4" /> Agregar
-        </button>
+      <div className="flex justify-end mb-3">
+        <Button onClick={openAdd} size="sm">
+          <Plus className="w-4 h-4 mr-1.5" /> Agregar miembro
+        </Button>
       </div>
 
-      {loading ? (
-        <div className="flex justify-center py-12">
-          <Loader2 className="w-6 h-6 animate-spin text-gray-400" />
-        </div>
-      ) : (
-        <div className="bg-white rounded-xl border shadow-sm overflow-hidden">
+      <Card className="overflow-hidden">
+        {loading ? (
+          <div className="flex justify-center py-12">
+            <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+          </div>
+        ) : miembros.length === 0 ? (
+          <div className="px-4 py-12 text-center text-sm text-muted-foreground">
+            No hay miembros del equipo. Agregá uno para comenzar.
+          </div>
+        ) : (
           <table className="w-full text-sm">
             <thead>
-              <tr className="border-b bg-[#FFE0EC]">
-                <th className="text-left px-4 py-3 font-medium text-[#99003D]">Nombre</th>
-                <th className="text-left px-4 py-3 font-medium text-[#99003D]">Rol</th>
-                <th className="text-left px-4 py-3 font-medium text-[#99003D]">PIN</th>
-                <th className="text-center px-4 py-3 font-medium text-[#99003D]">Estado</th>
-                <th className="text-right px-4 py-3 font-medium text-[#99003D]">Acciones</th>
+              <tr className="border-b bg-muted/40 text-xs text-muted-foreground">
+                <th className="text-left px-4 py-2.5 font-medium">Nombre</th>
+                <th className="text-left px-4 py-2.5 font-medium">Rol</th>
+                <th className="text-left px-4 py-2.5 font-medium">PIN</th>
+                <th className="text-center px-4 py-2.5 font-medium">Estado</th>
+                <th className="text-right px-4 py-2.5 font-medium">Acciones</th>
               </tr>
             </thead>
             <tbody>
               {miembros.map((m) => (
-                <tr key={m.id} className={`border-b last:border-b-0 hover:bg-[#FFF5F8] ${!m.activo ? "opacity-50" : ""}`}>
-                  <td className="px-4 py-3 font-medium text-gray-900">{m.nombre}</td>
+                <tr
+                  key={m.id}
+                  className={`border-b last:border-b-0 hover:bg-muted/30 transition-colors ${!m.activo ? "opacity-50" : ""}`}
+                >
+                  <td className="px-4 py-3 font-medium">{m.nombre}</td>
                   <td className="px-4 py-3">
-                    <span className={`text-xs px-2 py-1 rounded-full font-medium ${rolColor(m.rol)}`}>
-                      {rolLabel(m.rol)}
-                    </span>
+                    <Badge
+                      variant="secondary"
+                      className={
+                        m.rol === "admin"
+                          ? "bg-violet-100 text-violet-700 hover:bg-violet-100"
+                          : m.rol === "repartidor"
+                          ? "bg-sky-100 text-sky-700 hover:bg-sky-100"
+                          : "bg-primary/10 text-primary hover:bg-primary/10"
+                      }
+                    >
+                      {ROL_LABEL[m.rol] || m.rol}
+                    </Badge>
                   </td>
-                  <td className="px-4 py-3 font-mono text-gray-500">****</td>
+                  <td className="px-4 py-3 font-mono text-muted-foreground">****</td>
                   <td className="px-4 py-3 text-center">
-                    <span className={`text-xs px-2 py-1 rounded-full font-medium ${m.activo ? "bg-[#D4F5E2] text-[#1A7A45]" : "bg-gray-100 text-[#6B7080]"}`}>
+                    <Badge
+                      variant={m.activo ? "default" : "secondary"}
+                      className={m.activo ? "bg-emerald-100 text-emerald-700 hover:bg-emerald-100" : ""}
+                    >
                       {m.activo ? "Activo" : "Inactivo"}
-                    </span>
+                    </Badge>
                   </td>
-                  <td className="px-4 py-3 text-right space-x-2">
-                    <button onClick={() => openEdit(m)} className="text-gray-400 hover:text-gray-700">
-                      <Pencil className="w-4 h-4 inline" />
-                    </button>
-                    <button onClick={() => toggleActivo(m)} className="text-gray-400 hover:text-gray-700">
-                      {m.activo ? <EyeOff className="w-4 h-4 inline" /> : <Eye className="w-4 h-4 inline" />}
-                    </button>
-                    <button onClick={() => handleDelete(m)} className="text-gray-400 hover:text-red-600">
-                      <Trash2 className="w-4 h-4 inline" />
-                    </button>
+                  <td className="px-4 py-3 text-right space-x-1">
+                    <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openEdit(m)}>
+                      <Pencil className="w-4 h-4" />
+                    </Button>
+                    <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => toggleActivo(m)}>
+                      {m.activo ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    </Button>
+                    <Button variant="ghost" size="icon" className="h-8 w-8 text-red-500 hover:text-red-600 hover:bg-red-50" onClick={() => setDeleteTarget(m)}>
+                      <Trash2 className="w-4 h-4" />
+                    </Button>
                   </td>
                 </tr>
               ))}
-              {miembros.length === 0 && (
-                <tr>
-                  <td colSpan={5} className="px-4 py-8 text-center text-gray-400">
-                    No hay miembros del equipo. Agregá uno para comenzar.
-                  </td>
-                </tr>
-              )}
             </tbody>
           </table>
-        </div>
-      )}
+        )}
+      </Card>
 
-      {/* Modal */}
-      {modalOpen && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl w-full max-w-sm p-5 space-y-4">
-            <h3 className="font-bold text-gray-900 text-lg">
-              {editingId ? "Editar miembro" : "Agregar miembro"}
-            </h3>
-
-            <div className="space-y-3">
-              <div>
-                <label className="text-sm font-medium text-gray-600 block mb-1">Nombre</label>
-                <input
-                  value={form.nombre}
-                  onChange={(e) => setForm({ ...form, nombre: e.target.value })}
-                  className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#FF2D6B]"
-                  placeholder="Nombre del empleado"
+      <Dialog open={modalOpen} onOpenChange={setModalOpen}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>{editingId ? "Editar miembro" : "Agregar miembro"}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div className="space-y-1.5">
+              <Label className="text-xs">Nombre</Label>
+              <Input
+                value={form.nombre}
+                onChange={(e) => setForm({ ...form, nombre: e.target.value })}
+                placeholder="Nombre del empleado"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs">PIN (4 dígitos)</Label>
+              <div className="relative">
+                <Input
+                  type={showPin ? "text" : "password"}
+                  value={form.pin}
+                  onChange={(e) => {
+                    const v = e.target.value.replace(/\D/g, "").slice(0, 4);
+                    setForm({ ...form, pin: v });
+                  }}
+                  className="font-mono pr-10"
+                  placeholder="1234"
+                  maxLength={4}
+                  inputMode="numeric"
                 />
-              </div>
-
-              <div>
-                <label className="text-sm font-medium text-gray-600 block mb-1">PIN (4 dígitos)</label>
-                <div className="relative">
-                  <input
-                    type={showPin ? "text" : "password"}
-                    value={form.pin}
-                    onChange={(e) => {
-                      const v = e.target.value.replace(/\D/g, "").slice(0, 4);
-                      setForm({ ...form, pin: v });
-                    }}
-                    className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-[#FF2D6B]"
-                    placeholder="1234"
-                    maxLength={4}
-                    inputMode="numeric"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowPin(!showPin)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-[#6B7080] hover:text-[#12131A]"
-                  >
-                    {showPin ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                  </button>
-                </div>
-              </div>
-
-              <div>
-                <label className="text-sm font-medium text-gray-600 block mb-1">Rol</label>
-                <select
-                  value={form.rol}
-                  onChange={(e) => setForm({ ...form, rol: e.target.value as Equipo["rol"] })}
-                  className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#FF2D6B]"
+                <button
+                  type="button"
+                  onClick={() => setShowPin(!showPin)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
                 >
-                  <option value="armador">Armador</option>
-                  <option value="repartidor">Repartidor</option>
-                  <option value="admin">Admin</option>
-                </select>
+                  {showPin ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
               </div>
             </div>
-
-            {error && <p className="text-red-500 text-sm">{error}</p>}
-
-            <div className="flex gap-3">
-              <button
-                onClick={() => setModalOpen(false)}
-                disabled={saving}
-                className="flex-1 py-2.5 rounded-xl border border-gray-300 text-gray-600 font-medium text-sm"
-              >
-                Cancelar
-              </button>
-              <button
-                onClick={handleSave}
-                disabled={saving}
-                className="flex-1 py-2.5 rounded-xl bg-[#FF2D6B] text-white font-medium text-sm flex items-center justify-center gap-1.5 hover:bg-[#E0255E]"
-              >
-                {saving && <Loader2 className="w-4 h-4 animate-spin" />}
-                {editingId ? "Guardar" : "Agregar"}
-              </button>
+            <div className="space-y-1.5">
+              <Label className="text-xs">Rol</Label>
+              <Select value={form.rol} onValueChange={(v) => setForm({ ...form, rol: (v ?? "armador") as Equipo["rol"] })}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="armador">Armador</SelectItem>
+                  <SelectItem value="repartidor">Repartidor</SelectItem>
+                  <SelectItem value="admin">Admin</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
           </div>
-        </div>
-      )}
+          {error && <p className="text-red-500 text-sm">{error}</p>}
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => setModalOpen(false)} disabled={saving}>Cancelar</Button>
+            <Button onClick={handleSave} disabled={saving}>
+              {saving && <Loader2 className="w-4 h-4 mr-1.5 animate-spin" />}
+              {editingId ? "Guardar" : "Agregar"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
-      {/* Delete confirmation modal */}
-      {deleteTarget && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl w-full max-w-sm p-5 space-y-4">
-            <h3 className="font-bold text-[#12131A] text-lg">Eliminar miembro</h3>
-            <p className="text-sm text-[#6B7080]">
-              ¿Eliminar a <span className="font-medium text-[#12131A]">{deleteTarget.nombre}</span>? Esta acción no se puede deshacer.
-            </p>
-            <div className="flex gap-3">
-              <button
-                onClick={() => setDeleteTarget(null)}
-                className="flex-1 py-2.5 rounded-xl border border-gray-300 text-[#6B7080] font-medium text-sm"
-              >
-                Cancelar
-              </button>
-              <button
-                onClick={confirmDelete}
-                className="flex-1 py-2.5 rounded-xl bg-red-600 text-white font-medium text-sm hover:bg-red-700"
-              >
-                Eliminar
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <ConfirmDialog
+        open={!!deleteTarget}
+        onOpenChange={(o) => !o && setDeleteTarget(null)}
+        title="Eliminar miembro"
+        description={`¿Eliminar a ${deleteTarget?.nombre}? Esta acción no se puede deshacer.`}
+        confirmLabel="Eliminar"
+        variant="danger"
+        onConfirm={confirmDelete}
+      />
     </>
   );
 }

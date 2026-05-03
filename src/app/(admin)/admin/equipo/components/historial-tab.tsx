@@ -22,10 +22,10 @@ function calcDuration(start: string | null | undefined, end: string | null | und
 type Estado = "pendiente" | "armando" | "armado" | "listo";
 
 const estadoBadge: Record<Estado, string> = {
-  pendiente: "bg-[#FFE0EC] text-[#99003D]",
-  armando: "bg-[#B3EFFF] text-[#006080]",
-  armado: "bg-[#B3EFFF] text-[#006080]",
-  listo: "bg-[#D4F5E2] text-[#1A7A45]",
+  pendiente: "bg-primary/10 text-primary",
+  armando: "bg-sky-100 text-sky-700",
+  armado: "bg-sky-100 text-sky-700",
+  listo: "bg-emerald-100 text-emerald-700",
 };
 
 const estadoLabel: Record<Estado, string> = {
@@ -155,15 +155,15 @@ export function HistorialTab() {
                 onClick={() => setFecha(opt.value)}
                 className={`px-3 py-1.5 rounded-full text-sm font-medium transition-all ${
                   fecha === opt.value
-                    ? "bg-[#FFE0EC] text-[#99003D] border border-[#FF2D6B]"
-                    : "bg-white border border-gray-200 text-[#6B7080] hover:border-[#FF2D6B]"
+                    ? "bg-primary/10 text-primary border border-primary"
+                    : "bg-white border border-gray-200 text-muted-foreground hover:border-primary"
                 }`}
               >
                 {opt.label}
               </button>
             ))}
             <div className="flex items-center gap-2">
-              <span className="text-xs text-[#6B7080]">Otra fecha:</span>
+              <span className="text-xs text-muted-foreground">Otra fecha:</span>
               <DateInput
                 value={fecha}
                 onChange={setFecha}
@@ -177,7 +177,7 @@ export function HistorialTab() {
         {pedidos.length > 0 && (
           <button
             onClick={exportExcel}
-            className="text-xs px-3 py-1.5 rounded-lg bg-[#D4F5E2] text-[#1A7A45] font-medium hover:bg-green-100 flex items-center gap-1.5 shrink-0"
+            className="text-xs px-3 py-1.5 rounded-lg bg-emerald-100 text-emerald-700 font-medium hover:bg-green-100 flex items-center gap-1.5 shrink-0"
           >
             <Download className="w-3.5 h-3.5" />
             Exportar
@@ -199,21 +199,21 @@ export function HistorialTab() {
           {/* Summary stats */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
             <div className="bg-white rounded-2xl border border-gray-200 p-4">
-              <div className="w-9 h-9 rounded-xl bg-gray-100 text-[#6B7080] flex items-center justify-center mb-2">
+              <div className="w-9 h-9 rounded-xl bg-gray-100 text-muted-foreground flex items-center justify-center mb-2">
                 <Package className="w-5 h-5" />
               </div>
               <p className="text-2xl font-bold text-gray-900">{stats.total}</p>
               <p className="text-xs text-gray-500">Total pedidos</p>
             </div>
             <div className="bg-white rounded-2xl border border-gray-200 p-4">
-              <div className="w-9 h-9 rounded-xl bg-[#D4F5E2] text-[#1A7A45] flex items-center justify-center mb-2">
+              <div className="w-9 h-9 rounded-xl bg-emerald-100 text-emerald-700 flex items-center justify-center mb-2">
                 <CheckCircle2 className="w-5 h-5" />
               </div>
               <p className="text-2xl font-bold text-gray-900">{stats.completados}</p>
               <p className="text-xs text-gray-500">Completados</p>
             </div>
             <div className="bg-white rounded-2xl border border-gray-200 p-4">
-              <div className="w-9 h-9 rounded-xl bg-[#B3EFFF] text-[#006080] flex items-center justify-center mb-2">
+              <div className="w-9 h-9 rounded-xl bg-sky-100 text-sky-700 flex items-center justify-center mb-2">
                 <Clock className="w-5 h-5" />
               </div>
               <p className="text-2xl font-bold text-gray-900">{formatDuration(stats.promedioArmado)}</p>
@@ -235,7 +235,7 @@ export function HistorialTab() {
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
                 {armadorMetrics.map((a) => (
                   <div key={a.nombre} className="bg-white rounded-2xl border border-gray-200 p-4 flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-full bg-[#FFE0EC] text-[#99003D] flex items-center justify-center font-bold text-sm shrink-0">
+                    <div className="w-10 h-10 rounded-full bg-primary/10 text-primary flex items-center justify-center font-bold text-sm shrink-0">
                       {a.nombre.charAt(0).toUpperCase()}
                     </div>
                     <div className="min-w-0 flex-1">
@@ -259,16 +259,16 @@ export function HistorialTab() {
             <div className="hidden md:block bg-white rounded-2xl border border-gray-200 overflow-hidden">
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="border-b bg-[#FFE0EC]">
-                    <th className="text-left px-4 py-3 font-medium text-[#99003D]">#</th>
-                    <th className="text-left px-4 py-3 font-medium text-[#99003D]">Cliente</th>
-                    <th className="text-left px-4 py-3 font-medium text-[#99003D]">Estado</th>
-                    <th className="text-left px-4 py-3 font-medium text-[#99003D]">Armador</th>
-                    <th className="text-right px-4 py-3 font-medium text-[#99003D]">T. Espera</th>
-                    <th className="text-right px-4 py-3 font-medium text-[#99003D]">T. Armado</th>
-                    <th className="text-right px-4 py-3 font-medium text-[#99003D]">T. Control</th>
-                    <th className="text-right px-4 py-3 font-medium text-[#99003D]">T. Total</th>
-                    <th className="text-center px-4 py-3 font-medium text-[#99003D]">Rech.</th>
+                  <tr className="border-b bg-primary/10">
+                    <th className="text-left px-4 py-3 font-medium text-primary">#</th>
+                    <th className="text-left px-4 py-3 font-medium text-primary">Cliente</th>
+                    <th className="text-left px-4 py-3 font-medium text-primary">Estado</th>
+                    <th className="text-left px-4 py-3 font-medium text-primary">Armador</th>
+                    <th className="text-right px-4 py-3 font-medium text-primary">T. Espera</th>
+                    <th className="text-right px-4 py-3 font-medium text-primary">T. Armado</th>
+                    <th className="text-right px-4 py-3 font-medium text-primary">T. Control</th>
+                    <th className="text-right px-4 py-3 font-medium text-primary">T. Total</th>
+                    <th className="text-center px-4 py-3 font-medium text-primary">Rech.</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -280,7 +280,7 @@ export function HistorialTab() {
                     const tControl = calcDuration(pa?.fin_armado_at, pa?.aprobado_at);
                     const tTotal = calcDuration(p.created_at, pa?.aprobado_at);
                     return (
-                      <tr key={p.id} className="border-b last:border-b-0 hover:bg-[#FFF5F8]">
+                      <tr key={p.id} className="border-b last:border-b-0 hover:bg-muted/30">
                         <td className="px-4 py-3 font-mono text-gray-500">{p.numero}</td>
                         <td className="px-4 py-3 font-medium text-gray-900">{p.clientes?.nombre ?? "—"}</td>
                         <td className="px-4 py-3">
