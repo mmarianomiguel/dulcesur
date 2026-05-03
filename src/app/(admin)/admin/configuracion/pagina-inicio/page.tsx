@@ -976,7 +976,20 @@ export default function PaginaInicioEditor() {
 
   const [originalIds, setOriginalIds] = useState<string[]>([]);
   const [savedSnapshot, setSavedSnapshot] = useState<string>("");
+  const [previewKey, setPreviewKey] = useState(0);
+  const [containerWidth, setContainerWidth] = useState(900);
   const settingsPanelRef = useRef<HTMLDivElement>(null);
+  const iframeRef = useRef<HTMLIFrameElement>(null);
+  const previewContainerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const el = previewContainerRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver(() => setContainerWidth(el.clientWidth - 32));
+    ro.observe(el);
+    setContainerWidth(el.clientWidth - 32);
+    return () => ro.disconnect();
+  }, []);
 
   const selectedBlock = bloques.find((b) => b.id === selectedId) ?? null;
 
@@ -1043,6 +1056,7 @@ export default function PaginaInicioEditor() {
       setOriginalIds(currentIds);
       setSavedSnapshot(JSON.stringify(bloques));
       setSaved(true);
+      setPreviewKey((k) => k + 1);
       setTimeout(() => setSaved(false), 2000);
     } catch (err) {
       console.error("Error saving:", err);
@@ -1198,147 +1212,55 @@ export default function PaginaInicioEditor() {
 
       {/* ── Main Area ──────────────────────────────────────────────────── */}
       <div className="flex flex-1 overflow-hidden">
-        {/* ── Left: Live Preview (inline rendering) ────────────────── */}
-        <div className="flex-1 bg-gray-200 overflow-hidden flex items-start justify-center p-4">
-          <div
-            className="@container bg-white shadow-xl rounded-lg overflow-y-auto transition-all duration-300 h-full"
-            style={{ maxWidth: previewWidths[device], width: "100%" }}
-          >
-            <div className="min-h-full bg-white">
-              {/* Insert point at the very top */}
-              <InsertPoint onClick={() => { setAddAtIndex(0); setAddDialogOpen(true); }} />
-
-              {bloques.map((bloque, idx) => {
-                const isSelected = selectedId === bloque.id;
-                const isHovered = hoveredId === bloque.id;
-                const BlockIcon = getBlockIcon(bloque.tipo);
-
-                return (
-                  <div key={bloque.id}>
-                    <div
-                      draggable
-                      onDragStart={(e) => { e.dataTransfer.setData("text/plain", String(idx)); e.currentTarget.style.opacity = "0.5"; }}
-                      onDragEnd={(e) => { e.currentTarget.style.opacity = ""; }}
-                      onDragOver={(e) => { e.preventDefault(); e.currentTarget.style.outline = "3px dashed #ec4899"; }}
-                      onDragLeave={(e) => { e.currentTarget.style.outline = ""; }}
-                      onDrop={(e) => {
-                        e.preventDefault();
-                        e.currentTarget.style.outline = "";
-                        const from = Number(e.dataTransfer.getData("text/plain"));
-                        if (from === idx || isNaN(from)) return;
-                        setBloques((prev) => {
-                          const list = [...prev];
-                          const [moved] = list.splice(from, 1);
-                          list.splice(idx, 0, moved);
-                          return list;
-                        });
-                      }}
-                      className={`relative cursor-grab active:cursor-grabbing transition-all duration-200 ${
-                        !bloque.activo ? "opacity-40" : ""
-                      }`}
-                      style={{
-                        outline: isSelected
-                          ? "3px solid #ec4899"
-                          : isHovered
-                          ? "2px solid #f9a8d4"
-                          : "2px solid transparent",
-                        outlineOffset: isSelected ? "-3px" : "-2px",
-                      }}
-                      onClick={() => setSelectedId(bloque.id)}
-                      onDoubleClick={() => setSelectedId(bloque.id)}
-                      onMouseEnter={() => setHoveredId(bloque.id)}
-                      onMouseLeave={() => setHoveredId(null)}
-                    >
-                      {/* Oculto badge */}
-                      {!bloque.activo && (
-                        <div className="absolute top-2 left-2 z-20 bg-gray-800 text-white text-[10px] font-semibold px-2 py-0.5 rounded-full flex items-center gap-1">
-                          <EyeOff className="w-3 h-3" />
-                          Oculto
-                        </div>
-                      )}
-
-                      {/* Floating toolbar on hover */}
-                      {(isHovered || isSelected) && (
-                        <div className="absolute top-2 right-2 z-20 flex items-center gap-1 bg-white rounded-lg shadow-lg border border-gray-200 p-1">
-                          <span className="px-2 py-0.5 text-[10px] font-semibold text-gray-500 border-r border-gray-200 mr-1">
-                            {getBlockDef(bloque.tipo)?.label}
-                          </span>
-                          <button
-                            onClick={(e) => { e.stopPropagation(); setSelectedId(bloque.id); }}
-                            className="p-1 hover:bg-pink-50 rounded transition-colors"
-                            title="Editar"
-                          >
-                            <Pencil className="w-3.5 h-3.5 text-gray-600" />
-                          </button>
-                          <button
-                            onClick={(e) => { e.stopPropagation(); moveBlock(bloque.id, -1); }}
-                            className="p-1 hover:bg-gray-100 rounded transition-colors disabled:opacity-30"
-                            disabled={idx === 0}
-                            title="Mover arriba"
-                          >
-                            <ChevronUp className="w-3.5 h-3.5 text-gray-600" />
-                          </button>
-                          <button
-                            onClick={(e) => { e.stopPropagation(); moveBlock(bloque.id, 1); }}
-                            className="p-1 hover:bg-gray-100 rounded transition-colors disabled:opacity-30"
-                            disabled={idx === bloques.length - 1}
-                            title="Mover abajo"
-                          >
-                            <ChevronDown className="w-3.5 h-3.5 text-gray-600" />
-                          </button>
-                          <button
-                            onClick={(e) => { e.stopPropagation(); toggleActivo(bloque.id); }}
-                            className="p-1 hover:bg-gray-100 rounded transition-colors"
-                            title={bloque.activo ? "Ocultar" : "Mostrar"}
-                          >
-                            {bloque.activo ? (
-                              <Eye className="w-3.5 h-3.5 text-gray-600" />
-                            ) : (
-                              <EyeOff className="w-3.5 h-3.5 text-gray-600" />
-                            )}
-                          </button>
-                          <button
-                            onClick={(e) => { e.stopPropagation(); setDeleteConfirm(bloque.id); }}
-                            className="p-1 hover:bg-red-50 rounded transition-colors"
-                            title="Eliminar"
-                          >
-                            <Trash2 className="w-3.5 h-3.5 text-red-500" />
-                          </button>
-                        </div>
-                      )}
-
-                      {/* Selected indicator bar */}
-                      {isSelected && (
-                        <div className="absolute left-0 top-0 bottom-0 w-1 bg-pink-500 z-20 rounded-r" />
-                      )}
-
-                      {/* The actual block preview - inline editable */}
-                      <div>
-                        <BlockPreview bloque={bloque} onConfigChange={(key, val) => updateConfig(bloque.id, key, val)} />
-                      </div>
-                    </div>
-
-                    {/* Insert point between blocks */}
-                    <InsertPoint onClick={() => { setAddAtIndex(idx + 1); setAddDialogOpen(true); }} />
-                  </div>
-                );
-              })}
-
-              {bloques.length === 0 && (
-                <div className="py-24 text-center text-gray-400">
-                  <MousePointer className="w-10 h-10 mx-auto mb-3 opacity-30" />
-                  <p className="text-sm">No hay bloques. Agregá uno para empezar.</p>
-                  <button
-                    onClick={() => { setAddAtIndex(-1); setAddDialogOpen(true); }}
-                    className="mt-4 px-4 py-2 bg-pink-500 text-white rounded-lg text-sm font-medium hover:bg-pink-600 transition-colors"
-                  >
-                    <Plus className="w-4 h-4 inline mr-1" />
-                    Agregar bloque
-                  </button>
-                </div>
-              )}
-            </div>
+        {/* ── Left: Real Store Preview (iframe) ────────────────── */}
+        <div ref={previewContainerRef} className="flex-1 bg-gray-300 overflow-hidden flex flex-col items-center p-4 gap-2">
+          {/* Toolbar de recarga */}
+          <div className="flex items-center gap-2 self-stretch justify-end">
+            <span className="text-xs text-gray-500">
+              {device === "mobile" ? "375px" : device === "tablet" ? "768px" : "Escritorio"}
+            </span>
+            <button
+              onClick={() => setPreviewKey((k) => k + 1)}
+              className="flex items-center gap-1.5 text-xs bg-white border border-gray-300 rounded-lg px-2.5 py-1 hover:bg-gray-50 transition-colors text-gray-600"
+              title="Recargar preview"
+            >
+              <RefreshCw className="w-3 h-3" />
+              Recargar
+            </button>
           </div>
+
+          {/* Contenedor del iframe con escalado */}
+          {(() => {
+            const devicePixelWidths: Record<string, number> = { mobile: 375, tablet: 768 };
+            const iframeW = devicePixelWidths[device] ?? containerWidth;
+            const scale = device === "desktop" ? 1 : Math.min(1, containerWidth / iframeW);
+            const visibleH = `calc(100% - 32px)`;
+            return (
+              <div
+                className="relative overflow-hidden rounded-xl shadow-2xl bg-white"
+                style={{
+                  width: device === "desktop" ? "100%" : iframeW * scale,
+                  height: visibleH,
+                  flexShrink: 0,
+                }}
+              >
+                <iframe
+                  ref={iframeRef}
+                  key={previewKey}
+                  src={`/?_t=${previewKey}`}
+                  title="Vista previa de la tienda"
+                  className="border-0 bg-white"
+                  style={{
+                    width: device === "desktop" ? "100%" : iframeW,
+                    height: scale < 1 ? `${100 / scale}%` : "100%",
+                    transform: scale < 1 ? `scale(${scale})` : undefined,
+                    transformOrigin: "top left",
+                    pointerEvents: "none",
+                  }}
+                />
+              </div>
+            );
+          })()}
         </div>
 
         {/* ── Right: Settings Panel ──────────────────────────────────── */}
