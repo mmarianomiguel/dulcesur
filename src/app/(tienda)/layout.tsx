@@ -13,15 +13,30 @@ import { createServerSupabase } from "@/lib/supabase-server";
 export const revalidate = 300;
 
 
-export const metadata: Metadata = {
-  title: {
-    default: "DulceSur - Tienda Online",
-    template: "%s | DulceSur",
-  },
-  description:
-    "Tienda online de DulceSur. Golosinas, galletitas, snacks y más al mejor precio.",
-  manifest: "/manifest-tienda.json",
-};
+export async function generateMetadata(): Promise<Metadata> {
+  const sb = createServerSupabase();
+  const { data } = await sb
+    .from("tienda_config")
+    .select("nombre_tienda, descripcion, meta_descripcion, favicon_url, og_image_url")
+    .limit(1)
+    .single();
+  const tc: any = data || {};
+  const nombre = tc.nombre_tienda || "Tienda Online";
+  const desc = tc.meta_descripcion || tc.descripcion || `Tienda online de ${nombre}`;
+  return {
+    title: { default: nombre, template: `%s | ${nombre}` },
+    description: desc,
+    manifest: "/manifest-tienda.json",
+    icons: tc.favicon_url ? { icon: tc.favicon_url, apple: tc.favicon_url } : undefined,
+    openGraph: {
+      title: nombre,
+      description: desc,
+      type: "website",
+      siteName: nombre,
+      ...(tc.og_image_url ? { images: [{ url: tc.og_image_url, width: 1200, height: 630 }] } : {}),
+    },
+  };
+}
 
 // Preconnect hints para recursos críticos — mejora LCP
 export const viewport = {
@@ -33,7 +48,7 @@ export default async function TiendaLayout({ children }: { children: React.React
   // causado por el fetch cliente-side en navbar/footer.
   const sb = createServerSupabase();
   const [tcRes, empRes, catsRes, subsRes, prodMarcasRes] = await Promise.all([
-    sb.from("tienda_config").select("nombre_tienda, logo_url, descripcion, footer_config, umbral_envio_gratis, horario_atencion_inicio, horario_atencion_fin, dias_atencion").limit(1).single(),
+    sb.from("tienda_config").select("nombre_tienda, logo_url, descripcion, footer_config, umbral_envio_gratis, horario_atencion_inicio, horario_atencion_fin, dias_atencion, tienda_activa, mensaje_mantenimiento").limit(1).single(),
     sb.from("empresa").select("nombre, telefono, white_label").limit(1).single(),
     sb.from("categorias").select("id, nombre, restringida").order("nombre"),
     sb.from("subcategorias").select("id, nombre, categoria_id"),
@@ -96,6 +111,11 @@ export default async function TiendaLayout({ children }: { children: React.React
     badges: fc.badges || undefined,
   };
 
+  // Si la tienda está apagada, mostramos un mensaje de mantenimiento en vez del catálogo.
+  // Mantenemos navbar/footer para que el cliente vea branding/contacto.
+  const tiendaActiva = tc?.tienda_activa !== false;
+  const mensajeMantenimiento = (tc?.mensaje_mantenimiento as string | null) || "";
+
   return (
     <CartProvider>
       <>
@@ -105,7 +125,21 @@ export default async function TiendaLayout({ children }: { children: React.React
         <div className="flex min-h-screen flex-col bg-white">
           <AdminBanner />
           <TiendaNavbar initial={navbarInitial} />
-          <main className="flex-1 min-h-[60vh]">{children}</main>
+          <main className="flex-1 min-h-[60vh]">
+            {tiendaActiva ? children : (
+              <section className="max-w-2xl mx-auto px-4 py-20 text-center">
+                <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-amber-100 mb-5">
+                  <svg className="w-8 h-8 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                </div>
+                <h1 className="text-2xl font-bold text-gray-900 mb-3">Estamos cerrados temporalmente</h1>
+                {mensajeMantenimiento ? (
+                  <p className="text-base text-gray-600 whitespace-pre-line max-w-lg mx-auto">{mensajeMantenimiento}</p>
+                ) : (
+                  <p className="text-base text-gray-600">Volvemos pronto. Disculpá las molestias.</p>
+                )}
+              </section>
+            )}
+          </main>
           <TiendaFooter initial={footerInitial} />
           <ToastContainer />
           <WhatsAppFloat />

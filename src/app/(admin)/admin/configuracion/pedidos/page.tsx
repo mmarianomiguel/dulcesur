@@ -21,7 +21,6 @@ import {
   Clock,
   DollarSign,
   Package,
-  Star,
   CalendarDays,
 } from "lucide-react";
 
@@ -39,7 +38,6 @@ interface TiendaConfig {
   dias_atencion: string[];
   minimo_unidades_mayorista: number;
   dias_ocultar_sin_stock: number;
-  dias_badge_nuevo: number;
 }
 
 const DIAS_SEMANA = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado"];
@@ -119,7 +117,6 @@ export default function PedidosConfigPage() {
         dias_atencion: config.dias_atencion,
         minimo_unidades_mayorista: config.minimo_unidades_mayorista,
         dias_ocultar_sin_stock: config.dias_ocultar_sin_stock,
-        dias_badge_nuevo: config.dias_badge_nuevo,
       })
       .eq("id", config.id);
 
@@ -202,7 +199,7 @@ export default function PedidosConfigPage() {
               </div>
               <div className="flex-1 space-y-2">
                 <Label className="text-xs text-muted-foreground font-normal">
-                  Monto mínimo de compra para envíos
+                  Monto mínimo para envío gratis
                 </Label>
                 <MoneyInput
                   value={config?.umbral_envio_gratis ?? 0}
@@ -436,30 +433,6 @@ export default function PedidosConfigPage() {
           </CardContent>
         </Card>
 
-        <Card>
-          <CardContent className="p-5">
-            <div className="flex items-start gap-4">
-              <div className="w-10 h-10 bg-green-50 rounded-xl flex items-center justify-center shrink-0">
-                <Star className="w-5 h-5 text-green-500" />
-              </div>
-              <div className="flex-1 space-y-2">
-                <Label className="text-xs text-muted-foreground font-normal">
-                  Días para badge &quot;Nuevo&quot;
-                </Label>
-                <Input
-                  type="number"
-                  min={0}
-                  value={config?.dias_badge_nuevo ?? 7}
-                  onChange={(e) => update("dias_badge_nuevo", Number(e.target.value))}
-                  className="h-9 w-32"
-                />
-                <p className="text-xs text-muted-foreground">
-                  Los productos creados en los últimos X días muestran el badge &quot;Nuevo&quot;. Poné 0 para desactivar.
-                </p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
       </div>
     </div>
   );

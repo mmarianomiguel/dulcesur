@@ -501,7 +501,6 @@ function ProductosDestacadosBlock({
   presMap,
   loading,
   agregarAlCarrito,
-  diasNuevo,
   masVendidos = [],
   nuevosIngresos = [],
   reingresos = [],
@@ -513,7 +512,6 @@ function ProductosDestacadosBlock({
   presMap: Record<string, any[]>;
   loading: boolean;
   agregarAlCarrito: (p: Producto, qty: number) => void;
-  diasNuevo: number;
   masVendidos?: any[];
   nuevosIngresos?: any[];
   reingresos?: any[];
@@ -582,13 +580,15 @@ function ProductosDestacadosBlock({
       return filtrarCategorias([p.categorias]).length > 0;
     }).slice(0, maxItems);
 
-  // Selector de período para "Más vendidos" — el cliente puede cambiarlo en runtime.
-  const [vendidosPeriodo, setVendidosPeriodo] = useState<7 | 30 | 90>(7);
+  // Selector de período para "Más vendidos" — el cliente puede cambiarlo en runtime si el admin lo permite.
+  const masVendidosPeriodoDefault = ((config.mas_vendidos_periodo_default as number) === 7 || (config.mas_vendidos_periodo_default as number) === 90) ? (config.mas_vendidos_periodo_default as 7 | 90) : 30;
+  const masVendidosMostrarSelector = (config.mas_vendidos_mostrar_selector as boolean) ?? true;
+  const [vendidosPeriodo, setVendidosPeriodo] = useState<7 | 30 | 90>(masVendidosPeriodoDefault);
   const [masVendidosLocal, setMasVendidosLocal] = useState<any[] | null>(null);
   const [vendidosLoading, setVendidosLoading] = useState(false);
   useEffect(() => {
-    // Default 30 días == lo que vino del SSR. No refetcheamos.
-    if (vendidosPeriodo === 30) { setMasVendidosLocal(null); return; }
+    // Si el período actual coincide con el default del SSR, usamos esos datos sin refetchear.
+    if (vendidosPeriodo === masVendidosPeriodoDefault) { setMasVendidosLocal(null); return; }
     let cancelled = false;
     (async () => {
       setVendidosLoading(true);
@@ -973,8 +973,8 @@ function ProductosDestacadosBlock({
         </div>
         <div className="w-12 h-0.5 bg-primary rounded-full mb-4" />
 
-        {/* Selector de período — solo visible en tab "Más vendidos" */}
-        {activeTab === "mas_vendidos" && (
+        {/* Selector de período — solo visible en tab "Más vendidos" si el admin lo permite */}
+        {activeTab === "mas_vendidos" && masVendidosMostrarSelector && (
           <div className="flex items-center justify-end gap-1 mb-3 text-xs">
             <span className="text-gray-500 mr-1">Período:</span>
             {([7, 30, 90] as const).map((d) => (
@@ -1131,14 +1131,14 @@ function ProductosDestacadosBlock({
   );
 }
 
-function AumentosRecientesBlock({ productos: initialData = [], presMap = {} }: { productos?: any[]; presMap?: Record<string, any[]> }) {
+function AumentosRecientesBlock({ productos: initialData = [], presMap = {}, maxItems = 4 }: { productos?: any[]; presMap?: Record<string, any[]>; maxItems?: number }) {
   const { filtrarCategorias } = useCategoriasPermitidas();
 
   const filtered = initialData.filter((p: any) => {
     const cat = p.categorias;
     if (!cat) return true;
     return filtrarCategorias([cat]).length > 0;
-  }).slice(0, 4);
+  }).slice(0, maxItems);
 
   if (filtered.length === 0) return null;
 
@@ -1518,7 +1518,6 @@ interface HomeClientProps {
   initialCategorias?: Categoria[];
   initialProductos?: Producto[];
   initialPresMap?: Record<string, any[]>;
-  initialDiasNuevo?: number;
   initialAumentos?: any[];
   initialMasVendidos?: any[];
   initialUltimasUnidades?: any[];
@@ -1536,7 +1535,6 @@ export default function TiendaPage({
   initialCategorias,
   initialProductos,
   initialPresMap,
-  initialDiasNuevo = 7,
   initialAumentos = [],
   initialMasVendidos = [],
   initialUltimasUnidades = [],
@@ -1554,7 +1552,6 @@ export default function TiendaPage({
   const [productos, setProductos] = useState<Producto[]>(initialProductos || []);
   const [presMap, setPresMap] = useState<Record<string, any[]>>({ ...(initialPresMap || {}), ...(initialTopPresMap || {}) });
   const [loading, setLoading] = useState(!hasInitial);
-  const [diasNuevo, setDiasNuevo] = useState(initialDiasNuevo);
   const [clienteAuthId, setClienteAuthId] = useState<number | null>(null);
 
   useEffect(() => {
@@ -1570,26 +1567,15 @@ export default function TiendaPage({
   useEffect(() => {
     if (hasInitial) return; // Skip client fetch — server provided initial data
     async function fetchData() {
-      // 1. Fetch blocks and tienda_config in parallel
-      const [bloquesRes, configRes] = await Promise.all([
-        supabase
-          .from("pagina_inicio_bloques")
-          .select("*")
-          .eq("activo", true)
-          .order("orden", { ascending: true }),
-        supabase
-          .from("tienda_config")
-          .select("dias_badge_nuevo")
-          .limit(1)
-          .single(),
-      ]);
+      // 1. Fetch blocks
+      const bloquesRes = await supabase
+        .from("pagina_inicio_bloques")
+        .select("*")
+        .eq("activo", true)
+        .order("orden", { ascending: true });
 
       const blocks: Bloque[] = bloquesRes.data || [];
       setBloques(blocks);
-
-      if (configRes.data?.dias_badge_nuevo != null) {
-        setDiasNuevo(configRes.data.dias_badge_nuevo);
-      }
 
       // 2. Determine what data we need based on block types
       const tipos = blocks.map((b) => b.tipo);
@@ -1779,7 +1765,6 @@ export default function TiendaPage({
             presMap={presMap}
             loading={loading}
             agregarAlCarrito={agregarAlCarrito}
-            diasNuevo={diasNuevo}
             masVendidos={initialTopVendidos}
             nuevosIngresos={initialNuevosIngresos}
             reingresos={initialReingresos}
@@ -1799,6 +1784,8 @@ export default function TiendaPage({
         return <MasVendidosBlock key={bloque.id} config={config} productos={initialMasVendidos} />;
       case "ultimas_unidades":
         return <UltimasUnidadesBlock key={bloque.id} config={config} productos={initialUltimasUnidades} />;
+      case "aumentos_recientes":
+        return <AumentosRecientesBlock key={bloque.id} productos={initialAumentos} presMap={presMap} maxItems={(config.max_items_home as number) || 4} />;
       default:
         return null;
     }
@@ -1859,6 +1846,10 @@ export default function TiendaPage({
     if (b) { orderedBloques.push(b); used.add(b.id); }
   }
 
+  // Aumentos Recientes: ahora se controla desde el editor (bloque de DB).
+  const bloqueAumentos = bloques.find((bl) => bl.tipo === "aumentos_recientes");
+  if (bloqueAumentos) used.add(bloqueAumentos.id);
+
   // After aumentos: specific sections
   const afterAumentosBloques: Bloque[] = [];
   for (const tipo of afterAumentos) {
@@ -1873,7 +1864,7 @@ export default function TiendaPage({
     <div className="min-h-screen bg-white">
       {orderedBloques.map((bloque) => renderBlock(bloque))}
       <InstallPrompt clienteId={clienteAuthId} />
-      <AumentosRecientesBlock productos={initialAumentos} presMap={presMap} />
+      {bloqueAumentos && renderBlock(bloqueAumentos)}
       {afterAumentosBloques.map((bloque) => renderBlock(bloque))}
       {remaining.map((bloque) => renderBlock(bloque))}
       <VistosRecientementeBlock />

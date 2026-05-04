@@ -31,7 +31,7 @@ const fetchProductosData = unstable_cache(async (): Promise<InitialProductosData
     supabase.from("marcas").select("id, nombre"),
     supabase.from("descuentos").select("*").eq("activo", true).lte("fecha_inicio", today),
     supabase.from("tienda_config").select("dias_ocultar_sin_stock").limit(1).single(),
-    fetchAllRows(supabase.from("productos").select("categoria_id, subcategoria_id, marca_id, stock, updated_at").eq("activo", true).eq("visibilidad", "visible")),
+    fetchAllRows(supabase.from("productos").select("categoria_id, subcategoria_id, marca_id, stock, fecha_sin_stock").eq("activo", true).eq("visibilidad", "visible")),
     // First page of products sorted A-Z (default sort)
     supabase.from("productos").select("id, nombre, precio, imagen_url, categoria_id, subcategoria_id, marca_id, stock, created_at, updated_at, es_combo, precio_anterior, fecha_actualizacion, categorias(nombre), marcas(nombre)", { count: "exact" }).eq("activo", true).eq("visibilidad", "visible").order("nombre", { ascending: true }).range(0, PER_PAGE - 1),
     // Presentaciones for first page will be fetched after we have product IDs
@@ -44,7 +44,7 @@ const fetchProductosData = unstable_cache(async (): Promise<InitialProductosData
   // Build category/marca counts
   const allProds = prodsCountRes.data || [];
   const cutoff = dias > 0 ? new Date(Date.now() - dias * 24 * 60 * 60 * 1000).toISOString() : null;
-  const visibleProds = cutoff ? allProds.filter((p: any) => p.stock > 0 || (p.updated_at && p.updated_at > cutoff)) : allProds;
+  const visibleProds = cutoff ? allProds.filter((p: any) => p.stock > 0 || (p.fecha_sin_stock && p.fecha_sin_stock > cutoff)) : allProds;
 
   const catCount: Record<string, number> = {};
   const subCount: Record<string, number> = {};

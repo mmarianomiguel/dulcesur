@@ -59,9 +59,15 @@ import {
   Zap,
   ShoppingCart,
   TrendingUp,
+  Sparkles,
+  RotateCw,
+  ChevronLeft,
+  ChevronRight,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import Link from "next/link";
+import NextImage from "next/image";
+import { formatCurrency } from "@/lib/formatters";
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -139,9 +145,15 @@ const BLOCK_TYPES: BlockTypeDef[] = [
       tab_defecto: "destacados",
       tabs: [
         { key: "destacados", activo: true },
-        { key: "mas_vendidos", activo: true },
         { key: "nuevos", activo: true },
+        { key: "reingresos", activo: true },
+        { key: "ofertas", activo: true },
+        { key: "mas_vendidos", activo: true },
       ],
+      dias_nuevos: 5,
+      dias_reingresos: 4,
+      mas_vendidos_periodo_default: 30,
+      mas_vendidos_mostrar_selector: true,
     },
   },
   {
@@ -254,6 +266,74 @@ function getBlockIcon(tipo: string): LucideIcon {
   return getBlockDef(tipo)?.icon ?? Settings;
 }
 
+// ── Bloques automáticos (hardcoded en el store, no viven en DB) ────────────
+// Replican el orden visual real del store (home-client.tsx renderBlocks).
+const VIRTUAL_BLOCKS: Record<string, { id: string; label: string; descripcion: string; icon: LucideIcon }> = {
+  install_prompt: {
+    id: "__virtual_install_prompt",
+    label: "Instalá la app",
+    descripcion: "Banner para instalar la PWA. Se muestra solo a clientes que no la tienen instalada.",
+    icon: Smartphone,
+  },
+  vistos_recientemente: {
+    id: "__virtual_vistos_recientemente",
+    label: "Vistos Recientemente",
+    descripcion: "Últimos productos que el cliente miró. Aparece al final del home.",
+    icon: Eye,
+  },
+};
+
+function isVirtualBloque(id: string) {
+  return id.startsWith("__virtual_");
+}
+
+// Replica EXACTA del orden del store (home-client.tsx ~1850).
+// Devuelve los bloques en el orden visual real, intercalando los hardcoded.
+function getDisplayBloques(bloques: Bloque[]): Array<Bloque | { virtual: typeof VIRTUAL_BLOCKS[string] }> {
+  const sectionOrder = ["hero", "trust_badges", "productos_destacados"];
+  const afterAumentos = ["categorias_destacadas", "por_que_elegirnos"];
+  const used = new Set<string>();
+  const out: Array<Bloque | { virtual: typeof VIRTUAL_BLOCKS[string] }> = [];
+
+  for (const tipo of sectionOrder) {
+    const b = bloques.find((bl) => bl.tipo === tipo);
+    if (b) { out.push(b); used.add(b.id); }
+  }
+  out.push({ virtual: VIRTUAL_BLOCKS.install_prompt });
+  // Aumentos Recientes: bloque de DB inyectado en esta posición fija.
+  const bloqueAumentos = bloques.find((bl) => bl.tipo === "aumentos_recientes");
+  if (bloqueAumentos) { out.push(bloqueAumentos); used.add(bloqueAumentos.id); }
+  for (const tipo of afterAumentos) {
+    const b = bloques.find((bl) => bl.tipo === tipo);
+    if (b) { out.push(b); used.add(b.id); }
+  }
+  for (const b of bloques) {
+    if (!used.has(b.id)) out.push(b);
+  }
+  out.push({ virtual: VIRTUAL_BLOCKS.vistos_recientemente });
+  return out;
+}
+
+function VirtualBlockPlaceholder({ virtual }: { virtual: typeof VIRTUAL_BLOCKS[string] }) {
+  const Icon = virtual.icon;
+  return (
+    <section className="py-6 bg-gradient-to-r from-gray-50 to-gray-100 border-y border-dashed border-gray-300">
+      <div className="max-w-7xl mx-auto px-4 flex items-center gap-4">
+        <div className="w-10 h-10 rounded-lg bg-white border border-gray-200 flex items-center justify-center shrink-0">
+          <Icon className="w-5 h-5 text-gray-500" />
+        </div>
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2">
+            <span className="text-sm font-semibold text-gray-700">{virtual.label}</span>
+            <span className="text-[10px] font-bold uppercase tracking-wider bg-gray-700 text-white px-2 py-0.5 rounded-full">Automático</span>
+          </div>
+          <p className="text-xs text-gray-500 mt-0.5 truncate">{virtual.descripcion}</p>
+        </div>
+      </div>
+    </section>
+  );
+}
+
 // ── Default blocks when table is empty ─────────────────────────────────────
 
 function createDefaultBlocks(): Bloque[] {
@@ -351,13 +431,13 @@ function PreviewHero({ config, onConfigChange }: { config: Record<string, unknow
       style={{ background: `linear-gradient(to right, ${colorStart}, ${colorEnd})` }}
     >
       {/* decorative circles - matching tienda exactly */}
-      <div className="absolute top-10 right-10 w-64 h-64 bg-white/10 rounded-full hidden md:block" />
-      <div className="absolute top-40 right-56 w-40 h-40 bg-white/10 rounded-full hidden md:block" />
-      <div className="absolute -bottom-10 right-20 w-32 h-32 bg-white/10 rounded-full hidden md:block" />
-      <div className="absolute top-20 right-96 w-20 h-20 bg-white/10 rounded-full hidden md:block" />
-      <div className="absolute bottom-16 right-72 w-12 h-12 bg-white/10 rounded-full hidden md:block" />
+      <div className="absolute top-10 right-10 w-64 h-64 bg-white/10 rounded-full hidden @md:block" />
+      <div className="absolute top-40 right-56 w-40 h-40 bg-white/10 rounded-full hidden @md:block" />
+      <div className="absolute -bottom-10 right-20 w-32 h-32 bg-white/10 rounded-full hidden @md:block" />
+      <div className="absolute top-20 right-96 w-20 h-20 bg-white/10 rounded-full hidden @md:block" />
+      <div className="absolute bottom-16 right-72 w-12 h-12 bg-white/10 rounded-full hidden @md:block" />
 
-      <div className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16 w-full">
+      <div className="relative z-10 max-w-7xl mx-auto px-4 @sm:px-6 @lg:px-8 py-16 w-full">
         <div className="max-w-2xl">
           <span className="inline-block text-sm font-semibold text-white/80 tracking-widest uppercase mb-4">
             {(config.marca as string) || APP_NAME}
@@ -365,13 +445,13 @@ function PreviewHero({ config, onConfigChange }: { config: Record<string, unknow
           {onConfigChange ? (
             <EditableText
               tag="h1"
-              className="text-4xl md:text-5xl font-bold text-white leading-tight mb-5"
+              className="text-4xl @md:text-5xl font-bold text-white leading-tight mb-5"
               value={(config.titulo as string) || "Título del Hero"}
               onChange={(v) => onConfigChange("titulo", v)}
               placeholder="Título del Hero"
             />
           ) : (
-            <h1 className="text-4xl md:text-5xl font-bold text-white leading-tight mb-5">
+            <h1 className="text-4xl @md:text-5xl font-bold text-white leading-tight mb-5">
               {(config.titulo as string) || "Título del Hero"}
             </h1>
           )}
@@ -435,7 +515,7 @@ function PreviewTrustBadges({ config, onConfigChange }: { config: Record<string,
   return (
     <section className="bg-white border-y border-gray-100 py-4">
       <div className="max-w-7xl mx-auto px-4">
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div className="grid grid-cols-2 @md:grid-cols-4 gap-4">
           {items.map((item, i) => {
             const Icon = ICON_MAP[item.icono] ?? Shield;
             return (
@@ -474,13 +554,13 @@ function PreviewCategoriasDestacadas({ config, onConfigChange }: { config: Recor
       <div className="max-w-7xl mx-auto px-4">
         <div className="text-center mb-10">
           {onConfigChange ? (
-            <EditableText tag="h2" className="text-2xl md:text-3xl font-bold text-gray-900" value={titulo} onChange={(v) => onConfigChange("titulo_seccion", v)} />
+            <EditableText tag="h2" className="text-2xl @md:text-3xl font-bold text-gray-900" value={titulo} onChange={(v) => onConfigChange("titulo_seccion", v)} />
           ) : (
-            <h2 className="text-2xl md:text-3xl font-bold text-gray-900">{titulo}</h2>
+            <h2 className="text-2xl @md:text-3xl font-bold text-gray-900">{titulo}</h2>
           )}
           <div className="w-16 h-1 bg-pink-600 rounded-full mx-auto mt-2" />
         </div>
-        <div className="grid grid-cols-3 md:grid-cols-6 gap-4">
+        <div className="grid grid-cols-3 @md:grid-cols-6 gap-4">
           {Array.from({ length: Math.min(max, 6) }).map((_, i) => (
             <div
               key={i}
@@ -498,16 +578,13 @@ function PreviewCategoriasDestacadas({ config, onConfigChange }: { config: Recor
 
 function PreviewProductosDestacados({ config, onConfigChange }: { config: Record<string, unknown>; onConfigChange?: (key: string, value: unknown) => void }) {
   const titulo = (config.titulo_seccion as string) || "Productos Destacados";
-  const max = (config.max_items as number) || 8;
-
   const TAB_META: Record<string, { label: string; shortLabel: string; Icon: LucideIcon }> = {
     destacados: { label: "Destacados", shortLabel: "Dest.", Icon: Star },
-    nuevos: { label: "Nuevos ingresos", shortLabel: "Nuevos", Icon: Zap },
-    reingresos: { label: "De vuelta en stock", shortLabel: "Vuelve", Icon: RefreshCw },
-    ofertas: { label: "Ofertas", shortLabel: "Ofertas", Icon: DollarSign },
+    ofertas: { label: "Ofertas", shortLabel: "Ofertas", Icon: Sparkles },
     mas_vendidos: { label: "Más vendidos", shortLabel: "Top", Icon: TrendingUp },
+    nuevos: { label: "Nuevos ingresos", shortLabel: "Nuevos", Icon: Zap },
+    reingresos: { label: "De vuelta en stock", shortLabel: "De vuelta", Icon: RotateCw },
   };
-
   const rawTabs = (config.tabs as Array<{ key: string; activo: boolean }> | undefined);
   const defaultTabs = [
     { key: "destacados", activo: true },
@@ -517,54 +594,54 @@ function PreviewProductosDestacados({ config, onConfigChange }: { config: Record
     { key: "mas_vendidos", activo: true },
   ];
   const tabsSource = Array.isArray(rawTabs) && rawTabs.length > 0 ? rawTabs : defaultTabs;
-  const visibleTabs = tabsSource.filter((t) => t && t.activo && TAB_META[t.key as string]);
+  const visibleTabs = tabsSource.filter((t) => t && t.activo && TAB_META[t.key]);
   const defaultTab = (config.tab_defecto as string) ?? visibleTabs[0]?.key ?? "destacados";
-  const resolvedDefault = visibleTabs.some((t) => t.key === defaultTab) ? defaultTab : (visibleTabs[0]?.key ?? "destacados");
-
-  const [activeTab, setActiveTab] = useState(resolvedDefault);
+  const [activeKey, setActiveKey] = useState(() => visibleTabs.some((t) => t.key === defaultTab) ? defaultTab : (visibleTabs[0]?.key ?? "destacados"));
   const [productos, setProductos] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => { setActiveTab(resolvedDefault); }, [resolvedDefault]);
+  const [page, setPage] = useState(0);
 
   useEffect(() => {
-    setLoading(true);
-    supabase
-      .from("productos")
-      .select("id, nombre, precio, imagen_url, stock, categorias(nombre)")
-      .eq("activo", true)
-      .eq("visibilidad", "visible")
-      .eq("destacado", true)
-      .limit(max)
-      .then(({ data }) => { setProductos(data || []); setLoading(false); });
-  }, [max]);
+    let cancelled = false;
+    (async () => {
+      const { data } = await supabase
+        .from("productos")
+        .select("id, nombre, precio, imagen_url, stock, es_combo, precio_anterior, categorias(id, nombre)")
+        .eq("activo", true)
+        .eq("visibilidad", "visible")
+        .eq("destacado", true)
+        .order("orden_destacado", { ascending: true, nullsFirst: false })
+        .limit(24);
+      if (!cancelled && data) setProductos(data);
+    })();
+    return () => { cancelled = true; };
+  }, []);
 
-  const displayProds = loading
-    ? Array.from({ length: Math.min(max, 4) }).map((_, i) => ({ id: `ph-${i}`, placeholder: true }))
-    : productos.length > 0
-    ? productos
-    : Array.from({ length: Math.min(max, 4) }).map((_, i) => ({ id: `ph-${i}`, placeholder: true }));
+  useEffect(() => { setPage(0); }, [activeKey]);
+
+  const perPage = 4;
+  const totalPages = Math.max(1, Math.ceil(productos.length / perPage));
+  const pageProds = productos.slice(page * perPage, (page + 1) * perPage);
 
   return (
-    <section className="py-8 bg-gray-50/50">
+    <section className="py-8 @md:py-10 bg-gray-50/50">
       <div className="max-w-7xl mx-auto px-4">
-        <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
+        <div className="flex flex-col @sm:flex-row @sm:items-center @sm:justify-between gap-3 mb-4">
           {onConfigChange ? (
             <EditableText tag="h2" className="text-xl font-bold text-gray-900" value={titulo} onChange={(v) => onConfigChange("titulo_seccion", v)} />
           ) : (
             <h2 className="text-xl font-bold text-gray-900">{titulo}</h2>
           )}
           {visibleTabs.length > 1 && (
-            <div className="flex flex-wrap items-center gap-1 bg-white border border-gray-200 rounded-xl p-1">
+            <div className="flex items-center gap-1 bg-white border border-gray-200 rounded-xl p-1">
               {visibleTabs.map((t) => {
-                const meta = TAB_META[t.key as string];
+                const meta = TAB_META[t.key];
                 const Icon = meta.Icon;
-                const isActive = t.key === activeTab;
+                const isActive = t.key === activeKey;
                 return (
                   <button
                     key={t.key}
-                    onClick={() => setActiveTab(t.key as string)}
-                    className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-colors ${isActive ? "bg-gray-900 text-white" : "text-gray-500 hover:bg-gray-100"}`}
+                    onClick={() => setActiveKey(t.key)}
+                    className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-all duration-200 ${isActive ? "bg-gray-900 text-white shadow-sm" : "text-gray-500 hover:text-gray-700 hover:bg-gray-50"}`}
                   >
                     <Icon className="w-3 h-3" />
                     <span>{meta.label}</span>
@@ -575,40 +652,70 @@ function PreviewProductosDestacados({ config, onConfigChange }: { config: Record
           )}
         </div>
         <div className="w-12 h-0.5 bg-primary rounded-full mb-4" />
-        <div className="grid grid-cols-2 @md:grid-cols-4 gap-3">
-          {displayProds.map((p: any) => (
-            <div key={p.id} className="rounded-xl border border-gray-100 bg-white overflow-hidden">
-              <div className="aspect-[4/3] bg-gray-50 flex items-center justify-center overflow-hidden">
-                {p.placeholder || !p.imagen_url ? (
-                  <Package className={`w-10 h-10 ${p.placeholder ? "text-gray-200 animate-pulse" : "text-gray-300"}`} />
-                ) : (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img src={p.imagen_url} alt={p.nombre} className="w-full h-full object-contain p-2" />
-                )}
+        <div className="relative">
+          {totalPages > 1 && page > 0 && (
+            <button onClick={() => setPage((p) => Math.max(0, p - 1))} className="absolute -left-3 top-1/2 -translate-y-1/2 z-10 w-8 h-8 rounded-full bg-white border border-gray-200 shadow-md flex items-center justify-center hover:bg-gray-50 transition-colors">
+              <ChevronLeft className="w-4 h-4 text-gray-600" />
+            </button>
+          )}
+          {totalPages > 1 && page < totalPages - 1 && (
+            <button onClick={() => setPage((p) => Math.min(totalPages - 1, p + 1))} className="absolute -right-3 top-1/2 -translate-y-1/2 z-10 w-8 h-8 rounded-full bg-white border border-gray-200 shadow-md flex items-center justify-center hover:bg-gray-50 transition-colors">
+              <ChevronRight className="w-4 h-4 text-gray-600" />
+            </button>
+          )}
+          <div className="grid grid-cols-2 @md:grid-cols-4 gap-3">
+            {(pageProds.length > 0 ? pageProds : Array.from({ length: 4 })).map((prod: any, i: number) => (
+              <div key={prod?.id ?? i} className="group relative overflow-hidden rounded-2xl border border-gray-100 bg-white flex flex-col">
+                <div className="relative aspect-square bg-gray-50 overflow-hidden">
+                  {prod?.imagen_url ? (
+                    <NextImage src={prod.imagen_url} alt={prod.nombre} fill sizes="25vw" className="object-contain p-3 group-hover:scale-105 transition-transform duration-300" />
+                  ) : (
+                    <div className="w-full h-full flex items-center justify-center"><Package className="w-10 h-10 text-gray-300" /></div>
+                  )}
+                  {prod?.es_combo && (
+                    <span className="absolute top-2 left-2 bg-gradient-to-r from-pink-600 to-rose-400 text-white text-[10px] font-bold px-2 py-0.5 rounded-full shadow-sm">COMBO</span>
+                  )}
+                  {prod && prod.stock <= 0 && (
+                    <div className="absolute inset-0 bg-white/60 flex items-center justify-center">
+                      <span className="bg-gray-800 text-white text-xs font-semibold px-3 py-1 rounded-full">Sin stock</span>
+                    </div>
+                  )}
+                </div>
+                <div className="p-3">
+                  {prod?.categorias && (
+                    <span className="inline-block text-[10px] font-medium text-pink-600 bg-pink-50 rounded-full px-2 py-0.5">{(prod.categorias as any).nombre}</span>
+                  )}
+                  <p className="text-xs font-medium text-gray-800 line-clamp-2 mt-1 min-h-[2rem]">
+                    {prod?.nombre ?? `Producto ${i + 1}`}
+                  </p>
+                  <div className="mt-1.5 flex items-baseline gap-1.5">
+                    <p className="text-base font-bold text-gray-900">{prod ? formatCurrency(prod.precio) : "$0"}</p>
+                  </div>
+                </div>
+                <div className="px-3 pb-3 mt-auto">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center border border-gray-200 rounded-lg overflow-hidden">
+                      <span className="w-7 h-7 flex items-center justify-center text-gray-400">−</span>
+                      <span className="w-6 text-center text-xs font-medium">1</span>
+                      <span className="w-7 h-7 flex items-center justify-center text-gray-400">+</span>
+                    </div>
+                    <span className="text-xs font-bold text-gray-900">{prod ? formatCurrency(prod.precio) : "$0"}</span>
+                  </div>
+                  <button className="w-full mt-1.5 bg-gray-900 text-white py-2 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5">
+                    <ShoppingCart className="w-3 h-3" /> Agregar
+                  </button>
+                </div>
               </div>
-              <div className="p-3">
-                {p.placeholder ? (
-                  <>
-                    <div className="h-3 bg-gray-100 rounded animate-pulse w-16 mb-2" />
-                    <div className="h-3 bg-gray-100 rounded animate-pulse w-full mb-1" />
-                    <div className="h-3 bg-gray-100 rounded animate-pulse w-3/4 mb-2" />
-                    <div className="h-5 bg-gray-100 rounded animate-pulse w-20" />
-                  </>
-                ) : (
-                  <>
-                    <span className="text-[10px] font-medium text-pink-600 bg-pink-50 rounded-full px-2 py-0.5">
-                      {(p.categorias as any)?.nombre ?? "Sin categoría"}
-                    </span>
-                    <p className="text-xs font-medium text-gray-800 line-clamp-2 mt-1.5">{p.nombre}</p>
-                    <p className="text-base font-bold text-gray-900 mt-1">
-                      ${Number(p.precio).toLocaleString("es-AR")}
-                    </p>
-                  </>
-                )}
-              </div>
-            </div>
-          ))}
+            ))}
+          </div>
         </div>
+        {totalPages > 1 && (
+          <div className="flex justify-center gap-1.5 mt-4">
+            {Array.from({ length: totalPages }).map((_, i) => (
+              <button key={i} onClick={() => setPage(i)} className={`w-2 h-2 rounded-full transition-all ${i === page ? "bg-gray-900 w-4" : "bg-gray-300"}`} />
+            ))}
+          </div>
+        )}
       </div>
     </section>
   );
@@ -620,7 +727,7 @@ function PreviewBannerPromo({ config, onConfigChange }: { config: Record<string,
     <section className="py-12">
       <div className="max-w-7xl mx-auto px-4">
         <div
-          className="text-white p-8 md:p-12 rounded-2xl flex flex-col md:flex-row items-center justify-between gap-6"
+          className="text-white p-8 @md:p-12 rounded-2xl flex flex-col @md:flex-row items-center justify-between gap-6"
           style={{ background: `linear-gradient(to right, ${color}, ${color}dd)` }}
         >
           <div className="flex items-center gap-5">
@@ -630,12 +737,12 @@ function PreviewBannerPromo({ config, onConfigChange }: { config: Record<string,
             <div>
               {onConfigChange ? (
                 <>
-                  <EditableText tag="p" className="text-2xl md:text-3xl font-bold" value={(config.titulo as string) || "Promoción"} onChange={(v) => onConfigChange("titulo", v)} />
+                  <EditableText tag="p" className="text-2xl @md:text-3xl font-bold" value={(config.titulo as string) || "Promoción"} onChange={(v) => onConfigChange("titulo", v)} />
                   <EditableText tag="p" className="text-white/90 mt-1" value={(config.subtitulo as string) || "Descripción de la promo"} onChange={(v) => onConfigChange("subtitulo", v)} />
                 </>
               ) : (
                 <>
-                  <p className="text-2xl md:text-3xl font-bold">{(config.titulo as string) || "Promoción"}</p>
+                  <p className="text-2xl @md:text-3xl font-bold">{(config.titulo as string) || "Promoción"}</p>
                   <p className="text-white/90 mt-1">{(config.subtitulo as string) || "Descripción de la promo"}</p>
                 </>
               )}
@@ -677,13 +784,13 @@ function PreviewPorQueElegirnos({ config, onConfigChange }: { config: Record<str
       <div className="max-w-7xl mx-auto px-4">
         <div className="text-center mb-10">
           {onConfigChange ? (
-            <EditableText tag="h2" className="text-2xl md:text-3xl font-bold text-gray-900" value={titulo} onChange={(v) => onConfigChange("titulo_seccion", v)} />
+            <EditableText tag="h2" className="text-2xl @md:text-3xl font-bold text-gray-900" value={titulo} onChange={(v) => onConfigChange("titulo_seccion", v)} />
           ) : (
-            <h2 className="text-2xl md:text-3xl font-bold text-gray-900">{titulo}</h2>
+            <h2 className="text-2xl @md:text-3xl font-bold text-gray-900">{titulo}</h2>
           )}
           <div className="w-16 h-1 bg-pink-600 rounded-full mx-auto mt-2" />
         </div>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 @md:grid-cols-3 gap-6">
           {cards.map((card, i) => {
             const Icon = ICON_MAP[card.icono] ?? Star;
             return (
@@ -791,7 +898,7 @@ function BlockPreview({ bloque, onConfigChange }: { bloque: Bloque; onConfigChan
               </h2>
               <span className="text-xs text-orange-500 font-medium">Ver todos →</span>
             </div>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            <div className="grid grid-cols-2 @md:grid-cols-4 gap-3">
               {Array.from({ length: Math.min((bloque.config.max_items_home as number) || 4, 4) }).map((_, i) => (
                 <div key={i} className="rounded-xl border border-orange-100 bg-white p-3">
                   <div className="aspect-square bg-gray-100 rounded-lg mb-2 flex items-center justify-center">
@@ -818,7 +925,7 @@ function BlockPreview({ bloque, onConfigChange }: { bloque: Bloque; onConfigChan
               <h2 className="text-xl font-bold text-gray-900">{(bloque.config.titulo as string) || "Últimas Unidades"}</h2>
               <div className="w-12 h-0.5 bg-red-400 rounded-full mx-auto mt-2" />
             </div>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            <div className="grid grid-cols-2 @md:grid-cols-4 gap-3">
               {Array.from({ length: 4 }).map((_, i) => (
                 <div key={i} className="rounded-xl border border-red-100 bg-white p-3">
                   <div className="aspect-square bg-gray-100 rounded-lg mb-2 flex items-center justify-center relative">
@@ -842,7 +949,7 @@ function BlockPreview({ bloque, onConfigChange }: { bloque: Bloque; onConfigChan
               <h2 className="text-xl font-bold text-gray-900">{(bloque.config.titulo as string) || "Los Más Vendidos"}</h2>
               <div className="w-12 h-0.5 bg-primary rounded-full mx-auto mt-2" />
             </div>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            <div className="grid grid-cols-2 @md:grid-cols-4 gap-3">
               {Array.from({ length: 4 }).map((_, i) => (
                 <div key={i} className="rounded-xl border border-gray-100 bg-white p-3">
                   <div className="aspect-square bg-gray-100 rounded-lg mb-2 flex items-center justify-center">
@@ -976,20 +1083,7 @@ export default function PaginaInicioEditor() {
 
   const [originalIds, setOriginalIds] = useState<string[]>([]);
   const [savedSnapshot, setSavedSnapshot] = useState<string>("");
-  const [previewKey, setPreviewKey] = useState(0);
-  const [containerWidth, setContainerWidth] = useState(900);
   const settingsPanelRef = useRef<HTMLDivElement>(null);
-  const iframeRef = useRef<HTMLIFrameElement>(null);
-  const previewContainerRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    const el = previewContainerRef.current;
-    if (!el) return;
-    const ro = new ResizeObserver(() => setContainerWidth(el.clientWidth - 32));
-    ro.observe(el);
-    setContainerWidth(el.clientWidth - 32);
-    return () => ro.disconnect();
-  }, []);
 
   const selectedBlock = bloques.find((b) => b.id === selectedId) ?? null;
 
@@ -1056,7 +1150,6 @@ export default function PaginaInicioEditor() {
       setOriginalIds(currentIds);
       setSavedSnapshot(JSON.stringify(bloques));
       setSaved(true);
-      setPreviewKey((k) => k + 1);
       setTimeout(() => setSaved(false), 2000);
     } catch (err) {
       console.error("Error saving:", err);
@@ -1212,55 +1305,159 @@ export default function PaginaInicioEditor() {
 
       {/* ── Main Area ──────────────────────────────────────────────────── */}
       <div className="flex flex-1 overflow-hidden">
-        {/* ── Left: Real Store Preview (iframe) ────────────────── */}
-        <div ref={previewContainerRef} className="flex-1 bg-gray-300 overflow-hidden flex flex-col items-center p-4 gap-2">
-          {/* Toolbar de recarga */}
-          <div className="flex items-center gap-2 self-stretch justify-end">
-            <span className="text-xs text-gray-500">
-              {device === "mobile" ? "375px" : device === "tablet" ? "768px" : "Escritorio"}
-            </span>
-            <button
-              onClick={() => setPreviewKey((k) => k + 1)}
-              className="flex items-center gap-1.5 text-xs bg-white border border-gray-300 rounded-lg px-2.5 py-1 hover:bg-gray-50 transition-colors text-gray-600"
-              title="Recargar preview"
-            >
-              <RefreshCw className="w-3 h-3" />
-              Recargar
-            </button>
-          </div>
+        {/* ── Left: Live Preview (inline rendering) ────────────────── */}
+        <div className="flex-1 bg-gray-200 overflow-hidden flex items-start justify-center p-4">
+          <div
+            className="bg-white shadow-xl rounded-lg overflow-y-auto transition-all duration-300 h-full @container"
+            style={{ maxWidth: previewWidths[device], width: "100%" }}
+          >
+            <div className="min-h-full bg-white">
+              {/* Insert point at the very top */}
+              <InsertPoint onClick={() => { setAddAtIndex(0); setAddDialogOpen(true); }} />
 
-          {/* Contenedor del iframe con escalado */}
-          {(() => {
-            const devicePixelWidths: Record<string, number> = { mobile: 375, tablet: 768 };
-            const iframeW = devicePixelWidths[device] ?? containerWidth;
-            const scale = device === "desktop" ? 1 : Math.min(1, containerWidth / iframeW);
-            const visibleH = `calc(100% - 32px)`;
-            return (
-              <div
-                className="relative overflow-hidden rounded-xl shadow-2xl bg-white"
-                style={{
-                  width: device === "desktop" ? "100%" : iframeW * scale,
-                  height: visibleH,
-                  flexShrink: 0,
-                }}
-              >
-                <iframe
-                  ref={iframeRef}
-                  key={previewKey}
-                  src={`/?_t=${previewKey}`}
-                  title="Vista previa de la tienda"
-                  className="border-0 bg-white"
-                  style={{
-                    width: device === "desktop" ? "100%" : iframeW,
-                    height: scale < 1 ? `${100 / scale}%` : "100%",
-                    transform: scale < 1 ? `scale(${scale})` : undefined,
-                    transformOrigin: "top left",
-                    pointerEvents: "none",
-                  }}
-                />
-              </div>
-            );
-          })()}
+              {getDisplayBloques(bloques).map((entry, displayIdx) => {
+                if ("virtual" in entry) {
+                  return (
+                    <div key={entry.virtual.id}>
+                      <VirtualBlockPlaceholder virtual={entry.virtual} />
+                    </div>
+                  );
+                }
+                const bloque = entry;
+                const idx = bloques.findIndex((b) => b.id === bloque.id);
+                const isSelected = selectedId === bloque.id;
+                const isHovered = hoveredId === bloque.id;
+                const BlockIcon = getBlockIcon(bloque.tipo);
+
+                return (
+                  <div key={bloque.id}>
+                    <div
+                      draggable
+                      onDragStart={(e) => { e.dataTransfer.setData("text/plain", bloque.id); e.currentTarget.style.opacity = "0.5"; }}
+                      onDragEnd={(e) => { e.currentTarget.style.opacity = ""; }}
+                      onDragOver={(e) => { e.preventDefault(); e.currentTarget.style.outline = "3px dashed #ec4899"; }}
+                      onDragLeave={(e) => { e.currentTarget.style.outline = ""; }}
+                      onDrop={(e) => {
+                        e.preventDefault();
+                        e.currentTarget.style.outline = "";
+                        const fromId = e.dataTransfer.getData("text/plain");
+                        if (!fromId || fromId === bloque.id || isVirtualBloque(fromId)) return;
+                        setBloques((prev) => {
+                          const fromIdx = prev.findIndex((b) => b.id === fromId);
+                          const toIdx = prev.findIndex((b) => b.id === bloque.id);
+                          if (fromIdx < 0 || toIdx < 0) return prev;
+                          const list = [...prev];
+                          const [moved] = list.splice(fromIdx, 1);
+                          list.splice(toIdx, 0, moved);
+                          return list;
+                        });
+                      }}
+                      className={`relative cursor-grab active:cursor-grabbing transition-all duration-200 ${
+                        !bloque.activo ? "opacity-40" : ""
+                      }`}
+                      style={{
+                        outline: isSelected
+                          ? "3px solid #ec4899"
+                          : isHovered
+                          ? "2px solid #f9a8d4"
+                          : "2px solid transparent",
+                        outlineOffset: isSelected ? "-3px" : "-2px",
+                      }}
+                      onClick={() => setSelectedId(bloque.id)}
+                      onDoubleClick={() => setSelectedId(bloque.id)}
+                      onMouseEnter={() => setHoveredId(bloque.id)}
+                      onMouseLeave={() => setHoveredId(null)}
+                    >
+                      {/* Oculto badge */}
+                      {!bloque.activo && (
+                        <div className="absolute top-2 left-2 z-20 bg-gray-800 text-white text-[10px] font-semibold px-2 py-0.5 rounded-full flex items-center gap-1">
+                          <EyeOff className="w-3 h-3" />
+                          Oculto
+                        </div>
+                      )}
+
+                      {/* Floating toolbar on hover */}
+                      {(isHovered || isSelected) && (
+                        <div className="absolute top-2 right-2 z-20 flex items-center gap-1 bg-white rounded-lg shadow-lg border border-gray-200 p-1">
+                          <span className="px-2 py-0.5 text-[10px] font-semibold text-gray-500 border-r border-gray-200 mr-1">
+                            {getBlockDef(bloque.tipo)?.label}
+                          </span>
+                          <button
+                            onClick={(e) => { e.stopPropagation(); setSelectedId(bloque.id); }}
+                            className="p-1 hover:bg-pink-50 rounded transition-colors"
+                            title="Editar"
+                          >
+                            <Pencil className="w-3.5 h-3.5 text-gray-600" />
+                          </button>
+                          <button
+                            onClick={(e) => { e.stopPropagation(); moveBlock(bloque.id, -1); }}
+                            className="p-1 hover:bg-gray-100 rounded transition-colors disabled:opacity-30"
+                            disabled={idx === 0}
+                            title="Mover arriba"
+                          >
+                            <ChevronUp className="w-3.5 h-3.5 text-gray-600" />
+                          </button>
+                          <button
+                            onClick={(e) => { e.stopPropagation(); moveBlock(bloque.id, 1); }}
+                            className="p-1 hover:bg-gray-100 rounded transition-colors disabled:opacity-30"
+                            disabled={idx === bloques.length - 1}
+                            title="Mover abajo"
+                          >
+                            <ChevronDown className="w-3.5 h-3.5 text-gray-600" />
+                          </button>
+                          <button
+                            onClick={(e) => { e.stopPropagation(); toggleActivo(bloque.id); }}
+                            className="p-1 hover:bg-gray-100 rounded transition-colors"
+                            title={bloque.activo ? "Ocultar" : "Mostrar"}
+                          >
+                            {bloque.activo ? (
+                              <Eye className="w-3.5 h-3.5 text-gray-600" />
+                            ) : (
+                              <EyeOff className="w-3.5 h-3.5 text-gray-600" />
+                            )}
+                          </button>
+                          <button
+                            onClick={(e) => { e.stopPropagation(); setDeleteConfirm(bloque.id); }}
+                            className="p-1 hover:bg-red-50 rounded transition-colors"
+                            title="Eliminar"
+                          >
+                            <Trash2 className="w-3.5 h-3.5 text-red-500" />
+                          </button>
+                        </div>
+                      )}
+
+                      {/* Selected indicator bar */}
+                      {isSelected && (
+                        <div className="absolute left-0 top-0 bottom-0 w-1 bg-pink-500 z-20 rounded-r" />
+                      )}
+
+                      {/* The actual block preview - inline editable */}
+                      <div>
+                        <BlockPreview bloque={bloque} onConfigChange={(key, val) => updateConfig(bloque.id, key, val)} />
+                      </div>
+                    </div>
+
+                    {/* Insert point between blocks */}
+                    <InsertPoint onClick={() => { setAddAtIndex(idx + 1); setAddDialogOpen(true); }} />
+                  </div>
+                );
+              })}
+
+              {bloques.length === 0 && (
+                <div className="py-24 text-center text-gray-400">
+                  <MousePointer className="w-10 h-10 mx-auto mb-3 opacity-30" />
+                  <p className="text-sm">No hay bloques. Agregá uno para empezar.</p>
+                  <button
+                    onClick={() => { setAddAtIndex(-1); setAddDialogOpen(true); }}
+                    className="mt-4 px-4 py-2 bg-pink-500 text-white rounded-lg text-sm font-medium hover:bg-pink-600 transition-colors"
+                  >
+                    <Plus className="w-4 h-4 inline mr-1" />
+                    Agregar bloque
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
         </div>
 
         {/* ── Right: Settings Panel ──────────────────────────────────── */}
@@ -1319,26 +1516,50 @@ export default function PaginaInicioEditor() {
                     No hay bloques. Agregá uno para empezar.
                   </div>
                 )}
-                {bloques.map((bloque, idx: number) => {
+                {getDisplayBloques(bloques).map((entry) => {
+                  if ("virtual" in entry) {
+                    const VIcon = entry.virtual.icon;
+                    return (
+                      <div
+                        key={entry.virtual.id}
+                        className="flex items-center gap-2 p-2 rounded-lg border border-dashed border-gray-200 bg-gray-50/50 opacity-70"
+                        title={entry.virtual.descripcion}
+                      >
+                        <div className="w-3.5 shrink-0" />
+                        <div className="w-7 h-7 rounded-md flex items-center justify-center shrink-0 bg-white border border-gray-200">
+                          <VIcon className="w-3.5 h-3.5 text-gray-500" />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-xs font-medium truncate text-gray-600">{entry.virtual.label}</p>
+                          <p className="text-[10px] text-gray-400">Automático</p>
+                        </div>
+                      </div>
+                    );
+                  }
+                  const bloque = entry;
+                  const idx = bloques.findIndex((b) => b.id === bloque.id);
                   const Icon = getBlockIcon(bloque.tipo);
                   const isSelected = selectedId === bloque.id;
                   return (
                     <div
                       key={bloque.id}
                       draggable
-                      onDragStart={(e) => { e.dataTransfer.setData("text/plain", String(idx)); e.currentTarget.classList.add("opacity-50"); }}
+                      onDragStart={(e) => { e.dataTransfer.setData("text/plain", bloque.id); e.currentTarget.classList.add("opacity-50"); }}
                       onDragEnd={(e) => { e.currentTarget.classList.remove("opacity-50"); }}
                       onDragOver={(e) => { e.preventDefault(); e.currentTarget.classList.add("border-pink-400"); }}
                       onDragLeave={(e) => { e.currentTarget.classList.remove("border-pink-400"); }}
                       onDrop={(e) => {
                         e.preventDefault();
                         e.currentTarget.classList.remove("border-pink-400");
-                        const from = Number(e.dataTransfer.getData("text/plain"));
-                        if (from === idx || isNaN(from)) return;
+                        const fromId = e.dataTransfer.getData("text/plain");
+                        if (!fromId || fromId === bloque.id || isVirtualBloque(fromId)) return;
                         setBloques((prev) => {
+                          const fromIdx = prev.findIndex((b) => b.id === fromId);
+                          const toIdx = prev.findIndex((b) => b.id === bloque.id);
+                          if (fromIdx < 0 || toIdx < 0) return prev;
                           const list = [...prev];
-                          const [moved] = list.splice(from, 1);
-                          list.splice(idx, 0, moved);
+                          const [moved] = list.splice(fromIdx, 1);
+                          list.splice(toIdx, 0, moved);
                           return list;
                         });
                       }}
@@ -1464,6 +1685,239 @@ export default function PaginaInicioEditor() {
 
 // ── Block config forms ─────────────────────────────────────────────────────
 
+// ── Productos Destacados Form ──────────────────────────────────────────────
+
+function ProductosDestacadosForm({ c, onConfigChange }: { c: Record<string, unknown>; onConfigChange: (key: string, value: unknown) => void }) {
+  const TAB_META: Record<string, { label: string; Icon: LucideIcon; descripcion: string }> = {
+    destacados: { label: "Destacados", Icon: Star, descripcion: "Productos marcados manualmente como destacados." },
+    nuevos: { label: "Nuevos ingresos", Icon: Zap, descripcion: "Productos creados recientemente en el catálogo." },
+    reingresos: { label: "De vuelta en stock", Icon: RotateCw, descripcion: "Productos que volvieron a tener stock después de estar en cero." },
+    ofertas: { label: "Ofertas", Icon: Sparkles, descripcion: "Productos con descuentos activos." },
+    mas_vendidos: { label: "Más vendidos", Icon: TrendingUp, descripcion: "Top productos por unidades vendidas en un período." },
+  };
+
+  const rawTabs = (c.tabs as Array<{ key: string; activo: boolean }> | undefined);
+  const defaultTabs = [
+    { key: "destacados", activo: true },
+    { key: "nuevos", activo: true },
+    { key: "reingresos", activo: true },
+    { key: "ofertas", activo: true },
+    { key: "mas_vendidos", activo: true },
+  ];
+  const orderedTabs = Array.isArray(rawTabs) && rawTabs.length > 0
+    ? (() => {
+        const filtered = rawTabs.filter((t) => t && typeof t.key === "string" && TAB_META[t.key]);
+        const seen = new Set(filtered.map((t) => t.key));
+        for (const d of defaultTabs) if (!seen.has(d.key)) filtered.push(d);
+        return filtered;
+      })()
+    : defaultTabs;
+
+  const updateTabs = (next: Array<{ key: string; activo: boolean }>) => onConfigChange("tabs", next);
+  const moveTab = (idx: number, dir: -1 | 1) => {
+    const next = [...orderedTabs];
+    const target = idx + dir;
+    if (target < 0 || target >= next.length) return;
+    [next[idx], next[target]] = [next[target], next[idx]];
+    updateTabs(next);
+  };
+  const toggleTab = (idx: number) => {
+    updateTabs(orderedTabs.map((t, i) => i === idx ? { ...t, activo: !t.activo } : t));
+  };
+
+  const activeKeys = orderedTabs.filter((t) => t.activo).map((t) => t.key);
+  const tabDefecto = (c.tab_defecto as string) ?? activeKeys[0] ?? "destacados";
+
+  const [expandedKey, setExpandedKey] = useState<string | null>(null);
+
+  return (
+    <div className="space-y-4">
+      {/* ── Identidad ── */}
+      <Field label="Título de sección" value={c.titulo_seccion as string} onChange={(v) => onConfigChange("titulo_seccion", v)} />
+
+      {/* ── Layout ── */}
+      <div className="grid grid-cols-2 gap-2">
+        <div className="space-y-1.5">
+          <Label>Cantidad máxima</Label>
+          <Select
+            value={String((c.max_items as number) ?? 8)}
+            onValueChange={(v) => onConfigChange("max_items", parseInt((v ?? "8"), 10))}
+          >
+            <SelectTrigger><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="4">4</SelectItem>
+              <SelectItem value="8">8</SelectItem>
+              <SelectItem value="12">12</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="space-y-1.5">
+          <Label>Rotación auto.</Label>
+          <Select
+            value={String((c.carrusel_intervalo as number) ?? 0)}
+            onValueChange={(v) => onConfigChange("carrusel_intervalo", parseInt(v ?? "0", 10))}
+          >
+            <SelectTrigger><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="0">Sin rotación</SelectItem>
+              <SelectItem value="3">Cada 3s</SelectItem>
+              <SelectItem value="5">Cada 5s</SelectItem>
+              <SelectItem value="8">Cada 8s</SelectItem>
+              <SelectItem value="10">Cada 10s</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
+
+      {/* ── Tabs (expandibles) ── */}
+      <div className="space-y-1.5">
+        <Label>Tabs</Label>
+        <div className="space-y-1.5">
+          {orderedTabs.map((t, idx) => {
+            const meta = TAB_META[t.key];
+            const Icon = meta.Icon;
+            const isExpanded = expandedKey === t.key;
+            const isDefault = tabDefecto === t.key && t.activo;
+            return (
+              <div key={t.key} className={`rounded-lg border transition-colors ${isExpanded ? "border-pink-300 bg-pink-50/30" : "border-gray-200 bg-white"}`}>
+                {/* Header */}
+                <div className="flex items-center gap-1.5 p-2">
+                  <div className="flex flex-col shrink-0">
+                    <button type="button" disabled={idx === 0} onClick={() => moveTab(idx, -1)} className="text-gray-400 hover:text-gray-700 disabled:opacity-30 disabled:cursor-not-allowed" aria-label="Subir">
+                      <ChevronUp className="w-3 h-3" />
+                    </button>
+                    <button type="button" disabled={idx === orderedTabs.length - 1} onClick={() => moveTab(idx, 1)} className="text-gray-400 hover:text-gray-700 disabled:opacity-30 disabled:cursor-not-allowed" aria-label="Bajar">
+                      <ChevronDown className="w-3 h-3" />
+                    </button>
+                  </div>
+                  <div className={`w-7 h-7 rounded-md flex items-center justify-center shrink-0 ${t.activo ? "bg-indigo-50" : "bg-gray-100"}`}>
+                    <Icon className={`w-3.5 h-3.5 ${t.activo ? "text-indigo-600" : "text-gray-400"}`} />
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setExpandedKey(isExpanded ? null : t.key)}
+                    className={`flex-1 text-left text-sm font-medium min-w-0 truncate ${t.activo ? "text-gray-900" : "text-gray-400 line-through"}`}
+                  >
+                    {meta.label}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => t.activo && onConfigChange("tab_defecto", t.key)}
+                    disabled={!t.activo}
+                    className={`p-1 rounded transition disabled:cursor-not-allowed ${isDefault ? "text-amber-500" : "text-gray-300 hover:text-amber-400 disabled:hover:text-gray-300"}`}
+                    aria-label={isDefault ? "Tab por defecto" : "Marcar como tab por defecto"}
+                    title={isDefault ? "Tab por defecto" : "Marcar como tab por defecto"}
+                  >
+                    <Star className={`w-3.5 h-3.5 ${isDefault ? "fill-amber-500" : ""}`} />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => toggleTab(idx)}
+                    className={`p-1 rounded transition ${t.activo ? "text-primary hover:bg-primary/10" : "text-gray-400 hover:bg-gray-100"}`}
+                    aria-label={t.activo ? "Ocultar tab" : "Mostrar tab"}
+                    title={t.activo ? "Ocultar tab" : "Mostrar tab"}
+                  >
+                    {t.activo ? <Eye className="w-3.5 h-3.5" /> : <EyeOff className="w-3.5 h-3.5" />}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setExpandedKey(isExpanded ? null : t.key)}
+                    className="p-1 text-gray-400 hover:text-gray-700"
+                    aria-label={isExpanded ? "Contraer" : "Expandir"}
+                  >
+                    <ChevronDownIcon className={`w-3.5 h-3.5 transition-transform ${isExpanded ? "" : "-rotate-90"}`} />
+                  </button>
+                </div>
+
+                {/* Body */}
+                {isExpanded && (
+                  <div className="px-3 pb-3 pt-1 space-y-3 border-t border-gray-100">
+                    <p className="text-[11px] text-muted-foreground">{meta.descripcion}</p>
+
+                    {t.key === "nuevos" && (
+                      <div className="space-y-1.5">
+                        <Label>Días para considerar &quot;nuevo&quot;</Label>
+                        <Input
+                          type="number" min={1} max={30}
+                          value={(c.dias_nuevos as number) ?? 5}
+                          onChange={(e) => onConfigChange("dias_nuevos", parseInt(e.target.value) || 5)}
+                        />
+                      </div>
+                    )}
+
+                    {t.key === "reingresos" && (
+                      <div className="space-y-1.5">
+                        <Label>Días que dura un reingreso</Label>
+                        <Input
+                          type="number" min={1} max={14}
+                          value={(c.dias_reingresos as number) ?? 4}
+                          onChange={(e) => onConfigChange("dias_reingresos", parseInt(e.target.value) || 4)}
+                        />
+                      </div>
+                    )}
+
+                    {t.key === "mas_vendidos" && (
+                      <>
+                        <div className="space-y-1.5">
+                          <Label>Período inicial</Label>
+                          <Select
+                            value={String((c.mas_vendidos_periodo_default as number) ?? 30)}
+                            onValueChange={(v) => onConfigChange("mas_vendidos_periodo_default", parseInt(v ?? "30", 10))}
+                          >
+                            <SelectTrigger><SelectValue /></SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="7">Últimos 7 días</SelectItem>
+                              <SelectItem value="30">Últimos 30 días</SelectItem>
+                              <SelectItem value="90">Últimos 90 días</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <Label>Cliente puede cambiar período</Label>
+                            <p className="text-[11px] text-muted-foreground">Mostrar selector 7/30/90 en la web.</p>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => onConfigChange("mas_vendidos_mostrar_selector", !((c.mas_vendidos_mostrar_selector as boolean | undefined) ?? true))}
+                            className="shrink-0"
+                          >
+                            <span className={`w-9 h-5 rounded-full relative inline-flex items-center transition-colors ${((c.mas_vendidos_mostrar_selector as boolean | undefined) ?? true) ? "bg-pink-500" : "bg-gray-300"}`}>
+                              <span className={`w-3.5 h-3.5 rounded-full bg-white absolute transition-transform ${((c.mas_vendidos_mostrar_selector as boolean | undefined) ?? true) ? "translate-x-5" : "translate-x-0.5"}`} />
+                            </span>
+                          </button>
+                        </div>
+                      </>
+                    )}
+
+                    {t.key === "destacados" && (
+                      <div className="space-y-1.5">
+                        <Label>Productos destacados</Label>
+                        <p className="text-[11px] text-muted-foreground">Arrastrá para reordenar — el orden manual se respeta en la web.</p>
+                        <FeaturedProductsPanel />
+                      </div>
+                    )}
+
+                    {t.key === "ofertas" && (
+                      <p className="text-xs text-gray-600">
+                        Se llena automáticamente con productos que tengan descuentos activos. Los descuentos se gestionan desde{" "}
+                        <Link href="/admin/descuentos" className="text-pink-600 hover:underline">/admin/descuentos</Link>.
+                      </p>
+                    )}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+        <p className="text-[11px] text-muted-foreground">
+          ⭐ marca el tab por defecto · 👁 oculta el tab · ↕ reordena
+        </p>
+      </div>
+    </div>
+  );
+}
+
 function BlockConfigForm({
   bloque,
   onConfigChange,
@@ -1558,172 +2012,7 @@ function BlockConfigForm({
       );
 
     case "productos_destacados":
-      return (
-        <div className="space-y-3">
-          <Field label="Título de sección" value={c.titulo_seccion as string} onChange={(v) => onConfigChange("titulo_seccion", v)} />
-          <div className="space-y-1.5">
-            <Label>Cantidad máxima</Label>
-            <Select
-              value={String((c.max_items as number) ?? 8)}
-              onValueChange={(v) => onConfigChange("max_items", parseInt((v ?? "8"), 10))}
-            >
-              <SelectTrigger className="w-full">
-                <SelectValue placeholder="Cantidad máxima" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="4">4</SelectItem>
-                <SelectItem value="8">8</SelectItem>
-                <SelectItem value="12">12</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="space-y-1.5">
-            <Label>Orden</Label>
-            <Select
-              value={(c.orden as string) ?? "recientes"}
-              onValueChange={(v) => onConfigChange("orden", v ?? "recientes")}
-            >
-              <SelectTrigger className="w-full">
-                <SelectValue placeholder="Orden" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="manual">Manual (marcados como destacados)</SelectItem>
-                <SelectItem value="recientes">Más recientes</SelectItem>
-                <SelectItem value="precio_asc">Precio: menor a mayor</SelectItem>
-                <SelectItem value="precio_desc">Precio: mayor a menor</SelectItem>
-                <SelectItem value="nombre">Nombre A-Z</SelectItem>
-                <SelectItem value="recien_repuestos">Recién repuestos (sin stock → con stock)</SelectItem>
-                <SelectItem value="mas_vendidos">Más vendidos (últimos 30 días)</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-          {(() => {
-            const TAB_META: Record<string, { label: string }> = {
-              destacados: { label: "Destacados" },
-              nuevos: { label: "Nuevos ingresos" },
-              reingresos: { label: "De vuelta en stock" },
-              ofertas: { label: "Ofertas" },
-              mas_vendidos: { label: "Más vendidos" },
-            };
-            const rawTabs = (c.tabs as Array<{ key: string; activo: boolean }> | undefined);
-            const defaultTabs = [
-              { key: "destacados", activo: true },
-              { key: "nuevos", activo: true },
-              { key: "reingresos", activo: true },
-              { key: "ofertas", activo: true },
-              { key: "mas_vendidos", activo: true },
-            ];
-            const currentTabs = Array.isArray(rawTabs) && rawTabs.length > 0
-              ? defaultTabs.map((d) => rawTabs.find((t) => t.key === d.key) ?? d)
-                  .concat(rawTabs.filter((t) => !defaultTabs.some((d) => d.key === t.key)))
-              : defaultTabs;
-            // Preservar orden custom si existe
-            const orderedTabs = Array.isArray(rawTabs) && rawTabs.length > 0
-              ? rawTabs.filter((t) => t && typeof t.key === "string" && TAB_META[t.key])
-              : defaultTabs;
-            const updateTabs = (next: Array<{ key: string; activo: boolean }>) => {
-              onConfigChange("tabs", next);
-            };
-            const moveTab = (idx: number, dir: -1 | 1) => {
-              const next = [...orderedTabs];
-              const target = idx + dir;
-              if (target < 0 || target >= next.length) return;
-              [next[idx], next[target]] = [next[target], next[idx]];
-              updateTabs(next);
-            };
-            const toggleTab = (idx: number) => {
-              const next = orderedTabs.map((t, i) => i === idx ? { ...t, activo: !t.activo } : t);
-              updateTabs(next);
-            };
-            const activeKeys = orderedTabs.filter((t) => t.activo).map((t) => t.key);
-            const defaultTab = (c.tab_defecto as string) ?? activeKeys[0] ?? "destacados";
-            void currentTabs;
-            return (
-              <>
-                <div className="space-y-1.5">
-                  <Label>Tabs visibles (orden y activación)</Label>
-                  <div className="space-y-1 rounded-lg border border-gray-200 p-2 bg-gray-50/50">
-                    {orderedTabs.map((t, idx) => (
-                      <div key={t.key} className="flex items-center gap-2 px-2 py-1.5 bg-white rounded border border-gray-100">
-                        <div className="flex flex-col">
-                          <button
-                            type="button"
-                            disabled={idx === 0}
-                            onClick={() => moveTab(idx, -1)}
-                            className="text-gray-400 hover:text-gray-700 disabled:opacity-30 disabled:cursor-not-allowed"
-                            aria-label="Subir"
-                          >
-                            <ChevronUp className="w-3.5 h-3.5" />
-                          </button>
-                          <button
-                            type="button"
-                            disabled={idx === orderedTabs.length - 1}
-                            onClick={() => moveTab(idx, 1)}
-                            className="text-gray-400 hover:text-gray-700 disabled:opacity-30 disabled:cursor-not-allowed"
-                            aria-label="Bajar"
-                          >
-                            <ChevronDown className="w-3.5 h-3.5" />
-                          </button>
-                        </div>
-                        <span className={`flex-1 text-sm font-medium ${t.activo ? "text-gray-900" : "text-gray-400 line-through"}`}>
-                          {TAB_META[t.key]?.label ?? t.key}
-                        </span>
-                        <button
-                          type="button"
-                          onClick={() => toggleTab(idx)}
-                          className={`p-1.5 rounded-md transition ${t.activo ? "text-primary hover:bg-primary/10" : "text-gray-400 hover:bg-gray-100"}`}
-                          aria-label={t.activo ? "Ocultar tab" : "Mostrar tab"}
-                          title={t.activo ? "Ocultar tab" : "Mostrar tab"}
-                        >
-                          {t.activo ? <Eye className="w-4 h-4" /> : <EyeOff className="w-4 h-4" />}
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                  <p className="text-xs text-gray-500">El primer tab visible es el que se muestra por defecto cuando abre la tienda.</p>
-                </div>
-
-                <div className="space-y-1.5">
-                  <Label>Tab por defecto</Label>
-                  <Select
-                    value={activeKeys.includes(defaultTab) ? defaultTab : (activeKeys[0] ?? "destacados")}
-                    onValueChange={(v) => onConfigChange("tab_defecto", v ?? "destacados")}
-                  >
-                    <SelectTrigger><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      {orderedTabs.filter((t) => t.activo).map((t) => (
-                        <SelectItem key={t.key} value={t.key}>{TAB_META[t.key]?.label ?? t.key}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              </>
-            );
-          })()}
-
-          <div className="space-y-1.5">
-            <Label>Rotación automática</Label>
-            <Select
-              value={String((c.carrusel_intervalo as number) ?? 0)}
-              onValueChange={(v) => onConfigChange("carrusel_intervalo", parseInt(v ?? "0", 10))}
-            >
-              <SelectTrigger><SelectValue /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="0">Sin rotación</SelectItem>
-                <SelectItem value="3">Cada 3 segundos</SelectItem>
-                <SelectItem value="5">Cada 5 segundos</SelectItem>
-                <SelectItem value="8">Cada 8 segundos</SelectItem>
-                <SelectItem value="10">Cada 10 segundos</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-
-          <div className="space-y-1.5">
-            <Label>Productos destacados actuales</Label>
-            <FeaturedProductsPanel />
-          </div>
-        </div>
-      );
+      return <ProductosDestacadosForm c={c} onConfigChange={onConfigChange} />;
 
     case "banner_promo":
       return (

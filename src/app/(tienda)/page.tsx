@@ -8,17 +8,12 @@ const fetchHomeData = unstable_cache(async () => {
   // 1. Fetch blocks + config + programaciones de hero activas en paralelo.
   // Si hay 1: override del hero. Si hay 2+: carrusel.
   const nowIso = new Date().toISOString();
-  const [bloquesRes, configRes, heroProgRes] = await Promise.all([
+  const [bloquesRes, heroProgRes] = await Promise.all([
     supabase
       .from("pagina_inicio_bloques")
       .select("*")
       .eq("activo", true)
       .order("orden", { ascending: true }),
-    supabase
-      .from("tienda_config")
-      .select("dias_badge_nuevo")
-      .limit(1)
-      .single(),
     supabase
       .from("hero_programaciones")
       .select("titulo, subtitulo, boton_texto, boton_link, boton_secundario_texto, boton_secundario_link, color_inicio, color_fin, marcas, auto_porcentaje, tipo, producto_id, descuento_id")
@@ -150,7 +145,6 @@ const fetchHomeData = unstable_cache(async () => {
       }).filter(Boolean);
     }
   }
-  const diasNuevo: number = configRes.data?.dias_badge_nuevo ?? 5;
   const tipos = blocks.map((b) => b.tipo);
 
   // 2. Fetch categories and products in parallel based on block types
@@ -276,9 +270,16 @@ const fetchHomeData = unstable_cache(async () => {
   const bloqueNuevos = blocks.find((b: any) => b.tipo === "nuevos_ingresos");
   const bloqueAumentos = blocks.find((b: any) => b.tipo === "aumentos_recientes");
   const bloqueUltimas = blocks.find((b: any) => b.tipo === "ultimas_unidades");
+  const bloqueProductosDestacados = blocks.find((b: any) => b.tipo === "productos_destacados");
+
+  // Tabs config (productos_destacados block) — fallback a legacy si existe.
+  const diasNuevosTab = bloqueProductosDestacados?.config?.dias_nuevos ?? bloqueNuevos?.config?.dias_atras ?? 5;
+  const diasReingresoTab = bloqueProductosDestacados?.config?.dias_reingresos ?? 4;
+  const masVendidosPeriodoDefault = bloqueProductosDestacados?.config?.mas_vendidos_periodo_default ?? 30;
+  const masVendidosMostrarSelector = bloqueProductosDestacados?.config?.mas_vendidos_mostrar_selector ?? true;
 
   const diasMasVendidos = bloqueMasVendidos?.config?.dias_atras ?? 30;
-  const diasNuevos = bloqueNuevos?.config?.dias_atras ?? 5;
+  const diasNuevos = diasNuevosTab;
   const diasAumentos = bloqueAumentos?.config?.dias_atras ?? 3;
   const maxNuevos = bloqueNuevos?.config?.max_items ?? 16;
   const maxMasVendidos = bloqueMasVendidos?.config?.max_items ?? 8;
@@ -326,17 +327,18 @@ const fetchHomeData = unstable_cache(async () => {
     .order("stock", { ascending: true })
     .limit(maxUltimasItems);
 
-  // Más vendidos (tabs): top productos por ventas
+  // Más vendidos (tabs): top productos por ventas.
+  // Período: usa el default config del bloque productos_destacados (admin), con fallback al legacy mas_vendidos.
+  const diasTopVendidos = masVendidosPeriodoDefault ?? diasMasVendidos;
   const hace30 = new Date(ahoraAR);
-  hace30.setDate(hace30.getDate() - diasMasVendidos);
+  hace30.setDate(hace30.getDate() - diasTopVendidos);
 
   const haceNuevosDias = new Date(ahoraAR);
   haceNuevosDias.setDate(haceNuevosDias.getDate() - diasNuevos);
   haceNuevosDias.setHours(0, 0, 0, 0);
-  // Reingresos duran menos que nuevos (4 días vs 5).
-  const diasReingresoHome = 4;
+  // Reingresos: configurable desde el bloque productos_destacados (default 4).
   const haceReingresoDias = new Date(ahoraAR);
-  haceReingresoDias.setDate(haceReingresoDias.getDate() - diasReingresoHome);
+  haceReingresoDias.setDate(haceReingresoDias.getDate() - diasReingresoTab);
   haceReingresoDias.setHours(0, 0, 0, 0);
   const cutoffReingresoMs = haceReingresoDias.getTime();
 
@@ -594,7 +596,6 @@ const fetchHomeData = unstable_cache(async () => {
     categorias,
     productos,
     presMap,
-    diasNuevo,
     aumentos,
     masVendidosData: masVendidosData || [],
     ultimasUnidadesData: ultimasUnidadesData || [],
@@ -616,7 +617,6 @@ export default async function TiendaHomePage() {
       initialCategorias={data.categorias}
       initialProductos={data.productos}
       initialPresMap={data.presMap}
-      initialDiasNuevo={data.diasNuevo}
       initialAumentos={data.aumentos}
       initialMasVendidos={data.masVendidosData}
       initialUltimasUnidades={data.ultimasUnidadesData}

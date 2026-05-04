@@ -12,7 +12,7 @@ import {
 } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
-import { Printer, Loader2, Check, Eye, Image } from "lucide-react";
+import { Printer, Loader2, Check, Eye, Image, GripVertical, ChevronDown, Search, X } from "lucide-react";
 import { showAdminToast } from "@/components/admin-toast";
 import type { ReceiptConfig } from "@/components/receipt-print-view";
 import { defaultReceiptConfig } from "@/components/receipt-print-view";
@@ -84,45 +84,114 @@ function CategoriaOrdenList({
     })();
     return () => { alive = false; };
   }, []);
+  const [expandedCatId, setExpandedCatId] = useState<string | null>(null);
+  const [draggedId, setDraggedId] = useState<string | null>(null);
+  const [overId, setOverId] = useState<string | null>(null);
+  const [subSearch, setSubSearch] = useState("");
+
   if (loading) return <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />;
   if (cats.length === 0) return <p className="text-xs text-muted-foreground">No hay categorías cargadas.</p>;
+
   const subsByCat: Record<string, { id: string; nombre: string }[]> = {};
   for (const s of subs) {
     if (!s.categoria_id) continue;
     (subsByCat[s.categoria_id] ||= []).push({ id: s.id, nombre: s.nombre });
   }
+
+  // Persiste un orden secuencial 1..N para todas las cats. Llamar luego de un drop.
+  const persistOrder = async (ordered: typeof cats) => {
+    const updates = ordered.map((c, i) =>
+      supabase.from("categorias").update({ orden: i + 1 }).eq("id", c.id)
+    );
+    await Promise.all(updates);
+  };
+
+  const handleDrop = (targetId: string) => {
+    if (!draggedId || draggedId === targetId) return;
+    setCats((prev) => {
+      const fromIdx = prev.findIndex((c) => c.id === draggedId);
+      const toIdx = prev.findIndex((c) => c.id === targetId);
+      if (fromIdx < 0 || toIdx < 0) return prev;
+      const next = [...prev];
+      const [moved] = next.splice(fromIdx, 1);
+      next.splice(toIdx, 0, moved);
+      const reordered = next.map((c, i) => ({ ...c, orden: i + 1 }));
+      void persistOrder(reordered);
+      return reordered;
+    });
+    setDraggedId(null);
+    setOverId(null);
+  };
+
   return (
-    <div className="space-y-2">
+    <div className="space-y-1">
       {cats.map((c) => {
         const catSubs = subsByCat[c.id] || [];
+        const selectedCount = catSubs.filter((s) => expandedSubs.includes(s.id)).length;
+        const isExpanded = expandedCatId === c.id;
+        const isDragging = draggedId === c.id;
+        const isOver = overId === c.id && draggedId !== c.id;
+        const showSubtotal = subtotalCats.includes(c.id);
+        const showAlfa = alfaCats.includes(c.id);
+        const filteredSubs = subSearch
+          ? catSubs.filter((s) => s.nombre.toLowerCase().includes(subSearch.toLowerCase()))
+          : catSubs;
+
         return (
-          <div key={c.id} className="border rounded-md p-2.5">
-            <div className="flex items-center gap-3">
-              <Input
-                type="number"
-                value={c.orden ?? ""}
-                placeholder="—"
-                className="h-8 w-20 text-xs"
-                onChange={(e) => {
-                  const val = e.target.value === "" ? null : Number(e.target.value);
-                  setCats((prev) => prev.map((cat) => cat.id === c.id ? { ...cat, orden: val } : cat));
-                }}
-                onBlur={async (e) => {
-                  const val = e.target.value === "" ? null : Number(e.target.value);
-                  await supabase.from("categorias").update({ orden: val }).eq("id", c.id);
-                }}
-              />
-              <span className="text-sm font-medium">{c.nombre}</span>
+          <div
+            key={c.id}
+            className={cn(
+              "border rounded-md bg-card transition-all",
+              isOver && "border-emerald-400 border-2",
+              isDragging && "opacity-40",
+              isExpanded && "border-emerald-300"
+            )}
+            onDragOver={(e) => { e.preventDefault(); setOverId(c.id); }}
+            onDragLeave={() => setOverId((cur) => (cur === c.id ? null : cur))}
+            onDrop={(e) => { e.preventDefault(); handleDrop(c.id); }}
+          >
+            {/* Fila compacta */}
+            <div className="flex items-center gap-2 px-2 py-2">
+              <button
+                type="button"
+                draggable
+                onDragStart={(e) => { e.dataTransfer.effectAllowed = "move"; setDraggedId(c.id); }}
+                onDragEnd={() => { setDraggedId(null); setOverId(null); }}
+                className="cursor-grab active:cursor-grabbing text-muted-foreground hover:text-foreground p-0.5"
+                title="Arrastrar para reordenar"
+                aria-label="Reordenar"
+              >
+                <GripVertical className="w-4 h-4" />
+              </button>
+              <span className="text-[11px] tabular-nums text-muted-foreground w-5 text-center">{c.orden ?? "—"}</span>
+              <button
+                type="button"
+                onClick={() => catSubs.length > 0 && setExpandedCatId(isExpanded ? null : c.id)}
+                className={cn(
+                  "flex-1 text-left text-sm font-medium truncate min-w-0",
+                  catSubs.length > 0 ? "cursor-pointer hover:text-emerald-700" : "cursor-default"
+                )}
+              >
+                {c.nombre}
+              </button>
+              {catSubs.length > 0 && (
+                <span className={cn(
+                  "text-[10px] px-1.5 py-0.5 rounded-full font-medium tabular-nums",
+                  selectedCount > 0 ? "bg-emerald-50 text-emerald-700" : "bg-muted text-muted-foreground"
+                )}>
+                  {selectedCount}/{catSubs.length}
+                </span>
+              )}
               <button
                 type="button"
                 onClick={() => onToggleSubtotalCat(c.id)}
                 className={cn(
-                  "ml-auto text-[11px] px-2 py-0.5 rounded-full border font-medium cursor-pointer transition-colors",
-                  subtotalCats.includes(c.id)
+                  "text-[11px] px-2 py-0.5 rounded-full border font-medium cursor-pointer transition-colors",
+                  showSubtotal
                     ? "bg-emerald-50 border-emerald-300 text-emerald-700"
                     : "bg-muted/30 border-border text-muted-foreground hover:bg-muted"
                 )}
-                title={subtotalCats.includes(c.id) ? "Mostrar el subtotal $ de esta categoría en el ticket" : "No mostrar subtotal $ en el ticket"}
+                title={showSubtotal ? "Mostrar el subtotal $ de esta categoría en el ticket" : "No mostrar subtotal $ en el ticket"}
               >
                 $ subtotal
               </button>
@@ -131,39 +200,76 @@ function CategoriaOrdenList({
                 onClick={() => onToggleAlfaCat(c.id)}
                 className={cn(
                   "text-[11px] px-2 py-0.5 rounded-full border font-medium cursor-pointer transition-colors",
-                  alfaCats.includes(c.id)
+                  showAlfa
                     ? "bg-sky-50 border-sky-300 text-sky-700"
                     : "bg-muted/30 border-border text-muted-foreground hover:bg-muted"
                 )}
-                title={alfaCats.includes(c.id) ? "Items ordenados A-Z dentro de esta categoría" : "Items en orden de carga (default)"}
+                title={showAlfa ? "Items ordenados A-Z dentro de esta categoría" : "Items en orden de carga (default)"}
               >
                 A-Z
               </button>
               {catSubs.length > 0 && (
-                <span className="text-[10px] text-muted-foreground">{catSubs.length} subcat.</span>
+                <button
+                  type="button"
+                  onClick={() => setExpandedCatId(isExpanded ? null : c.id)}
+                  className="p-0.5 text-muted-foreground hover:text-foreground"
+                  aria-label={isExpanded ? "Contraer" : "Expandir subcategorías"}
+                >
+                  <ChevronDown className={cn("w-4 h-4 transition-transform", !isExpanded && "-rotate-90")} />
+                </button>
               )}
             </div>
-            {catSubs.length > 0 && (
-              <div className="mt-2 pl-5 flex flex-wrap gap-1.5">
-                {catSubs.map((s) => {
-                  const checked = expandedSubs.includes(s.id);
-                  return (
-                    <button
-                      key={s.id}
-                      type="button"
-                      onClick={() => onToggleSub(s.id)}
-                      className={cn(
-                        "text-xs px-2 py-0.5 rounded-full border transition-colors cursor-pointer",
-                        checked
-                          ? "bg-emerald-50 border-emerald-300 text-emerald-700"
-                          : "bg-muted/30 border-border text-muted-foreground hover:bg-muted"
-                      )}
-                      title={checked ? "Se mostrará como sub-bloque" : "Se mezcla en la categoría"}
-                    >
-                      {s.nombre}
-                    </button>
-                  );
-                })}
+
+            {/* Body — checkbox list de subcategorías */}
+            {isExpanded && catSubs.length > 0 && (
+              <div className="border-t px-3 py-2.5 space-y-2 bg-muted/20">
+                <p className="text-[11px] text-muted-foreground">
+                  Marcá las subcategorías que querés mostrar como sub-bloque dentro del ticket. Las que no marques se mezclan con el resto de la categoría.
+                </p>
+                {catSubs.length > 10 && (
+                  <div className="relative">
+                    <Search className="w-3.5 h-3.5 absolute left-2 top-1/2 -translate-y-1/2 text-muted-foreground" />
+                    <Input
+                      value={subSearch}
+                      onChange={(e) => setSubSearch(e.target.value)}
+                      placeholder="Buscar subcategoría..."
+                      className="h-7 pl-7 pr-7 text-xs"
+                    />
+                    {subSearch && (
+                      <button
+                        type="button"
+                        onClick={() => setSubSearch("")}
+                        className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                      >
+                        <X className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+                  </div>
+                )}
+                <div className="grid grid-cols-2 gap-x-3 gap-y-1">
+                  {filteredSubs.map((s) => {
+                    const checked = expandedSubs.includes(s.id);
+                    return (
+                      <label
+                        key={s.id}
+                        className="flex items-center gap-2 px-1.5 py-1 rounded hover:bg-background cursor-pointer text-xs"
+                      >
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          onChange={() => onToggleSub(s.id)}
+                          className="w-3.5 h-3.5 rounded accent-emerald-500"
+                        />
+                        <span className={checked ? "text-emerald-700 font-medium" : "text-foreground"}>
+                          {s.nombre}
+                        </span>
+                      </label>
+                    );
+                  })}
+                </div>
+                {filteredSubs.length === 0 && (
+                  <p className="text-[11px] text-muted-foreground italic">Sin resultados.</p>
+                )}
               </div>
             )}
           </div>
@@ -553,9 +659,10 @@ export default function ImpresionPage() {
               <>
                 <Separator />
                 <div>
-                  <p className="text-xs font-medium mb-2">Orden de las categorías y subgrupos</p>
-                  <p className="text-xs text-muted-foreground mb-3">Asigná un número (1, 2, 3, ...) para fijar el orden. Las categorías sin número se muestran al final ordenadas alfabéticamente. &quot;Otros&quot; (sin categoría) siempre va al final.</p>
-                  <p className="text-xs text-muted-foreground mb-3">Tocá una subcategoría para mostrarla como sub-bloque dentro del ticket (ej: dentro de Almacén, separar Limpieza y Galletitas). Las que no marques se muestran mezcladas con el resto de la categoría.</p>
+                  <p className="text-xs font-medium mb-2">Orden de las categorías</p>
+                  <p className="text-xs text-muted-foreground mb-3">
+                    Arrastrá ⠿ para reordenar · <span className="text-emerald-700">$ subtotal</span> muestra el subtotal en el ticket · <span className="text-sky-700">A-Z</span> ordena los items alfabéticamente · ▾ expandí una categoría para elegir qué subcategorías separar como sub-bloques. &quot;Otros&quot; (sin categoría) siempre va al final.
+                  </p>
                   <CategoriaOrdenList
                     expandedSubs={rcfg.subcategoriasExpandidas || []}
                     onToggleSub={(subId) => setRcfg((prev) => {
