@@ -224,14 +224,11 @@ function HeroSlideContent({ slide }: { slide: Record<string, any> }) {
 
   // ── Tipo: imagen_libre ──
   if (tipo === "imagen_libre") {
-    const link = slide.boton_link || "/productos";
     return (
-      <Link
-        href={link}
-        className="relative overflow-hidden block min-h-[200px] md:min-h-[240px] group"
+      <section
+        className="relative overflow-hidden block min-h-[200px] md:min-h-[240px]"
         style={hasImagen ? { backgroundImage: `url("${imagenUrl}")`, backgroundSize: "cover", backgroundPosition: "center" } : { background: `linear-gradient(135deg, ${colorInicio}, ${colorFin})` }}
       >
-        {/* Overlay sólo si hay título/CTA encima */}
         {(slide.titulo || slide.subtitulo || slide.boton_texto) && hasImagen && (
           <div className="absolute inset-0 bg-gradient-to-r from-black/60 via-black/30 to-transparent" />
         )}
@@ -251,7 +248,7 @@ function HeroSlideContent({ slide }: { slide: Record<string, any> }) {
             </div>
           )}
         </div>
-      </Link>
+      </section>
     );
   }
 
@@ -260,7 +257,7 @@ function HeroSlideContent({ slide }: { slide: Record<string, any> }) {
     const prod = slide.producto;
     const link = slide.boton_link || (prod ? `/productos/${prod.id}` : "/productos");
     return (
-      <Link href={link} className="relative overflow-hidden block min-h-[200px] md:min-h-[220px] group" style={bgStyle}>
+      <section className="relative overflow-hidden block min-h-[200px] md:min-h-[220px] group" style={bgStyle}>
         {!hasImagen && <HeroDecorations />}
         <div className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 md:py-8 w-full">
           <div className="flex items-center justify-between gap-4 md:gap-8">
@@ -284,21 +281,24 @@ function HeroSlideContent({ slide }: { slide: Record<string, any> }) {
               {slide.subtitulo && !prod?.tiene_oferta && (
                 <p className="text-sm md:text-base text-white/90 mt-2 max-w-md drop-shadow">{slide.subtitulo}</p>
               )}
-              <span className="inline-flex items-center gap-1.5 mt-3 bg-white text-gray-900 rounded-full px-5 py-2 text-sm md:text-base font-semibold shadow-lg group-hover:shadow-xl group-hover:scale-105 transition-all">
+              <Link
+                href={link}
+                className="inline-flex items-center gap-1.5 mt-3 bg-white text-gray-900 rounded-full px-5 py-2 text-sm md:text-base font-semibold shadow-lg hover:shadow-xl hover:scale-105 transition-all"
+              >
                 {slide.boton_texto || "Ver producto"} <span className="transition-transform group-hover:translate-x-0.5">→</span>
-              </span>
+              </Link>
             </div>
             {prod?.imagen_url && (
-              <div className="shrink-0 w-28 h-28 md:w-44 md:h-44 relative">
+              <Link href={link} className="shrink-0 w-28 h-28 md:w-44 md:h-44 relative">
                 <div className="absolute inset-0 bg-white/15 rounded-2xl rotate-6 blur-sm" />
                 <div className="relative w-full h-full bg-white rounded-2xl shadow-2xl overflow-hidden flex items-center justify-center">
                   <img src={prod.imagen_url} alt={prod.nombre} className="max-w-full max-h-full object-contain p-2" />
                 </div>
-              </div>
+              </Link>
             )}
           </div>
         </div>
-      </Link>
+      </section>
     );
   }
 
@@ -306,7 +306,7 @@ function HeroSlideContent({ slide }: { slide: Record<string, any> }) {
   if (tipo === "marca_destacada") {
     const link = slide.boton_link || "/productos";
     return (
-      <Link href={link} className="relative overflow-hidden block min-h-[200px] md:min-h-[220px] group" style={bgStyle}>
+      <section className="relative overflow-hidden block min-h-[200px] md:min-h-[220px]" style={bgStyle}>
         {!hasImagen && <HeroDecorations />}
         <div className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 md:py-10 w-full">
           <span className="inline-block bg-white/15 backdrop-blur-sm text-white text-[10px] md:text-xs font-bold px-3 py-1 rounded-full mb-3 uppercase tracking-widest">Marca destacada</span>
@@ -320,7 +320,7 @@ function HeroSlideContent({ slide }: { slide: Record<string, any> }) {
             <HeroCTA texto={slide.boton_texto || "Ver productos"} link={link} />
           </div>
         </div>
-      </Link>
+      </section>
     );
   }
 
@@ -328,7 +328,7 @@ function HeroSlideContent({ slide }: { slide: Record<string, any> }) {
   if (tipo === "categoria_destacada") {
     const link = slide.boton_link || "/productos";
     return (
-      <Link href={link} className="relative overflow-hidden block min-h-[200px] md:min-h-[220px] group" style={bgStyle}>
+      <section className="relative overflow-hidden block min-h-[200px] md:min-h-[220px]" style={bgStyle}>
         {!hasImagen && <HeroDecorations />}
         <div className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 md:py-10 w-full">
           <span className="inline-block bg-white/15 backdrop-blur-sm text-white text-[10px] md:text-xs font-bold px-3 py-1 rounded-full mb-3 uppercase tracking-widest">Categoría destacada</span>
@@ -342,7 +342,7 @@ function HeroSlideContent({ slide }: { slide: Record<string, any> }) {
             <HeroCTA texto={slide.boton_texto || "Ver categoría"} link={link} />
           </div>
         </div>
-      </Link>
+      </section>
     );
   }
 
@@ -351,7 +351,7 @@ function HeroSlideContent({ slide }: { slide: Record<string, any> }) {
     const link = slide.boton_link || "/ofertas";
     const showCountdown = (tipo === "oferta_countdown" || slide.mostrar_countdown) && slide.fecha_hasta;
     return (
-      <Link href={link} className="relative overflow-hidden block min-h-[200px] md:min-h-[220px] group" style={bgStyle}>
+      <section className="relative overflow-hidden block min-h-[200px] md:min-h-[220px]" style={bgStyle}>
         {!hasImagen && <HeroDecorations />}
         <div className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 md:py-8 w-full">
           <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
@@ -373,15 +373,13 @@ function HeroSlideContent({ slide }: { slide: Record<string, any> }) {
             )}
           </div>
         </div>
-      </Link>
+      </section>
     );
   }
 
   // ── Tipo: personalizado / aumento_marca / default ──
-  const link = slide.boton_link || "/productos";
-  const Wrapper: any = link ? Link : "div";
   return (
-    <Wrapper {...(link ? { href: link } : {})} className="relative overflow-hidden block min-h-[180px] md:min-h-[200px]" style={bgStyle}>
+    <section className="relative overflow-hidden block min-h-[180px] md:min-h-[200px]" style={bgStyle}>
       {!hasImagen && <HeroDecorations />}
       <div className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 md:py-8 w-full">
         <div className="flex items-center justify-between gap-4 md:gap-8">
@@ -399,7 +397,7 @@ function HeroSlideContent({ slide }: { slide: Record<string, any> }) {
           </div>
         </div>
       </div>
-    </Wrapper>
+    </section>
   );
 }
 
