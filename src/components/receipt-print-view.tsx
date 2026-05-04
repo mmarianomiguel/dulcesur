@@ -179,6 +179,21 @@ export function ReceiptPrintView({
       })
     : [...sale.items];
 
+  // Helper: peso aproximado de un item (combos pesan ~1.6 por la sub-linea de comboItems)
+  const itemWeight = (it: ReceiptLineItem) =>
+    it.es_combo && it.comboItems && it.comboItems.length > 0 ? 1.6 : 1;
+  // Acumula items hasta llenar un cap (en peso), devuelve cuantos items consume.
+  const takeUntilCap = (arr: ReceiptLineItem[], cap: number) => {
+    let used = 0;
+    let i = 0;
+    while (i < arr.length && used + itemWeight(arr[i]) <= cap) {
+      used += itemWeight(arr[i]);
+      i++;
+    }
+    // Garantizar al menos 1 item por pagina
+    return Math.max(1, i);
+  };
+
   // Squeeze check: if only a few items overflow, force single page
   const overflow = allItems.length - singlePageItems;
   if (overflow <= 0) {
@@ -189,15 +204,32 @@ export function ReceiptPrintView({
     pages.push(allItems);
   } else {
     // First page (no totals, more room)
-    pages.push(allItems.splice(0, multiFirstPageItems));
+    const firstCount = takeUntilCap(allItems, multiFirstPageItems);
+    pages.push(allItems.splice(0, firstCount));
     // Middle + last pages
     while (allItems.length > 0) {
       if (allItems.length <= multiLastPageItems) {
         // Remaining items fit on last page (with totals)
         pages.push(allItems.splice(0));
       } else {
-        // Middle page (no totals)
-        pages.push(allItems.splice(0, multiOtherPageItems));
+        const otherCount = takeUntilCap(allItems, multiOtherPageItems);
+        pages.push(allItems.splice(0, otherCount));
+      }
+    }
+
+    // Balancing: si la ultima pagina queda con < 5 items, mover desde la previa
+    // para que quede mas pareja. Iteramos de atras hacia adelante.
+    const MIN_LAST_PAGE = 5;
+    if (pages.length >= 2) {
+      const last = pages[pages.length - 1];
+      const prev = pages[pages.length - 2];
+      if (last.length < MIN_LAST_PAGE && prev.length > MIN_LAST_PAGE) {
+        const need = MIN_LAST_PAGE - last.length;
+        const canMove = Math.min(need, prev.length - MIN_LAST_PAGE);
+        if (canMove > 0) {
+          const moved = prev.splice(prev.length - canMove, canMove);
+          last.unshift(...moved);
+        }
       }
     }
   }
