@@ -63,6 +63,7 @@ import {
   RotateCw,
   ChevronLeft,
   ChevronRight,
+  Upload,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import Link from "next/link";
@@ -200,6 +201,20 @@ const BLOCK_TYPES: BlockTypeDef[] = [
     icon: Image,
     defaultTitulo: "Imagen Banner",
     defaultConfig: { url_imagen: "", link: "", alt: "", alto: "mediano" },
+  },
+  {
+    tipo: "triple_banner",
+    label: "Tira de 3 banners",
+    description: "3 banners en grid (categorías, marcas o promos)",
+    icon: Layout,
+    defaultTitulo: "Tira de 3 banners",
+    defaultConfig: {
+      slots: [
+        { titulo: "Almacén", subtitulo: "Lo esencial para tu negocio", imagen_url: "", link: "/productos", color: "#0891b2" },
+        { titulo: "Kiosco", subtitulo: "Golosinas y snacks", imagen_url: "", link: "/productos", color: "#ec4899" },
+        { titulo: "Ofertas", subtitulo: "Promos del mes", imagen_url: "", link: "/ofertas", color: "#f97316" },
+      ],
+    },
   },
   {
     tipo: "aumentos_recientes",
@@ -866,6 +881,28 @@ function PreviewImagenBanner({ config }: { config: Record<string, unknown> }) {
   );
 }
 
+function PreviewTripleBanner({ config }: { config: Record<string, unknown> }) {
+  const slots = (config.slots as Array<{ titulo: string; subtitulo: string; imagen_url: string; link: string; color: string }> | undefined) || [];
+  if (slots.length === 0) return <section className="py-4"><div className="max-w-7xl mx-auto px-4 text-center text-gray-400 text-sm">Sin banners</div></section>;
+  return (
+    <section className="py-6">
+      <div className="max-w-7xl mx-auto px-4 grid grid-cols-1 @md:grid-cols-3 gap-3">
+        {slots.slice(0, 3).map((s, i) => {
+          const bg: React.CSSProperties = s.imagen_url
+            ? { backgroundImage: `linear-gradient(135deg, ${s.color || "#0891b2"}aa, ${s.color || "#0891b2"}55), url("${s.imagen_url}")`, backgroundSize: "cover", backgroundPosition: "center" }
+            : { background: `linear-gradient(135deg, ${s.color || "#0891b2"}, ${s.color || "#0891b2"}cc)` };
+          return (
+            <div key={i} className="rounded-xl overflow-hidden text-white p-5 min-h-[140px] flex flex-col justify-end" style={bg}>
+              <div className="font-extrabold text-xl leading-tight drop-shadow">{s.titulo || `Banner ${i + 1}`}</div>
+              {s.subtitulo && <div className="text-xs opacity-90 mt-1 drop-shadow">{s.subtitulo}</div>}
+            </div>
+          );
+        })}
+      </div>
+    </section>
+  );
+}
+
 // ── Block Preview Router ───────────────────────────────────────────────────
 
 function BlockPreview({ bloque, onConfigChange }: { bloque: Bloque; onConfigChange?: (key: string, value: unknown) => void }) {
@@ -886,6 +923,8 @@ function BlockPreview({ bloque, onConfigChange }: { bloque: Bloque; onConfigChan
       return <PreviewTextoLibre config={bloque.config} />;
     case "imagen_banner":
       return <PreviewImagenBanner config={bloque.config} />;
+    case "triple_banner":
+      return <PreviewTripleBanner config={bloque.config} />;
 
     case "aumentos_recientes":
       return (
@@ -2117,6 +2156,62 @@ function BlockConfigForm({
           </div>
         </div>
       );
+
+    case "triple_banner": {
+      const slots = (c.slots as Array<{ titulo: string; subtitulo: string; imagen_url: string; link: string; color: string }> | undefined) || [];
+      const updateSlot = (i: number, key: string, val: string) => {
+        const next = [...slots];
+        next[i] = { ...next[i], [key]: val };
+        onConfigChange("slots", next);
+      };
+      const uploadSlotImage = async (i: number, file: File | null) => {
+        if (!file) return;
+        const fd = new FormData();
+        fd.append("file", file);
+        try {
+          const res = await fetch("/api/upload", { method: "POST", body: fd });
+          if (!res.ok) { showAdminToast("Error al subir"); return; }
+          const data = await res.json();
+          if (data.secure_url) updateSlot(i, "imagen_url", data.secure_url);
+        } catch { showAdminToast("Error al subir"); }
+      };
+      return (
+        <div className="space-y-3">
+          {slots.slice(0, 3).map((slot, i) => (
+            <CollapsibleSection key={i} title={`Banner ${i + 1}: ${slot.titulo || "(sin título)"}`} defaultOpen={i === 0}>
+              <Field label="Título" value={slot.titulo} onChange={(v) => updateSlot(i, "titulo", v)} />
+              <Field label="Subtítulo" value={slot.subtitulo} onChange={(v) => updateSlot(i, "subtitulo", v)} />
+              <Field label="Link destino" value={slot.link} onChange={(v) => updateSlot(i, "link", v)} />
+              <ColorField label="Color (si no hay imagen)" value={slot.color} onChange={(v) => updateSlot(i, "color", v)} />
+              <div className="space-y-1.5">
+                <Label>Imagen de fondo</Label>
+                {slot.imagen_url ? (
+                  <div className="relative group rounded-lg overflow-hidden border h-24">
+                    <img src={slot.imagen_url} alt="" className="w-full h-full object-cover" />
+                    <div className="absolute top-1.5 right-1.5 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <label className="w-7 h-7 bg-white text-gray-900 rounded shadow flex items-center justify-center hover:bg-gray-100 cursor-pointer" title="Reemplazar">
+                        <Upload className="w-3.5 h-3.5" />
+                        <input type="file" accept="image/*" className="hidden" onChange={(e) => { uploadSlotImage(i, e.target.files?.[0] || null); e.target.value = ""; }} />
+                      </label>
+                      <button type="button" onClick={() => updateSlot(i, "imagen_url", "")} className="w-7 h-7 bg-red-500 text-white rounded shadow flex items-center justify-center hover:bg-red-600">
+                        <X className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <label className="block rounded-lg border-2 border-dashed border-gray-300 bg-gray-50 hover:bg-gray-100 cursor-pointer p-4 text-center text-muted-foreground text-xs">
+                    <Upload className="w-4 h-4 mx-auto mb-1" />
+                    Subir imagen
+                    <input type="file" accept="image/*" className="hidden" onChange={(e) => { uploadSlotImage(i, e.target.files?.[0] || null); e.target.value = ""; }} />
+                  </label>
+                )}
+                <Input value={slot.imagen_url} onChange={(e) => updateSlot(i, "imagen_url", e.target.value)} placeholder="o pegá URL" className="h-7 text-[11px]" />
+              </div>
+            </CollapsibleSection>
+          ))}
+        </div>
+      );
+    }
 
     case "aumentos_recientes":
       return (

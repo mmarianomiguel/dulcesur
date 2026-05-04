@@ -162,58 +162,250 @@ function HeroDecorations() {
   );
 }
 
-// Hero variant for producto_destacado: split layout con imagen
-function HeroProductoSlide({ slide }: { slide: Record<string, any> }) {
-  const colorInicio = slide.color_inicio || "hsl(var(--primary))";
-  const colorFin = slide.color_fin || "hsl(var(--primary) / 0.7)";
-  const prod = slide.producto;
-  const link = slide.boton_link || (prod ? `/productos/${prod.id}` : "/productos");
+// Countdown component — solo client-side para tickear cada segundo.
+function HeroCountdown({ to }: { to: string | Date }) {
+  const target = typeof to === "string" ? new Date(to).getTime() : to.getTime();
+  const [now, setNow] = useState<number>(() => Date.now());
+  useEffect(() => {
+    const t = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(t);
+  }, []);
+  const diff = Math.max(0, target - now);
+  const d = Math.floor(diff / 86400000);
+  const h = Math.floor((diff % 86400000) / 3600000);
+  const m = Math.floor((diff % 3600000) / 60000);
+  const s = Math.floor((diff % 60000) / 1000);
+  if (diff <= 0) return null;
+  const Cell = ({ value, label }: { value: number; label: string }) => (
+    <div className="flex flex-col items-center bg-white/15 backdrop-blur-sm rounded-lg px-2.5 py-1.5 min-w-[44px] md:min-w-[56px]">
+      <span className="text-base md:text-2xl font-extrabold text-white tabular-nums leading-none">{String(value).padStart(2, "0")}</span>
+      <span className="text-[8px] md:text-[10px] uppercase tracking-wider text-white/80 mt-0.5">{label}</span>
+    </div>
+  );
+  return (
+    <div className="flex items-center gap-1.5">
+      {d > 0 && <Cell value={d} label="días" />}
+      <Cell value={h} label="hrs" />
+      <Cell value={m} label="min" />
+      <Cell value={s} label="seg" />
+    </div>
+  );
+}
 
+// CTA shared component
+function HeroCTA({ texto, link, primary = true }: { texto: string; link: string; primary?: boolean }) {
+  if (!texto) return null;
   return (
     <Link
-      href={link}
-      className="relative overflow-hidden block min-h-[180px] md:min-h-[200px] group"
-      style={{ background: `linear-gradient(135deg, ${colorInicio}, ${colorFin})` }}
+      href={link || "/productos"}
+      className={
+        primary
+          ? "inline-flex items-center gap-1.5 bg-white text-gray-900 rounded-full px-5 py-2 text-sm md:text-base font-semibold shadow-lg hover:shadow-xl hover:scale-105 active:scale-95 transition-all duration-200"
+          : "inline-flex border-2 border-white text-white rounded-full px-5 py-2 text-sm md:text-base font-semibold hover:bg-white/15 active:scale-95 transition-all duration-200"
+      }
     >
-      <HeroDecorations />
-      <div className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 md:py-8 w-full">
-        <div className="flex items-center justify-between gap-4 md:gap-8">
-          <div className="min-w-0 flex-1">
-            {prod?.tiene_oferta && (
-              <span className="inline-block bg-yellow-400 text-gray-900 text-[10px] md:text-xs font-bold px-2.5 py-1 rounded-full mb-2 uppercase tracking-wide">
-                ⚡ Oferta · {prod.descuento_pct}% off
-              </span>
-            )}
-            <h1 className="text-xl md:text-3xl font-extrabold text-white leading-tight tracking-tight line-clamp-2">
-              {slide.titulo || prod?.nombre || "Producto destacado"}
+      {texto} {primary && <span>→</span>}
+    </Link>
+  );
+}
+
+// Renderer único por tipo. Usado por HeroBlock (single) y HeroCarousel (loop).
+function HeroSlideContent({ slide }: { slide: Record<string, any> }) {
+  const tipo = slide.tipo || "personalizado";
+  const colorInicio = slide.color_inicio || "#ec4899";
+  const colorFin = slide.color_fin || "#a855f7";
+  const imagenUrl = slide.imagen_url || "";
+  const hasImagen = !!imagenUrl;
+
+  // Gradiente: si hay imagen, gradiente más sutil arriba para legibilidad del texto.
+  const bgStyle = hasImagen
+    ? { backgroundImage: `linear-gradient(135deg, ${colorInicio}cc, ${colorFin}aa), url("${imagenUrl}")`, backgroundSize: "cover, cover", backgroundPosition: "center, center" }
+    : { background: `linear-gradient(135deg, ${colorInicio}, ${colorFin})` };
+
+  // ── Tipo: imagen_libre ──
+  if (tipo === "imagen_libre") {
+    const link = slide.boton_link || "/productos";
+    return (
+      <Link
+        href={link}
+        className="relative overflow-hidden block min-h-[200px] md:min-h-[240px] group"
+        style={hasImagen ? { backgroundImage: `url("${imagenUrl}")`, backgroundSize: "cover", backgroundPosition: "center" } : { background: `linear-gradient(135deg, ${colorInicio}, ${colorFin})` }}
+      >
+        {/* Overlay sólo si hay título/CTA encima */}
+        {(slide.titulo || slide.subtitulo || slide.boton_texto) && hasImagen && (
+          <div className="absolute inset-0 bg-gradient-to-r from-black/60 via-black/30 to-transparent" />
+        )}
+        <div className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10 md:py-14 w-full">
+          {slide.titulo && (
+            <h1 className="text-2xl md:text-4xl font-extrabold text-white leading-tight tracking-tight max-w-2xl drop-shadow-md">
+              {slide.titulo}
             </h1>
-            {prod && (
-              <div className="flex items-baseline gap-2 mt-2">
-                <span className="text-2xl md:text-3xl font-bold text-white">${prod.precio.toLocaleString("es-AR")}</span>
-                {prod.tiene_oferta && (
-                  <span className="text-sm text-white/70 line-through">${prod.precio_anterior.toLocaleString("es-AR")}</span>
-                )}
-              </div>
-            )}
-            {slide.subtitulo && !prod?.tiene_oferta && (
-              <p className="text-sm md:text-base text-white/85 mt-2 max-w-md">{slide.subtitulo}</p>
-            )}
-            <span className="inline-flex items-center gap-1.5 mt-3 bg-white text-gray-900 rounded-full px-5 py-2 text-sm font-semibold shadow-lg group-hover:shadow-xl group-hover:scale-105 transition-all">
-              {slide.boton_texto || "Ver producto"} <span className="transition-transform group-hover:translate-x-0.5">→</span>
-            </span>
-          </div>
-          {prod?.imagen_url && (
-            <div className="shrink-0 w-24 h-24 md:w-40 md:h-40 relative">
-              <div className="absolute inset-0 bg-white/15 rounded-2xl rotate-6 blur-sm" />
-              <div className="relative w-full h-full bg-white rounded-2xl shadow-2xl overflow-hidden flex items-center justify-center">
-                <img src={prod.imagen_url} alt={prod.nombre} className="max-w-full max-h-full object-contain p-2" />
-              </div>
+          )}
+          {slide.subtitulo && (
+            <p className="text-sm md:text-lg text-white/90 mt-2 max-w-xl drop-shadow">{slide.subtitulo}</p>
+          )}
+          {slide.boton_texto && (
+            <div className="mt-4 flex flex-wrap gap-2">
+              <HeroCTA texto={slide.boton_texto} link={slide.boton_link} />
+              {slide.boton_secundario_texto && <HeroCTA texto={slide.boton_secundario_texto} link={slide.boton_secundario_link} primary={false} />}
             </div>
           )}
         </div>
+      </Link>
+    );
+  }
+
+  // ── Tipo: producto_destacado ──
+  if (tipo === "producto_destacado") {
+    const prod = slide.producto;
+    const link = slide.boton_link || (prod ? `/productos/${prod.id}` : "/productos");
+    return (
+      <Link href={link} className="relative overflow-hidden block min-h-[200px] md:min-h-[220px] group" style={bgStyle}>
+        {!hasImagen && <HeroDecorations />}
+        <div className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 md:py-8 w-full">
+          <div className="flex items-center justify-between gap-4 md:gap-8">
+            <div className="min-w-0 flex-1">
+              {prod?.tiene_oferta && (
+                <span className="inline-flex items-center gap-1 bg-yellow-400 text-gray-900 text-[10px] md:text-xs font-bold px-2.5 py-1 rounded-full mb-2 uppercase tracking-wide shadow-lg">
+                  ⚡ Oferta · {prod.descuento_pct}% off
+                </span>
+              )}
+              <h1 className="text-xl md:text-3xl font-extrabold text-white leading-tight tracking-tight line-clamp-2 drop-shadow-md">
+                {slide.titulo || prod?.nombre || "Producto destacado"}
+              </h1>
+              {prod && (
+                <div className="flex items-baseline gap-2 mt-2">
+                  <span className="text-2xl md:text-4xl font-extrabold text-white drop-shadow">${prod.precio.toLocaleString("es-AR")}</span>
+                  {prod.tiene_oferta && (
+                    <span className="text-sm md:text-base text-white/70 line-through">${prod.precio_anterior.toLocaleString("es-AR")}</span>
+                  )}
+                </div>
+              )}
+              {slide.subtitulo && !prod?.tiene_oferta && (
+                <p className="text-sm md:text-base text-white/90 mt-2 max-w-md drop-shadow">{slide.subtitulo}</p>
+              )}
+              <span className="inline-flex items-center gap-1.5 mt-3 bg-white text-gray-900 rounded-full px-5 py-2 text-sm md:text-base font-semibold shadow-lg group-hover:shadow-xl group-hover:scale-105 transition-all">
+                {slide.boton_texto || "Ver producto"} <span className="transition-transform group-hover:translate-x-0.5">→</span>
+              </span>
+            </div>
+            {prod?.imagen_url && (
+              <div className="shrink-0 w-28 h-28 md:w-44 md:h-44 relative">
+                <div className="absolute inset-0 bg-white/15 rounded-2xl rotate-6 blur-sm" />
+                <div className="relative w-full h-full bg-white rounded-2xl shadow-2xl overflow-hidden flex items-center justify-center">
+                  <img src={prod.imagen_url} alt={prod.nombre} className="max-w-full max-h-full object-contain p-2" />
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      </Link>
+    );
+  }
+
+  // ── Tipo: marca_destacada ──
+  if (tipo === "marca_destacada") {
+    const link = slide.boton_link || "/productos";
+    return (
+      <Link href={link} className="relative overflow-hidden block min-h-[200px] md:min-h-[220px] group" style={bgStyle}>
+        {!hasImagen && <HeroDecorations />}
+        <div className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 md:py-10 w-full">
+          <span className="inline-block bg-white/15 backdrop-blur-sm text-white text-[10px] md:text-xs font-bold px-3 py-1 rounded-full mb-3 uppercase tracking-widest">Marca destacada</span>
+          <h1 className="text-3xl md:text-5xl font-extrabold text-white leading-tight tracking-tight drop-shadow-md">
+            {slide.titulo}
+          </h1>
+          {slide.subtitulo && (
+            <p className="text-sm md:text-base text-white/90 mt-2 max-w-lg drop-shadow">{slide.subtitulo}</p>
+          )}
+          <div className="mt-4 flex flex-wrap gap-2">
+            <HeroCTA texto={slide.boton_texto || "Ver productos"} link={link} />
+          </div>
+        </div>
+      </Link>
+    );
+  }
+
+  // ── Tipo: categoria_destacada ──
+  if (tipo === "categoria_destacada") {
+    const link = slide.boton_link || "/productos";
+    return (
+      <Link href={link} className="relative overflow-hidden block min-h-[200px] md:min-h-[220px] group" style={bgStyle}>
+        {!hasImagen && <HeroDecorations />}
+        <div className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 md:py-10 w-full">
+          <span className="inline-block bg-white/15 backdrop-blur-sm text-white text-[10px] md:text-xs font-bold px-3 py-1 rounded-full mb-3 uppercase tracking-widest">Categoría destacada</span>
+          <h1 className="text-3xl md:text-5xl font-extrabold text-white leading-tight tracking-tight drop-shadow-md">
+            {slide.titulo}
+          </h1>
+          {slide.subtitulo && (
+            <p className="text-sm md:text-base text-white/90 mt-2 max-w-lg drop-shadow">{slide.subtitulo}</p>
+          )}
+          <div className="mt-4">
+            <HeroCTA texto={slide.boton_texto || "Ver categoría"} link={link} />
+          </div>
+        </div>
+      </Link>
+    );
+  }
+
+  // ── Tipo: oferta_descuento / oferta_countdown ──
+  if (tipo === "oferta_descuento" || tipo === "oferta_countdown") {
+    const link = slide.boton_link || "/ofertas";
+    const showCountdown = (tipo === "oferta_countdown" || slide.mostrar_countdown) && slide.fecha_hasta;
+    return (
+      <Link href={link} className="relative overflow-hidden block min-h-[200px] md:min-h-[220px] group" style={bgStyle}>
+        {!hasImagen && <HeroDecorations />}
+        <div className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 md:py-8 w-full">
+          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+            <div className="min-w-0 flex-1">
+              <h1 className="text-2xl md:text-4xl font-extrabold text-white leading-tight tracking-tight drop-shadow-md">
+                {slide.titulo}
+              </h1>
+              {slide.subtitulo && (
+                <p className="text-sm md:text-base text-white/90 mt-2 max-w-lg drop-shadow">{slide.subtitulo}</p>
+              )}
+              <div className="mt-3 flex flex-wrap gap-2">
+                <HeroCTA texto={slide.boton_texto || "Aprovechar"} link={link} />
+              </div>
+            </div>
+            {showCountdown && (
+              <div className="shrink-0">
+                <HeroCountdown to={slide.fecha_hasta} />
+              </div>
+            )}
+          </div>
+        </div>
+      </Link>
+    );
+  }
+
+  // ── Tipo: personalizado / aumento_marca / default ──
+  const link = slide.boton_link || "/productos";
+  const Wrapper: any = link ? Link : "div";
+  return (
+    <Wrapper {...(link ? { href: link } : {})} className="relative overflow-hidden block min-h-[180px] md:min-h-[200px]" style={bgStyle}>
+      {!hasImagen && <HeroDecorations />}
+      <div className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 md:py-8 w-full">
+        <div className="flex items-center justify-between gap-4 md:gap-8">
+          <div className="min-w-0 flex-1">
+            <h1 className="text-xl md:text-3xl font-extrabold text-white leading-tight tracking-tight drop-shadow-md">
+              {slide.titulo || "Bienvenido a nuestra tienda"}
+            </h1>
+            {slide.subtitulo && (
+              <p className="text-sm md:text-base text-white/90 mt-2 max-w-lg drop-shadow">{slide.subtitulo}</p>
+            )}
+            <div className="flex flex-wrap gap-2 mt-3">
+              {slide.boton_texto && <HeroCTA texto={slide.boton_texto} link={slide.boton_link} />}
+              {slide.boton_secundario_texto && <HeroCTA texto={slide.boton_secundario_texto} link={slide.boton_secundario_link} primary={false} />}
+            </div>
+          </div>
+        </div>
       </div>
-    </Link>
+    </Wrapper>
   );
+}
+
+// Hero variant for producto_destacado: split layout con imagen
+function HeroProductoSlide({ slide }: { slide: Record<string, any> }) {
+  return <HeroSlideContent slide={slide} />;
 }
 
 function HeroCarousel({ slides }: { slides: Record<string, any>[] }) {
@@ -228,70 +420,15 @@ function HeroCarousel({ slides }: { slides: Record<string, any>[] }) {
 
   const go = (delta: number) => setIdx((i) => (i + delta + slides.length) % slides.length);
   const cur = slides[idx] || {};
-  const colorInicio = cur.color_inicio || "hsl(var(--primary))";
-  const colorFin = cur.color_fin || "hsl(var(--primary) / 0.7)";
-  const isProducto = cur.tipo === "producto_destacado" && cur.producto;
-  const prod = cur.producto;
 
   return (
     <section
-      className="relative overflow-hidden min-h-[180px] md:min-h-[200px] transition-[background] duration-700"
-      style={{ background: `linear-gradient(135deg, ${colorInicio}, ${colorFin})` }}
+      className="relative"
       onMouseEnter={() => setPaused(true)}
       onMouseLeave={() => setPaused(false)}
     >
-      <HeroDecorations />
-
-      <div key={idx} className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 md:py-8 w-full animate-fade-in-up">
-        <div className="flex items-center justify-between gap-4 md:gap-8">
-          <div className="min-w-0 flex-1">
-            {isProducto && prod.tiene_oferta && (
-              <span className="inline-block bg-yellow-400 text-gray-900 text-[10px] md:text-xs font-bold px-2.5 py-1 rounded-full mb-2 uppercase tracking-wide">
-                ⚡ Oferta · {prod.descuento_pct}% off
-              </span>
-            )}
-            <h1 className="text-xl md:text-3xl font-extrabold text-white leading-tight tracking-tight line-clamp-2">
-              {cur.titulo || "Bienvenido a nuestra tienda"}
-            </h1>
-            {isProducto && prod && (
-              <div className="flex items-baseline gap-2 mt-2">
-                <span className="text-2xl md:text-3xl font-bold text-white">${prod.precio.toLocaleString("es-AR")}</span>
-                {prod.tiene_oferta && (
-                  <span className="text-sm text-white/70 line-through">${prod.precio_anterior.toLocaleString("es-AR")}</span>
-                )}
-              </div>
-            )}
-            {cur.subtitulo && !(isProducto && prod.tiene_oferta) && (
-              <p className="text-sm md:text-base text-white/85 mt-2 max-w-lg">{cur.subtitulo}</p>
-            )}
-            <div className="flex flex-wrap gap-2 mt-3">
-              {cur.boton_texto && (
-                <Link
-                  href={cur.boton_link || "/productos"}
-                  className="inline-flex items-center gap-1.5 bg-white text-gray-900 rounded-full px-5 py-2 text-sm font-semibold shadow-lg hover:shadow-xl hover:scale-105 active:scale-95 transition-all duration-200"
-                >
-                  {cur.boton_texto} <span>→</span>
-                </Link>
-              )}
-              {cur.boton_secundario_texto && (
-                <Link
-                  href={cur.boton_secundario_link || "/productos"}
-                  className="border-2 border-white text-white rounded-full px-5 py-2 text-sm font-semibold hover:bg-white/15 active:scale-95 transition-all duration-200"
-                >
-                  {cur.boton_secundario_texto}
-                </Link>
-              )}
-            </div>
-          </div>
-          {isProducto && prod.imagen_url && (
-            <div className="shrink-0 w-24 h-24 md:w-40 md:h-40 relative">
-              <div className="absolute inset-0 bg-white/15 rounded-2xl rotate-6 blur-sm" />
-              <div className="relative w-full h-full bg-white rounded-2xl shadow-2xl overflow-hidden flex items-center justify-center">
-                <img src={prod.imagen_url} alt={prod.nombre} className="max-w-full max-h-full object-contain p-2" />
-              </div>
-            </div>
-          )}
-        </div>
+      <div key={idx} className="animate-fade-in-up">
+        <HeroSlideContent slide={cur} />
       </div>
 
       {/* Flechas */}
@@ -328,50 +465,8 @@ function HeroCarousel({ slides }: { slides: Record<string, any>[] }) {
 }
 
 function HeroBlock({ config }: { config: Record<string, any> }) {
-  const colorInicio = config.color_inicio || "hsl(var(--primary))";
-  const colorFin = config.color_fin || "hsl(var(--primary) / 0.7)";
-
-  return (
-    <section
-      className="relative overflow-hidden min-h-[180px] md:min-h-[180px]"
-      style={{ background: `linear-gradient(135deg, ${colorInicio}, ${colorFin})` }}
-    >
-      <HeroDecorations />
-
-      <div className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 md:py-10 w-full">
-        <div className="flex items-center justify-between gap-6">
-          <div className="min-w-0">
-            <h1 className="text-2xl md:text-3xl font-extrabold text-white leading-tight tracking-tight">
-              {config.titulo || "Bienvenido a nuestra tienda"}
-            </h1>
-            {config.subtitulo && (
-              <p className="text-sm md:text-base text-white/85 mt-2 max-w-lg">
-                {config.subtitulo}
-              </p>
-            )}
-          </div>
-          <div className="flex flex-wrap gap-3 shrink-0 animate-fade-in-up" style={{ animationDelay: "0.2s" }}>
-            {config.boton_texto && (
-              <Link
-                href={config.boton_link || "/productos"}
-                className="inline-flex items-center gap-1.5 bg-white text-gray-900 rounded-full px-6 py-2.5 text-sm font-semibold shadow-lg hover:shadow-xl hover:scale-105 active:scale-95 transition-all duration-200"
-              >
-                {config.boton_texto} <span>→</span>
-              </Link>
-            )}
-            {config.boton_secundario_texto && (
-              <Link
-                href={config.boton_secundario_link || "/productos"}
-                className="border-2 border-white text-white rounded-full px-6 py-2 text-sm font-semibold hover:bg-white/15 active:scale-95 transition-all duration-200"
-              >
-                {config.boton_secundario_texto}
-              </Link>
-            )}
-          </div>
-        </div>
-      </div>
-    </section>
-  );
+  // El bloque hero "puro" (sin programación) también pasa por el renderer unificado.
+  return <HeroSlideContent slide={config} />;
 }
 
 function TrustBadgesBlock({ config }: { config: Record<string, any> }) {
@@ -1363,6 +1458,31 @@ function UltimasUnidadesBlock({ config, productos: initialData = [] }: { config:
   );
 }
 
+function TripleBannerBlock({ config }: { config: Record<string, any> }) {
+  const slots = (config.slots as Array<{ titulo: string; subtitulo: string; imagen_url: string; link: string; color: string }> | undefined) || [];
+  if (slots.length === 0) return null;
+  return (
+    <section className="py-6 md:py-8 bg-white">
+      <div className="max-w-7xl mx-auto px-4 grid grid-cols-1 md:grid-cols-3 gap-3 md:gap-4">
+        {slots.slice(0, 3).map((s, i) => {
+          const bg: React.CSSProperties = s.imagen_url
+            ? { backgroundImage: `linear-gradient(135deg, ${s.color || "#0891b2"}aa, ${s.color || "#0891b2"}55), url("${s.imagen_url}")`, backgroundSize: "cover", backgroundPosition: "center" }
+            : { background: `linear-gradient(135deg, ${s.color || "#0891b2"}, ${s.color || "#0891b2"}cc)` };
+          return (
+            <Link key={i} href={s.link || "/productos"} className="group block rounded-2xl overflow-hidden text-white p-6 min-h-[160px] md:min-h-[200px] flex flex-col justify-end relative transition-transform hover:-translate-y-1 hover:shadow-xl" style={bg}>
+              <div className="font-extrabold text-2xl md:text-3xl leading-tight drop-shadow-md">{s.titulo || `Banner ${i + 1}`}</div>
+              {s.subtitulo && <div className="text-sm opacity-95 mt-1 drop-shadow">{s.subtitulo}</div>}
+              <span className="inline-flex items-center gap-1 mt-3 text-xs font-semibold opacity-90 group-hover:opacity-100">
+                Ver más <span className="transition-transform group-hover:translate-x-0.5">→</span>
+              </span>
+            </Link>
+          );
+        })}
+      </div>
+    </section>
+  );
+}
+
 function BannerPromoBlock({ config }: { config: Record<string, any> }) {
   const colorFondo = config.color_fondo || "hsl(var(--primary))";
 
@@ -1784,6 +1904,8 @@ export default function TiendaPage({
         return <MasVendidosBlock key={bloque.id} config={config} productos={initialMasVendidos} />;
       case "ultimas_unidades":
         return <UltimasUnidadesBlock key={bloque.id} config={config} productos={initialUltimasUnidades} />;
+      case "triple_banner":
+        return <TripleBannerBlock key={bloque.id} config={config} />;
       case "aumentos_recientes":
         return <AumentosRecientesBlock key={bloque.id} productos={initialAumentos} presMap={presMap} maxItems={(config.max_items_home as number) || 4} />;
       default:

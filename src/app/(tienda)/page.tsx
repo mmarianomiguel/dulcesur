@@ -16,7 +16,7 @@ const fetchHomeData = unstable_cache(async () => {
       .order("orden", { ascending: true }),
     supabase
       .from("hero_programaciones")
-      .select("titulo, subtitulo, boton_texto, boton_link, boton_secundario_texto, boton_secundario_link, color_inicio, color_fin, marcas, auto_porcentaje, tipo, producto_id, descuento_id")
+      .select("titulo, subtitulo, boton_texto, boton_link, boton_secundario_texto, boton_secundario_link, color_inicio, color_fin, marcas, auto_porcentaje, tipo, producto_id, descuento_id, imagen_url, marca_id, categoria_id, mostrar_countdown, fecha_hasta")
       .eq("activo", true)
       .lte("fecha_desde", nowIso)
       .gte("fecha_hasta", nowIso)
@@ -106,6 +106,47 @@ const fetchHomeData = unstable_cache(async () => {
           porcentaje: d.porcentaje ? String(d.porcentaje) : "",
         });
       }).filter(Boolean);
+    }
+
+    // ─ marca_destacada: resolver nombre de marca para placeholder
+    const slidesMarca = heroSlides.filter((s) => s.tipo === "marca_destacada" && s.marca_id);
+    if (slidesMarca.length > 0) {
+      const ids = slidesMarca.map((s) => s.marca_id);
+      const { data: marcas } = await supabase.from("marcas").select("id, nombre").in("id", ids);
+      const marcaMap: Record<string, any> = {};
+      (marcas || []).forEach((m: any) => { marcaMap[m.id] = m; });
+      heroSlides = heroSlides.map((s) => {
+        if (s.tipo !== "marca_destacada" || !s.marca_id) return s;
+        const m = marcaMap[s.marca_id];
+        if (!m) return s;
+        return fillSlide(s, { marca: m.nombre });
+      });
+    }
+
+    // ─ categoria_destacada: resolver nombre y contar productos
+    const slidesCat = heroSlides.filter((s) => s.tipo === "categoria_destacada" && s.categoria_id);
+    if (slidesCat.length > 0) {
+      const ids = slidesCat.map((s) => s.categoria_id);
+      const { data: cats } = await supabase.from("categorias").select("id, nombre").in("id", ids);
+      const catMap: Record<string, any> = {};
+      (cats || []).forEach((c: any) => { catMap[c.id] = c; });
+      // Contar productos por categoría
+      const counts: Record<string, number> = {};
+      for (const id of ids) {
+        const { count } = await supabase
+          .from("productos")
+          .select("id", { count: "exact", head: true })
+          .eq("categoria_id", id)
+          .eq("activo", true)
+          .eq("visibilidad", "visible");
+        counts[id] = count || 0;
+      }
+      heroSlides = heroSlides.map((s) => {
+        if (s.tipo !== "categoria_destacada" || !s.categoria_id) return s;
+        const c = catMap[s.categoria_id];
+        if (!c) return s;
+        return fillSlide(s, { categoria: c.nombre, cant_productos: String(counts[s.categoria_id] || 0) });
+      });
     }
 
     // ─ producto_destacado: traer producto y enriquecer con imagen + precios

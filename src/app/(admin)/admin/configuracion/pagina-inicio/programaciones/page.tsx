@@ -22,9 +22,20 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { showAdminToast } from "@/components/admin-toast";
-import { ArrowLeft, Plus, Pencil, Trash2, Calendar, Power, PowerOff } from "lucide-react";
+import { ArrowLeft, Plus, Pencil, Trash2, Calendar, Power, PowerOff, Upload, X as XIcon, Image as ImageIcon, Tag, Layout, Zap, Megaphone, Clock } from "lucide-react";
 
-type HeroTipo = "personalizado" | "aumento_marca" | "oferta_descuento" | "producto_destacado";
+type HeroTipo = "personalizado" | "aumento_marca" | "oferta_descuento" | "producto_destacado" | "imagen_libre" | "marca_destacada" | "categoria_destacada" | "oferta_countdown";
+
+const TIPO_META: Record<HeroTipo, { label: string; descripcion: string; Icon: typeof Tag }> = {
+  personalizado: { label: "Texto sobre gradiente", descripcion: "Banner clásico con título, subtítulo, botón y fondo de color", Icon: Megaphone },
+  imagen_libre: { label: "Imagen libre", descripcion: "Subís tu propia imagen pre-armada (Canva/diseñador)", Icon: ImageIcon },
+  producto_destacado: { label: "Producto destacado", descripcion: "Foto del producto + precio + tachado + CTA", Icon: Tag },
+  marca_destacada: { label: "Marca destacada", descripcion: "Foto + nombre de marca + CTA", Icon: Tag },
+  categoria_destacada: { label: "Categoría destacada", descripcion: "Foto + nombre + cantidad de productos", Icon: Layout },
+  oferta_descuento: { label: "Oferta / descuento", descripcion: "Promoción con descuento activo", Icon: Zap },
+  oferta_countdown: { label: "Oferta con countdown", descripcion: "Promoción con timer al fin de la fecha", Icon: Clock },
+  aumento_marca: { label: "Aumento de marca", descripcion: "% promedio de aumento de una marca (auto)", Icon: Megaphone },
+};
 
 interface HeroTemplate {
   id: string;
@@ -38,6 +49,8 @@ interface HeroTemplate {
   boton_secundario_link: string;
   color_inicio: string;
   color_fin: string;
+  imagen_url: string | null;
+  mostrar_countdown: boolean;
   placeholders: string[];
 }
 
@@ -61,10 +74,75 @@ interface HeroProgramacion {
   auto_porcentaje: boolean;
   producto_id: string | null;
   descuento_id: string | null;
+  imagen_url: string | null;
+  marca_id: string | null;
+  categoria_id: string | null;
+  mostrar_countdown: boolean;
 }
 
 interface ProductoLite { id: string; nombre: string; precio: number; precio_anterior: number | null; imagen_url: string | null }
 interface DescuentoLite { id: string; nombre: string; porcentaje: number | null; activo: boolean; fecha_inicio: string | null; fecha_fin: string | null }
+interface MarcaLite { id: string; nombre: string }
+interface CategoriaLite { id: string; nombre: string }
+
+// Helper: upload file to /api/upload, returns secure_url or null
+async function uploadImage(file: File): Promise<string | null> {
+  const fd = new FormData();
+  fd.append("file", file);
+  try {
+    const res = await fetch("/api/upload", { method: "POST", body: fd });
+    if (!res.ok) return null;
+    const data = await res.json();
+    return data.secure_url || null;
+  } catch { return null; }
+}
+
+// Drop zone para imagen — pequeño, embedded en formulario
+function ImageDropField({ value, onChange, label = "Imagen de fondo", hint }: { value: string | null; onChange: (url: string | null) => void; label?: string; hint?: string }) {
+  const [uploading, setUploading] = useState(false);
+  const [drag, setDrag] = useState(false);
+  const handleFile = async (file: File | null) => {
+    if (!file || !file.type.startsWith("image/")) return;
+    setUploading(true);
+    const url = await uploadImage(file);
+    setUploading(false);
+    if (url) { onChange(url); showAdminToast("Imagen subida", "success"); }
+    else showAdminToast("Error al subir", "error");
+  };
+  return (
+    <div className="space-y-1.5">
+      <Label>{label}</Label>
+      <div
+        onDragOver={(e) => { e.preventDefault(); setDrag(true); }}
+        onDragLeave={() => setDrag(false)}
+        onDrop={(e) => { e.preventDefault(); setDrag(false); handleFile(e.dataTransfer.files?.[0] || null); }}
+        className={`relative aspect-[1.91/1] rounded-lg border-2 border-dashed transition-colors flex items-center justify-center overflow-hidden cursor-pointer group ${drag ? "border-pink-400 bg-pink-50" : value ? "border-gray-200" : "border-gray-300 bg-gray-50 hover:bg-gray-100"}`}
+        onClick={() => document.getElementById(`imgdrop-${label}`)?.click()}
+      >
+        {value ? (
+          <>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={value} alt={label} className="w-full h-full object-cover" />
+            <div className="absolute top-1.5 right-1.5 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+              <button type="button" onClick={(e) => { e.stopPropagation(); document.getElementById(`imgdrop-${label}`)?.click(); }} className="w-7 h-7 bg-white text-gray-900 rounded shadow flex items-center justify-center hover:bg-gray-100" title="Reemplazar"><Upload className="w-3.5 h-3.5" /></button>
+              <button type="button" onClick={(e) => { e.stopPropagation(); onChange(null); }} className="w-7 h-7 bg-red-500 text-white rounded shadow flex items-center justify-center hover:bg-red-600" title="Quitar"><XIcon className="w-3.5 h-3.5" /></button>
+            </div>
+          </>
+        ) : uploading ? (
+          <div className="text-xs text-muted-foreground">Subiendo…</div>
+        ) : (
+          <div className="text-center text-muted-foreground px-3">
+            <Upload className="w-5 h-5 mx-auto mb-1" />
+            <p className="text-xs font-medium">Arrastrá una imagen o hacé click</p>
+            {hint && <p className="text-[10px] opacity-70 mt-0.5">{hint}</p>}
+          </div>
+        )}
+        <input id={`imgdrop-${label}`} type="file" accept="image/*" className="hidden" onChange={(e) => { handleFile(e.target.files?.[0] || null); e.target.value = ""; }} />
+      </div>
+      <Input value={value || ""} onChange={(e) => onChange(e.target.value || null)} placeholder="o pegá URL" className="h-7 text-[11px]" />
+    </div>
+  );
+}
 
 const PLACEHOLDER_RE = /\{([a-z_][a-z0-9_]*)\}/gi;
 
@@ -94,9 +172,13 @@ function emptyTemplate(): HeroTemplate {
     boton_secundario_link: "",
     color_inicio: "#ec4899",
     color_fin: "#a855f7",
+    imagen_url: null,
+    mostrar_countdown: false,
     placeholders: [],
   };
 }
+
+void emptyTemplate;
 
 // Format datetime-local: YYYY-MM-DDTHH:mm (lo que devuelve <input type="datetime-local">)
 function isoToLocal(iso: string): string {
@@ -150,15 +232,21 @@ export default function ProgramacionesPage() {
   const [descuentosCache, setDescuentosCache] = useState<DescuentoLite[]>([]);
   const [productoSearch, setProductoSearch] = useState("");
   const [productoSelected, setProductoSelected] = useState<ProductoLite | null>(null);
+  const [marcasCache, setMarcasCache] = useState<MarcaLite[]>([]);
+  const [categoriasCache, setCategoriasCache] = useState<CategoriaLite[]>([]);
 
   const load = async () => {
     setLoading(true);
-    const [t, p] = await Promise.all([
+    const [t, p, m, c] = await Promise.all([
       supabase.from("hero_templates").select("*").order("nombre"),
       supabase.from("hero_programaciones").select("*").order("fecha_desde", { ascending: false }),
+      supabase.from("marcas").select("id, nombre").order("nombre"),
+      supabase.from("categorias").select("id, nombre").order("nombre"),
     ]);
     setTemplates((t.data as HeroTemplate[]) || []);
     setProgs((p.data as HeroProgramacion[]) || []);
+    setMarcasCache((m.data as MarcaLite[]) || []);
+    setCategoriasCache((c.data as CategoriaLite[]) || []);
     setLoading(false);
   };
   useEffect(() => { load(); }, []);
@@ -172,6 +260,7 @@ export default function ProgramacionesPage() {
     const placeholders = extractPlaceholders(t.titulo, t.subtitulo, t.boton_texto, t.boton_link, t.boton_secundario_texto, t.boton_secundario_link);
     const payload = {
       nombre: t.nombre.trim(),
+      tipo: t.tipo,
       titulo: t.titulo,
       subtitulo: t.subtitulo,
       boton_texto: t.boton_texto,
@@ -180,6 +269,8 @@ export default function ProgramacionesPage() {
       boton_secundario_link: t.boton_secundario_link,
       color_inicio: t.color_inicio,
       color_fin: t.color_fin,
+      imagen_url: t.imagen_url,
+      mostrar_countdown: t.mostrar_countdown,
       placeholders,
       updated_at: new Date().toISOString(),
     };
@@ -251,6 +342,7 @@ export default function ProgramacionesPage() {
       activo: true, prioridad: 0,
       marcas: null, auto_porcentaje: false,
       producto_id: null, descuento_id: null,
+      imagen_url: null, marca_id: null, categoria_id: null, mostrar_countdown: false,
     });
   };
 
@@ -308,6 +400,8 @@ export default function ProgramacionesPage() {
         boton_secundario_link: tpl.boton_secundario_link,
         color_inicio: tpl.color_inicio,
         color_fin: tpl.color_fin,
+        imagen_url: tpl.imagen_url,
+        mostrar_countdown: tpl.mostrar_countdown,
       });
     }
   };
@@ -376,6 +470,10 @@ export default function ProgramacionesPage() {
       auto_porcentaje: useAutoPct,
       producto_id: progProductoId,
       descuento_id: progDescuentoId,
+      imagen_url: resolved.imagen_url,
+      marca_id: resolved.marca_id,
+      categoria_id: resolved.categoria_id,
+      mostrar_countdown: resolved.mostrar_countdown,
     };
     const res = editingProg.id
       ? await supabase.from("hero_programaciones").update(payload).eq("id", editingProg.id)
@@ -517,27 +615,38 @@ export default function ProgramacionesPage() {
           {loading ? <div className="text-sm text-muted-foreground">Cargando…</div> :
            templates.length === 0 ? <div className="text-sm text-muted-foreground py-6 text-center">No hay plantillas.</div> :
             <div className="grid sm:grid-cols-2 gap-3">
-              {templates.map((t) => (
-                <div key={t.id} className="border rounded-lg overflow-hidden">
-                  <div className="h-20 px-4 flex items-center text-white text-sm font-bold" style={{ background: `linear-gradient(135deg, ${t.color_inicio}, ${t.color_fin})` }}>
-                    {t.titulo || t.nombre}
-                  </div>
-                  <div className="p-3 flex items-center justify-between">
-                    <div className="min-w-0">
-                      <div className="text-sm font-medium truncate">{t.nombre}</div>
-                      {t.placeholders.length > 0 && (
-                        <div className="text-[11px] text-muted-foreground truncate">
-                          Variables: {t.placeholders.map((p) => `{${p}}`).join(", ")}
-                        </div>
-                      )}
+              {templates.map((t) => {
+                const tipoMeta = TIPO_META[t.tipo] || TIPO_META.personalizado;
+                const TipoIcon = tipoMeta.Icon;
+                const bgStyle: React.CSSProperties = t.imagen_url
+                  ? { backgroundImage: `linear-gradient(135deg, ${t.color_inicio}cc, ${t.color_fin}aa), url("${t.imagen_url}")`, backgroundSize: "cover", backgroundPosition: "center" }
+                  : { background: `linear-gradient(135deg, ${t.color_inicio}, ${t.color_fin})` };
+                return (
+                  <div key={t.id} className="border rounded-lg overflow-hidden">
+                    <div className="relative h-24 px-4 flex items-center text-white text-sm font-bold" style={bgStyle}>
+                      <span className="drop-shadow">{t.titulo || t.nombre}</span>
+                      <span className="absolute top-1.5 right-1.5 inline-flex items-center gap-1 bg-black/30 backdrop-blur-sm text-[10px] uppercase tracking-wider px-1.5 py-0.5 rounded">
+                        <TipoIcon className="w-3 h-3" />
+                        {tipoMeta.label}
+                      </span>
                     </div>
-                    <div className="flex">
-                      <Button variant="ghost" size="icon" onClick={() => setEditingTemplate(t)}><Pencil className="h-4 w-4" /></Button>
-                      <Button variant="ghost" size="icon" onClick={() => deleteTemplate(t.id)}><Trash2 className="h-4 w-4 text-red-600" /></Button>
+                    <div className="p-3 flex items-center justify-between">
+                      <div className="min-w-0">
+                        <div className="text-sm font-medium truncate">{t.nombre}</div>
+                        {t.placeholders.length > 0 && (
+                          <div className="text-[11px] text-muted-foreground truncate">
+                            Variables: {t.placeholders.map((p) => `{${p}}`).join(", ")}
+                          </div>
+                        )}
+                      </div>
+                      <div className="flex">
+                        <Button variant="ghost" size="icon" onClick={() => setEditingTemplate(t)}><Pencil className="h-4 w-4" /></Button>
+                        <Button variant="ghost" size="icon" onClick={() => deleteTemplate(t.id)}><Trash2 className="h-4 w-4 text-red-600" /></Button>
+                      </div>
                     </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           }
         </CardContent>
@@ -554,6 +663,33 @@ export default function ProgramacionesPage() {
                 <Input value={editingTemplate.nombre} onChange={(e) => setEditingTemplate({ ...editingTemplate, nombre: e.target.value })} placeholder="Ej: Feriado, Cambio de mínimo…" />
               </div>
               <div>
+                <Label>Tipo de banner</Label>
+                <Select value={editingTemplate.tipo} onValueChange={(v) => setEditingTemplate({ ...editingTemplate, tipo: v as HeroTipo })}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {(Object.keys(TIPO_META) as HeroTipo[]).map((t) => {
+                      const m = TIPO_META[t];
+                      const Icon = m.Icon;
+                      return (
+                        <SelectItem key={t} value={t}>
+                          <span className="flex items-center gap-2"><Icon className="w-3.5 h-3.5" /> {m.label}</span>
+                        </SelectItem>
+                      );
+                    })}
+                  </SelectContent>
+                </Select>
+                <p className="text-[11px] text-muted-foreground mt-1">{TIPO_META[editingTemplate.tipo]?.descripcion}</p>
+              </div>
+
+              {/* Imagen de fondo (todos los tipos la soportan; obligatoria para imagen_libre, marca, categoria) */}
+              <ImageDropField
+                value={editingTemplate.imagen_url}
+                onChange={(url) => setEditingTemplate({ ...editingTemplate, imagen_url: url })}
+                label="Imagen de fondo"
+                hint={editingTemplate.tipo === "imagen_libre" ? "Recomendado: 1920×600 (banner pre-armado)" : "Opcional · si la dejás vacía, se usa el gradiente"}
+              />
+
+              <div>
                 <Label>Título <span className="text-xs text-muted-foreground">(usá <code>{`{variable}`}</code> para placeholders)</span></Label>
                 <Input value={editingTemplate.titulo} onChange={(e) => setEditingTemplate({ ...editingTemplate, titulo: e.target.value })} />
               </div>
@@ -569,9 +705,27 @@ export default function ProgramacionesPage() {
                 <div><Label>Color inicio</Label><Input type="color" value={editingTemplate.color_inicio} onChange={(e) => setEditingTemplate({ ...editingTemplate, color_inicio: e.target.value })} /></div>
                 <div><Label>Color fin</Label><Input type="color" value={editingTemplate.color_fin} onChange={(e) => setEditingTemplate({ ...editingTemplate, color_fin: e.target.value })} /></div>
               </div>
-              <div className="rounded-lg p-4 text-white" style={{ background: `linear-gradient(135deg, ${editingTemplate.color_inicio}, ${editingTemplate.color_fin})` }}>
-                <div className="font-bold text-lg">{editingTemplate.titulo || "Título de ejemplo"}</div>
-                <div className="text-sm opacity-90">{editingTemplate.subtitulo || "Subtítulo de ejemplo"}</div>
+              {(editingTemplate.tipo === "oferta_descuento" || editingTemplate.tipo === "oferta_countdown") && (
+                <label className="flex items-center gap-2 text-sm bg-amber-50 border border-amber-200 p-2 rounded">
+                  <input type="checkbox" checked={editingTemplate.mostrar_countdown} onChange={(e) => setEditingTemplate({ ...editingTemplate, mostrar_countdown: e.target.checked })} />
+                  <Clock className="w-4 h-4 text-amber-600" />
+                  <span>Mostrar countdown a la fecha de fin</span>
+                </label>
+              )}
+              {/* Preview real del template */}
+              <div className="rounded-lg overflow-hidden border">
+                <div
+                  className="relative min-h-[120px] flex items-center px-5 py-4 text-white"
+                  style={editingTemplate.imagen_url
+                    ? { backgroundImage: `linear-gradient(135deg, ${editingTemplate.color_inicio}cc, ${editingTemplate.color_fin}aa), url("${editingTemplate.imagen_url}")`, backgroundSize: "cover", backgroundPosition: "center" }
+                    : { background: `linear-gradient(135deg, ${editingTemplate.color_inicio}, ${editingTemplate.color_fin})` }}
+                >
+                  <div>
+                    <div className="font-extrabold text-xl drop-shadow">{editingTemplate.titulo || "Título de ejemplo"}</div>
+                    {editingTemplate.subtitulo && <div className="text-sm opacity-90 mt-1 drop-shadow">{editingTemplate.subtitulo}</div>}
+                    {editingTemplate.boton_texto && <div className="inline-block mt-2 px-3 py-1 bg-white text-gray-900 rounded-full text-xs font-semibold shadow">{editingTemplate.boton_texto} →</div>}
+                  </div>
+                </div>
               </div>
               {(() => {
                 const detected = extractPlaceholders(
@@ -704,13 +858,58 @@ export default function ProgramacionesPage() {
                     </>
                   )}
 
-                  {/* TIPO: personalizado → todos los placeholders como inputs simples */}
-                  {progTemplate.tipo === "personalizado" && progTemplate.placeholders.map((k) => (
+                  {/* TIPO: marca_destacada → selector de marca */}
+                  {progTemplate.tipo === "marca_destacada" && (
+                    <div>
+                      <Label>Marca</Label>
+                      <Select value={editingProg.marca_id || ""} onValueChange={(v) => setEditingProg({ ...editingProg, marca_id: v })}>
+                        <SelectTrigger><SelectValue placeholder="Elegí una marca…" /></SelectTrigger>
+                        <SelectContent>
+                          {marcasCache.map((m) => <SelectItem key={m.id} value={m.id}>{m.nombre}</SelectItem>)}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  )}
+
+                  {/* TIPO: categoria_destacada → selector de categoría */}
+                  {progTemplate.tipo === "categoria_destacada" && (
+                    <div>
+                      <Label>Categoría</Label>
+                      <Select value={editingProg.categoria_id || ""} onValueChange={(v) => setEditingProg({ ...editingProg, categoria_id: v })}>
+                        <SelectTrigger><SelectValue placeholder="Elegí una categoría…" /></SelectTrigger>
+                        <SelectContent>
+                          {categoriasCache.map((c) => <SelectItem key={c.id} value={c.id}>{c.nombre}</SelectItem>)}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  )}
+
+                  {/* TIPO: imagen_libre / personalizado → todos los placeholders como inputs simples */}
+                  {(progTemplate.tipo === "personalizado" || progTemplate.tipo === "imagen_libre") && progTemplate.placeholders.map((k) => (
                     <div key={k}>
                       <Label className="capitalize">{k.replace(/_/g, " ")}</Label>
                       <Input value={progValues[k] || ""} onChange={(e) => setProgValues({ ...progValues, [k]: e.target.value })} placeholder={`Valor para {${k}}`} />
                     </div>
                   ))}
+                </div>
+              )}
+
+              {/* Imagen de fondo + countdown toggle (siempre visibles según tipo) */}
+              {editingProg && (
+                <div className="space-y-3 p-3 border rounded-lg bg-gray-50">
+                  <ImageDropField
+                    value={editingProg.imagen_url}
+                    onChange={(url) => setEditingProg({ ...editingProg, imagen_url: url })}
+                    label="Imagen de fondo (opcional)"
+                    hint="Recomendado: 1920×600 · si la dejás vacía, se usa el gradiente"
+                  />
+                  {(editingProg.tipo === "oferta_descuento" || editingProg.tipo === "oferta_countdown") && (
+                    <label className="flex items-center gap-2 text-sm bg-amber-50 border border-amber-200 p-2 rounded">
+                      <input type="checkbox" checked={editingProg.mostrar_countdown} onChange={(e) => setEditingProg({ ...editingProg, mostrar_countdown: e.target.checked })} />
+                      <Clock className="w-4 h-4 text-amber-600" />
+                      <span>Mostrar countdown hasta la fecha de fin</span>
+                    </label>
+                  )}
                 </div>
               )}
 
@@ -747,9 +946,16 @@ export default function ProgramacionesPage() {
               </div>
 
               {livePreview && (
-                <div className="relative rounded-lg p-4 text-white overflow-hidden" style={{ background: `linear-gradient(135deg, ${livePreview.color_inicio}, ${livePreview.color_fin})` }}>
-                  <div className="absolute -top-8 -right-8 w-32 h-32 bg-white/10 rounded-full blur-2xl pointer-events-none" />
-                  <div className="absolute -bottom-10 -left-10 w-32 h-32 bg-white/8 rounded-full blur-3xl pointer-events-none" />
+                <div
+                  className="relative rounded-lg p-4 text-white overflow-hidden"
+                  style={editingProg?.imagen_url
+                    ? { backgroundImage: `linear-gradient(135deg, ${livePreview.color_inicio}cc, ${livePreview.color_fin}aa), url("${editingProg.imagen_url}")`, backgroundSize: "cover", backgroundPosition: "center" }
+                    : { background: `linear-gradient(135deg, ${livePreview.color_inicio}, ${livePreview.color_fin})` }}
+                >
+                  {!editingProg?.imagen_url && <>
+                    <div className="absolute -top-8 -right-8 w-32 h-32 bg-white/10 rounded-full blur-2xl pointer-events-none" />
+                    <div className="absolute -bottom-10 -left-10 w-32 h-32 bg-white/8 rounded-full blur-3xl pointer-events-none" />
+                  </>}
                   <div className="relative">
                     <div className="text-[10px] uppercase tracking-wide opacity-70 mb-1">Vista previa</div>
                     {livePreview.tipo === "producto_destacado" && livePreview.producto ? (
