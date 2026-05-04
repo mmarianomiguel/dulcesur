@@ -22,6 +22,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { showAdminToast } from "@/components/admin-toast";
+import { DateTimeInput } from "@/components/ui/datetime-input";
 import { ArrowLeft, Plus, Pencil, Trash2, Calendar, Power, PowerOff, Upload, X as XIcon, Image as ImageIcon, Tag, Layout, Zap, Megaphone, Clock } from "lucide-react";
 
 type HeroTipo = "personalizado" | "aumento_marca" | "oferta_descuento" | "producto_destacado" | "imagen_libre" | "marca_destacada" | "categoria_destacada" | "oferta_countdown";
@@ -479,6 +480,7 @@ export default function ProgramacionesPage() {
       ? await supabase.from("hero_programaciones").update(payload).eq("id", editingProg.id)
       : await supabase.from("hero_programaciones").insert(payload);
     if (res.error) { showAdminToast("Error: " + res.error.message, "error"); return; }
+    fetch("/api/revalidate-tienda", { method: "POST" }).catch(() => {});
     showAdminToast(editingProg.id ? "Programación actualizada" : "Programación creada", "success");
     setEditingProg(null); setProgTemplate(null); setProgValues({});
     load();
@@ -487,6 +489,7 @@ export default function ProgramacionesPage() {
   const toggleProg = async (p: HeroProgramacion) => {
     const res = await supabase.from("hero_programaciones").update({ activo: !p.activo }).eq("id", p.id);
     if (res.error) { showAdminToast("Error: " + res.error.message, "error"); return; }
+    fetch("/api/revalidate-tienda", { method: "POST" }).catch(() => {});
     load();
   };
 
@@ -494,6 +497,7 @@ export default function ProgramacionesPage() {
     if (!confirm("¿Eliminar programación?")) return;
     const res = await supabase.from("hero_programaciones").delete().eq("id", id);
     if (res.error) { showAdminToast("Error: " + res.error.message, "error"); return; }
+    fetch("/api/revalidate-tienda", { method: "POST" }).catch(() => {});
     showAdminToast("Programación eliminada", "success");
     load();
   };
@@ -931,8 +935,8 @@ export default function ProgramacionesPage() {
               )}
 
               <div className="grid grid-cols-2 gap-3">
-                <div><Label>Desde</Label><Input type="datetime-local" value={progFechaDesde} onChange={(e) => setProgFechaDesde(e.target.value)} /></div>
-                <div><Label>Hasta</Label><Input type="datetime-local" value={progFechaHasta} onChange={(e) => setProgFechaHasta(e.target.value)} /></div>
+                <div><Label>Desde</Label><DateTimeInput value={progFechaDesde} onChange={setProgFechaDesde} /></div>
+                <div><Label>Hasta</Label><DateTimeInput value={progFechaHasta} onChange={setProgFechaHasta} min={progFechaDesde} /></div>
                 <div>
                   <Label>Prioridad <span className="text-xs text-muted-foreground">(mayor gana si se solapan)</span></Label>
                   <Input type="number" value={progPrioridad} onChange={(e) => setProgPrioridad(parseInt(e.target.value) || 0)} />

@@ -1186,6 +1186,8 @@ export default function PaginaInicioEditor() {
       const { error } = await supabase.from("pagina_inicio_bloques").upsert(rows);
       if (error) throw error;
 
+      fetch("/api/revalidate-tienda", { method: "POST" }).catch(() => {});
+
       setOriginalIds(currentIds);
       setSavedSnapshot(JSON.stringify(bloques));
       setSaved(true);

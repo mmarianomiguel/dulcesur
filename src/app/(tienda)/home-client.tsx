@@ -142,23 +142,37 @@ function SectionTitle({ children }: { children: React.ReactNode }) {
 
 /* ──────────────── block renderers ──────────────── */
 
-// Decoraciones esteticas reutilizables para todos los hero variants
+// Decoraciones esteticas para hero sin imagen: 2 orbes blur + overlay sutil.
+// Minimal: solo da profundidad sin saturar.
 function HeroDecorations() {
   return (
     <>
-      <div className="absolute -top-12 -right-12 w-72 h-72 bg-white/10 rounded-full blur-2xl pointer-events-none" />
-      <div className="absolute -bottom-16 -left-16 w-64 h-64 bg-white/8 rounded-full blur-3xl pointer-events-none" />
-      <div className="absolute top-6 right-1/3 w-2 h-2 bg-white/40 rounded-full hidden md:block" />
-      <div className="absolute bottom-8 right-1/4 w-1.5 h-1.5 bg-white/40 rounded-full hidden md:block" />
+      <div className="absolute -top-20 -right-16 w-80 h-80 bg-white/15 rounded-full blur-3xl pointer-events-none" />
+      <div className="absolute -bottom-24 -left-20 w-96 h-96 bg-black/10 rounded-full blur-3xl pointer-events-none" />
       <div
-        className="absolute inset-0 opacity-[0.08] pointer-events-none"
+        className="absolute inset-0 pointer-events-none opacity-50"
         style={{
-          backgroundImage:
-            "radial-gradient(circle at 1px 1px, rgba(255,255,255,0.6) 1px, transparent 0)",
-          backgroundSize: "20px 20px",
+          background:
+            "radial-gradient(ellipse at top right, rgba(255,255,255,0.12), transparent 60%)",
         }}
       />
     </>
+  );
+}
+
+// Sticker flotante de descuento (solo para oferta_descuento/oferta_countdown si hay descuento_pct)
+function HeroDiscountSticker({ pct }: { pct: number | string }) {
+  return (
+    <div className="absolute top-4 right-4 md:top-6 md:right-6 pointer-events-none hidden sm:block">
+      <div className="relative w-20 h-20 md:w-28 md:h-28 -rotate-12">
+        <div className="absolute inset-0 bg-yellow-400 rounded-full shadow-2xl animate-pulse" style={{ animationDuration: "3s" }} />
+        <div className="absolute inset-1 bg-yellow-300 rounded-full border-2 border-dashed border-yellow-600/40" />
+        <div className="relative w-full h-full flex flex-col items-center justify-center">
+          <span className="text-xl md:text-3xl font-extrabold text-gray-900 leading-none">{pct}%</span>
+          <span className="text-[8px] md:text-[10px] font-bold text-gray-900 uppercase tracking-widest mt-0.5">OFF</span>
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -350,12 +364,21 @@ function HeroSlideContent({ slide }: { slide: Record<string, any> }) {
   if (tipo === "oferta_descuento" || tipo === "oferta_countdown") {
     const link = slide.boton_link || "/ofertas";
     const showCountdown = (tipo === "oferta_countdown" || slide.mostrar_countdown) && slide.fecha_hasta;
+    const pct = slide.descuento_pct;
     return (
       <section className="relative overflow-hidden block min-h-[200px] md:min-h-[220px]" style={bgStyle}>
         {!hasImagen && <HeroDecorations />}
+        {/* Overlay extra a la izquierda solo si hay imagen, para que el texto resalte sin tapar el patron */}
+        {hasImagen && (
+          <div className="absolute inset-0 bg-gradient-to-r from-black/45 via-black/20 to-transparent pointer-events-none" />
+        )}
+        {pct && <HeroDiscountSticker pct={pct} />}
         <div className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 md:py-8 w-full">
           <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-            <div className="min-w-0 flex-1">
+            <div className={"min-w-0 flex-1" + (pct ? " md:pr-36" : "")}>
+              <span className="inline-flex items-center gap-1 bg-white/20 backdrop-blur-sm border border-white/30 text-white text-[10px] md:text-xs font-bold px-2.5 py-1 rounded-full mb-2 uppercase tracking-widest shadow-sm">
+                ⚡ Oferta{pct ? ` · ${pct}% off` : ""}
+              </span>
               <h1 className="text-2xl md:text-4xl font-extrabold text-white leading-tight tracking-tight drop-shadow-md">
                 {slide.titulo}
               </h1>

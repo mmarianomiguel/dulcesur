@@ -104,7 +104,7 @@ const fetchHomeData = unstable_cache(async () => {
         return fillSlide(s, {
           nombre_descuento: d.nombre || "Oferta",
           porcentaje: d.porcentaje ? String(d.porcentaje) : "",
-        });
+        }, { descuento_pct: d.porcentaje || null });
       }).filter(Boolean);
     }
 
