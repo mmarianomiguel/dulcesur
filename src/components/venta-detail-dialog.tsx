@@ -1063,7 +1063,7 @@ export function VentaDetailDialog({
                         <div key={i} className="flex items-center justify-between text-xs">
                           <span className="text-muted-foreground">
                             {p.metodo.includes("(a cobrar)") ? "\u23F3" : "\u2713"} {p.metodo}
-                            {p.cuenta_bancaria && <span className="text-[10px] text-muted-foreground ml-1">\u2192 {p.cuenta_bancaria}</span>}
+                            {p.cuenta_bancaria && <span className="text-[10px] text-muted-foreground ml-1">{"\u2192"} {p.cuenta_bancaria}</span>}
                           </span>
                           <span className={`font-medium ${p.metodo.includes("(a cobrar)") ? "text-amber-600" : "text-foreground"}`}>{formatCurrency(p.monto)}</span>
                         </div>
