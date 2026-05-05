@@ -680,7 +680,7 @@ export function VentaDetailDialog({
           )}
 
           {/* ═══ AVISO MÍNIMO MAYORISTA ═══ */}
-          {minQtyViolations.length > 0 && (
+          {isEditable && minQtyViolations.length > 0 && (
             <div className="mb-4 bg-amber-50 border border-amber-200 rounded-xl p-3 sm:p-4">
               <div className="flex items-start gap-2 mb-2">
                 <span className="text-amber-500 text-base mt-0.5 shrink-0">⚠️</span>
