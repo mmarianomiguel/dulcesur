@@ -977,6 +977,23 @@ export default function ProductosPage() {
           ? supabase.from("presentaciones").delete().in("id", toDelete.map((p) => p.id!))
           : Promise.resolve(),
       ]);
+
+      // Force linear sync of non-Unidad presentations when product precio/costo changed.
+      // The input onBlur handlers can leave form state stale (e.g., precio onBlur only
+      // updates precio, leaving caja costo with old values from a stale costo onBlur).
+      if (editingProduct && (precioCambio || costoCambio)) {
+        const corrections: Promise<any>[] = [];
+        for (const pres of presentaciones) {
+          if (pres._deleted || !pres.id || pres.cantidad === 1) continue;
+          const presUpdate: Record<string, unknown> = {};
+          if (precioCambio) presUpdate.precio = Math.round(form.precio * pres.cantidad);
+          if (costoCambio) presUpdate.costo = Math.round(form.costo * pres.cantidad);
+          if (Object.keys(presUpdate).length > 0) {
+            corrections.push(supabase.from("presentaciones").update(presUpdate).eq("id", pres.id!).then());
+          }
+        }
+        if (corrections.length > 0) await Promise.all(corrections);
+      }
       } // end if (!isCombo)
 
       setDialogOpen(false);
