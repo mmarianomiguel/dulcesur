@@ -110,7 +110,8 @@ export default function ReportesPage() {
       supabase.from("ventas").select("id, fecha, total, subtotal, forma_pago, tipo_comprobante, created_at, cliente_id, origen, estado, remito_origen_id, clientes(nombre)")
         .gte("fecha", dEff).lte("fecha", hEff)
         .neq("estado", "anulada")
-        .order("created_at", { ascending: false }),
+        .order("created_at", { ascending: false })
+        .range(0, 49999),
       supabase.from("compras").select("id, fecha, total, forma_pago, proveedor_id, observacion, proveedores(nombre)")
         .gte("fecha", dEff).lte("fecha", hEff)
         .neq("estado", "Pendiente")

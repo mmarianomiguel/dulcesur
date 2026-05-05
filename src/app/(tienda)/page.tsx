@@ -471,7 +471,7 @@ const fetchHomeData = unstable_cache(async () => {
     .from("venta_items")
     .select("producto_id, cantidad")
     .gte("created_at", hace30.toISOString())
-    .limit(1000);
+    .limit(49999);
 
   // presentaciones depende de `productos` → se encadena con prodPromise para
   // arrancar apenas estén los IDs, sin esperar al resto del grupo crítico.
