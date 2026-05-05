@@ -1672,13 +1672,21 @@ export default function ListadoVentasPage() {
       if (existing) existing.monto += m.monto;
       else pagos.push({ metodo: label, monto: m.monto, cuenta_bancaria: cuenta });
     }
-    // Add payments made via cobros (hoja de ruta saldo allocation) — not in caja_movimientos for this venta
+    // Sumar cobros SOLO si no hay caja_movimientos directos para esta venta.
+    // Cuando un pedido se factura desde POS/listado, el flujo crea ambos: la entrada
+    // en caja_movimientos con referencia_tipo="venta" Y el recibo de cobro con sus
+    // cobro_items. Apuntan a la misma plata — sumar los dos duplica el total cobrado.
+    // Solo cuando no hay caja directa (ej: venta vieja en CC pagada después por un
+    // cobro cuyo caja_movimiento apunta a cobro.id, no a venta.id) los cobro_items
+    // son la única fuente del pago y hay que mostrarlos.
     const cobroTotalAmt = (cobroItemsData || []).reduce((s: number, ci: any) => s + (ci.monto_aplicado || 0), 0);
-    for (const ci of cobroItemsData || []) {
-      const fp = (ci as any).cobros?.forma_pago || "Cobro";
-      const existing = pagos.find((p) => p.metodo === fp);
-      if (existing) existing.monto += (ci as any).monto_aplicado;
-      else pagos.push({ metodo: fp, monto: (ci as any).monto_aplicado });
+    if (!movs || movs.length === 0) {
+      for (const ci of cobroItemsData || []) {
+        const fp = (ci as any).cobros?.forma_pago || "Cobro";
+        const existing = pagos.find((p) => p.metodo === fp);
+        if (existing) existing.monto += (ci as any).monto_aplicado;
+        else pagos.push({ metodo: fp, monto: (ci as any).monto_aplicado });
+      }
     }
     // CC charge: show only the portion NOT covered by cobros (avoids double-counting)
     const ccTotal = (ccMovs || []).reduce((s: number, c: any) => s + (c.debe || 0), 0);
