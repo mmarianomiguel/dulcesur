@@ -521,23 +521,24 @@ export default function ListadoVentasPage() {
   const openDetail = async (v: VentaRow) => {
     const [{ data }, { data: movData }, { data: clienteData }, { data: cobroSaldoData }] = await Promise.all([
       supabase.from("venta_items").select("*").eq("venta_id", v.id).order("created_at"),
-      supabase.from("caja_movimientos").select("metodo_pago, monto, descripcion").eq("referencia_id", v.id).eq("referencia_tipo", "venta").eq("tipo", "ingreso"),
+      supabase.from("caja_movimientos").select("metodo_pago, monto, descripcion, cuenta_bancaria").eq("referencia_id", v.id).eq("tipo", "ingreso"),
       v.cliente_id ? supabase.from("clientes").select("saldo").eq("id", v.cliente_id).single() : Promise.resolve({ data: null }),
-      supabase.from("caja_movimientos").select("metodo_pago, monto, descripcion, created_at").eq("referencia_id", v.id).eq("referencia_tipo", "cobro_saldo").eq("tipo", "ingreso"),
+      Promise.resolve({ data: [] }),
     ]);
     const vitems = (data as VentaItemRow[]) || [];
 
-    // Build detailPagos from caja_movimientos
-    const pagosFromCaja: { metodo: string; monto: number }[] = [];
+    // Build detailPagos from caja_movimientos (all referencia_tipos, like admin/caja does)
+    const pagosFromCaja: { metodo: string; monto: number; cuenta_bancaria?: string | null }[] = [];
     for (const m of movData || []) {
       let label = m.metodo_pago;
       if (m.metodo_pago === "Transferencia" && m.descripcion) {
         const match = m.descripcion.match(/\+(\d+(?:\.\d+)?)%/);
         if (match) label = `Transferencia (${match[1]}%)`;
       }
-      const existing = pagosFromCaja.find((p) => p.metodo === label);
+      const cuenta = (m as any).cuenta_bancaria || null;
+      const existing = pagosFromCaja.find((p) => p.metodo === label && (p.cuenta_bancaria || null) === cuenta);
       if (existing) existing.monto += m.monto;
-      else pagosFromCaja.push({ metodo: label, monto: m.monto });
+      else pagosFromCaja.push({ metodo: label, monto: m.monto, cuenta_bancaria: cuenta });
     }
     if (pagosFromCaja.length === 0 && v.forma_pago && v.forma_pago !== "Pendiente" && v.forma_pago !== "Cuenta Corriente") {
       // Fallback: venta was paid but no caja entry (old data) — use monto_pagado
