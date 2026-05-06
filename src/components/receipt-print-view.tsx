@@ -143,12 +143,30 @@ export function ReceiptPrintView({
   const pageNumPx = 20;
   const continuaPx = 25; // "Continúa en la siguiente página..."
 
-  // For single page: first page must fit header + client + items + totals
-  const singlePageItems = Math.floor((pageHeightPx - headerPx - clientPx - totalsPx) / rowHeightPx);
+  // Category and subcategory headers add visual rows that the per-item math misses.
+  // Count exact extras for single-page; for multi-page assume each page repeats ~2 headers.
+  const expandedSetForCount = new Set(config.subcategoriasExpandidas || []);
+  let extraHeaderRowsTotal = 0;
+  if (config.agruparPorCategoria !== false) {
+    const cats = new Set<string>();
+    const subcats = new Set<string>();
+    for (const it of sale.items) {
+      cats.add(it.categoria_nombre ?? "Otros");
+      if (it.subcategoria_id && expandedSetForCount.has(it.subcategoria_id)) {
+        subcats.add(`${it.categoria_nombre ?? "Otros"}|${it.subcategoria_id}`);
+      }
+    }
+    extraHeaderRowsTotal = cats.size + subcats.size;
+  }
+  const headersPx = extraHeaderRowsTotal * rowHeightPx;
+  const perPageHeaderSafety = config.agruparPorCategoria !== false ? rowHeightPx * 2 : 0;
+
+  // For single page: first page must fit header + client + items + totals + all category headers
+  const singlePageItems = Math.floor((pageHeightPx - headerPx - clientPx - totalsPx - headersPx) / rowHeightPx);
   // For multi-page: first page has no totals (they go on last page), so more room
-  const multiFirstPageItems = Math.floor((pageHeightPx - headerPx - clientPx - pageNumPx - continuaPx) / rowHeightPx);
-  const multiOtherPageItems = Math.floor((pageHeightPx - headerPx - pageNumPx - continuaPx - 25) / rowHeightPx); // client ref line + continúa
-  const multiLastPageItems = Math.floor((pageHeightPx - headerPx - pageNumPx - 25 - totalsPx) / rowHeightPx); // totals on last page
+  const multiFirstPageItems = Math.floor((pageHeightPx - headerPx - clientPx - pageNumPx - continuaPx - perPageHeaderSafety) / rowHeightPx);
+  const multiOtherPageItems = Math.floor((pageHeightPx - headerPx - pageNumPx - continuaPx - 25 - perPageHeaderSafety) / rowHeightPx); // client ref line + continúa
+  const multiLastPageItems = Math.floor((pageHeightPx - headerPx - pageNumPx - 25 - totalsPx - perPageHeaderSafety) / rowHeightPx); // totals on last page
 
   // Split items into pages
   const pages: ReceiptLineItem[][] = [];
@@ -194,13 +212,11 @@ export function ReceiptPrintView({
     return Math.max(1, i);
   };
 
-  // Squeeze check: if only a few items overflow, force single page
+  // If everything fits, single page. Otherwise split cleanly across pages.
+  // (No "squeeze" branch: forcing overflow into one page risks orphaning the TOTAL block.)
   const overflow = allItems.length - singlePageItems;
   if (overflow <= 0) {
     // Everything fits on one page
-    pages.push(allItems);
-  } else if (overflow <= 5) {
-    // Small overflow — squeeze onto one page (rows will compress slightly)
     pages.push(allItems);
   } else {
     // First page (no totals, more room)
@@ -511,6 +527,9 @@ export function ReceiptPrintView({
         {/* Spacer — only push to bottom on single-page receipts */}
         {pushToBottom ? <div style={{ flex: 1 }} /> : <div style={{ height: "12px" }} />}
 
+        {/* Wrap totals + payment + footer so they never split across pages */}
+        <div style={{ breakInside: "avoid", pageBreakInside: "avoid" }}>
+
         {/* TOTAL bar — bold, big, clear */}
         <div style={{ borderTop: "2px solid #000", borderBottom: "2px solid #000", padding: "6px 4px", display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
           <div style={{ fontSize: `${fs}px`, fontVariantNumeric: "tabular-nums" }}>
@@ -607,6 +626,8 @@ export function ReceiptPrintView({
         <div style={{ textAlign: "center", padding: "6px 0 2px", fontSize: `${fs - 2}px` }}>
           {config.footerTexto} — {sale.items.length} artículo{sale.items.length !== 1 ? "s" : ""}
         </div>
+
+        </div>
       </>
     );
   };
@@ -666,7 +687,7 @@ export function ReceiptPrintView({
               </div>
             )}
             <ItemsTable items={pageItems} showContinue={!isLastPage} />
-            {isLastPage && <TotalsAndPayment pushToBottom={false} />}
+            {isLastPage && <TotalsAndPayment pushToBottom={true} />}
             {!isLastPage && <div style={{ flex: 1 }} />}
           </div>
         );
