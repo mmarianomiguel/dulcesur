@@ -8,6 +8,7 @@ import { supabase } from "@/lib/supabase";
 import { showToast } from "@/components/tienda/toast";
 import { formatCurrency } from "@/lib/formatters";
 import { useCarritoSync } from "@/hooks/use-carrito-sync";
+import { useCart } from "@/components/tienda/cart-drawer";
 
 interface CartItem {
   id: string;
@@ -20,6 +21,7 @@ interface CartItem {
   descuento?: number;
   cantidad: number;
   unidades_por_presentacion?: number;
+  categoria_id?: string;
 }
 
 
@@ -29,6 +31,12 @@ export default function CarritoPage() {
   // Map of product id -> available stock in units
   const [stockMap, setStockMap] = useState<Record<string, number>>({});
   const { syncToRemote } = useCarritoSync();
+  const {
+    subtotalElegibleEnvio,
+    totalExcluidoEnvio,
+    hayExcluidosEnvio,
+    checkoutConfig,
+  } = useCart();
 
   useEffect(() => {
     const raw = localStorage.getItem("carrito");
@@ -276,8 +284,26 @@ export default function CarritoPage() {
       {/* Sticky bottom bar on mobile */}
       <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 p-4 flex items-center justify-between gap-4 sm:static sm:border-t-0 sm:mt-6 sm:p-0 sm:pt-6 sm:border-t sm:border-gray-200 z-40">
         <div>
-          <p className="text-xs text-gray-500">Subtotal</p>
-          <p className="text-lg font-bold">{formatCurrency(subtotal)}</p>
+          {hayExcluidosEnvio && checkoutConfig.mostrarDesglose ? (
+            <div className="space-y-0.5">
+              <div className="flex items-center gap-2 text-[11px]">
+                <span className="text-gray-500">Suma envío:</span>
+                <span className="font-semibold tabular-nums">{formatCurrency(subtotalElegibleEnvio)}</span>
+              </div>
+              <div className="flex items-center gap-2 text-[11px] text-gray-400">
+                <span>No suma:</span>
+                <span className="tabular-nums">{formatCurrency(totalExcluidoEnvio)}</span>
+              </div>
+              <p className="text-base font-bold leading-tight">
+                Total <span className="tabular-nums">{formatCurrency(subtotal)}</span>
+              </p>
+            </div>
+          ) : (
+            <>
+              <p className="text-xs text-gray-500">Subtotal</p>
+              <p className="text-lg font-bold">{formatCurrency(subtotal)}</p>
+            </>
+          )}
           {totalSavings > 0 && (
             <p className="text-xs text-green-600 font-semibold mt-0.5">
               Ahorrás {formatCurrency(totalSavings)}

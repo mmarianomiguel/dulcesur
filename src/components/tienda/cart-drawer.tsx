@@ -20,6 +20,17 @@ interface CartItem {
   descuento?: number;
   unidades_por_presentacion?: number;
   cantidad_minima?: number;
+  categoria_id?: string; // opcional: para items viejos se backfillea on-demand
+}
+
+interface CheckoutDisplayConfig {
+  categoriasExcluidasEnvio: string[];
+  excluidasAplicanARetiro: boolean;
+  mostrarProgreso: boolean;
+  mostrarDesglose: boolean;
+  mostrarBadge: boolean;
+  textoBadge: string;
+  mensajeMinimo: string;
 }
 
 interface CartContextType {
@@ -33,8 +44,17 @@ interface CartContextType {
   clearCart: () => void;
   itemCount: number;
   subtotal: number;
+  subtotalElegibleEnvio: number;
+  subtotalElegibleRetiro: number;
+  totalExcluidoEnvio: number;
+  hayExcluidosEnvio: boolean;
   minimoRetiro: number;
   minimoEnvio: number;
+  checkoutConfig: CheckoutDisplayConfig;
+  isCategoriaExcluidaEnvio: (categoriaId: string | null | undefined) => boolean;
+  isItemExcluidoEnvio: (item: { id: string; categoria_id?: string }) => boolean;
+  // Etiqueta amigable de las categorías excluidas (ej: "Cigarros" o "Cigarros y Bebidas")
+  excluidasLabel: string;
 }
 
 const CartContext = createContext<CartContextType | null>(null);
@@ -46,11 +66,28 @@ export function useCart() {
 }
 
 
+const DEFAULT_CHECKOUT_CONFIG: CheckoutDisplayConfig = {
+  categoriasExcluidasEnvio: [],
+  excluidasAplicanARetiro: false,
+  mostrarProgreso: true,
+  mostrarDesglose: true,
+  mostrarBadge: true,
+  textoBadge: "No suma al mínimo de envío",
+  mensajeMinimo: "Sumá {faltante} más en productos para llegar al mínimo de {minimo} y activar el envío a domicilio.",
+};
+
 export function CartProvider({ children }: { children: React.ReactNode }) {
   const [items, setItems] = useState<CartItem[]>([]);
   const [isOpen, setIsOpen] = useState(false);
   const [minimoRetiro, setMinimoRetiro] = useState(15000);
   const [minimoEnvio, setMinimoEnvio] = useState(50000);
+  const [checkoutConfig, setCheckoutConfig] = useState<CheckoutDisplayConfig>(DEFAULT_CHECKOUT_CONFIG);
+  // Map productId -> categoriaId, para items viejos del localStorage que no la tienen guardada
+  const [categoriaPorProducto, setCategoriaPorProducto] = useState<Record<string, string>>({});
+  // Nombres de las categorías excluidas (para mostrar amigable en UI)
+  const [excluidasNombres, setExcluidasNombres] = useState<string[]>([]);
+  // Flag del cliente logueado: si true, las categorías excluidas SÍ cuentan al mínimo para él
+  const [clienteIgnoraExcluidas, setClienteIgnoraExcluidas] = useState(false);
 
   useEffect(() => {
     const CART_TTL_MS = 3 * 24 * 60 * 60 * 1000; // 3 days
@@ -89,15 +126,119 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
     };
   }, []);
 
-  // Fetch minimum amounts from tienda_config
+  // Fetch minimum amounts + checkout display config from tienda_config.
+  // Defensivo: si las columnas nuevas no existen aún en BD, mantenemos los defaults.
   useEffect(() => {
-    supabase.from("tienda_config").select("monto_minimo_pedido, monto_minimo_envio, umbral_envio_gratis").single().then(({ data }) => {
-      if (data) {
-        setMinimoRetiro(data.monto_minimo_pedido ?? 15000);
-        setMinimoEnvio(data.monto_minimo_envio ?? data.umbral_envio_gratis ?? 50000);
-      }
-    });
+    supabase
+      .from("tienda_config")
+      .select(
+        "monto_minimo_pedido, monto_minimo_envio, umbral_envio_gratis, categorias_excluidas_minimo, excluidas_aplican_a_retiro, mostrar_progreso_minimo, mostrar_desglose_excluidos, mostrar_badge_excluidos, texto_badge_excluidos, mensaje_minimo_no_alcanzado"
+      )
+      .single()
+      .then(({ data, error }) => {
+        if (error || !data) {
+          // Fallback: si la query falla porque las columnas nuevas no existen,
+          // pedimos solo las viejas para no romper nada.
+          supabase
+            .from("tienda_config")
+            .select("monto_minimo_pedido, monto_minimo_envio, umbral_envio_gratis")
+            .single()
+            .then(({ data: legacy }) => {
+              if (legacy) {
+                const d = legacy as { monto_minimo_pedido?: number; monto_minimo_envio?: number; umbral_envio_gratis?: number };
+                setMinimoRetiro(d.monto_minimo_pedido ?? 15000);
+                setMinimoEnvio(d.monto_minimo_envio ?? d.umbral_envio_gratis ?? 50000);
+              }
+            });
+          return;
+        }
+        const d = data as Record<string, unknown>;
+        setMinimoRetiro((d.monto_minimo_pedido as number | null) ?? 15000);
+        setMinimoEnvio(((d.monto_minimo_envio as number | null) ?? (d.umbral_envio_gratis as number | null)) ?? 50000);
+        setCheckoutConfig({
+          categoriasExcluidasEnvio: (d.categorias_excluidas_minimo as string[] | null) ?? [],
+          excluidasAplicanARetiro: (d.excluidas_aplican_a_retiro as boolean | null) ?? false,
+          mostrarProgreso: (d.mostrar_progreso_minimo as boolean | null) ?? true,
+          mostrarDesglose: (d.mostrar_desglose_excluidos as boolean | null) ?? true,
+          mostrarBadge: (d.mostrar_badge_excluidos as boolean | null) ?? true,
+          textoBadge: (d.texto_badge_excluidos as string | null) ?? DEFAULT_CHECKOUT_CONFIG.textoBadge,
+          mensajeMinimo: (d.mensaje_minimo_no_alcanzado as string | null) ?? DEFAULT_CHECKOUT_CONFIG.mensajeMinimo,
+        });
+      });
   }, []);
+
+  // Cargar flag del cliente logueado (si lo hay) para saber si está exento de la regla de exclusión.
+  useEffect(() => {
+    const cargar = () => {
+      const auth = typeof window !== "undefined" ? localStorage.getItem("cliente_auth") : null;
+      if (!auth) { setClienteIgnoraExcluidas(false); return; }
+      let parsed: { id?: string } | null = null;
+      try { parsed = JSON.parse(auth); } catch { parsed = null; }
+      if (!parsed?.id) { setClienteIgnoraExcluidas(false); return; }
+      supabase
+        .from("clientes_auth")
+        .select("cliente_id")
+        .eq("id", parsed.id)
+        .maybeSingle()
+        .then(({ data: authRec }) => {
+          if (!authRec?.cliente_id) { setClienteIgnoraExcluidas(false); return; }
+          supabase
+            .from("clientes")
+            .select("ignora_categorias_excluidas")
+            .eq("id", authRec.cliente_id)
+            .maybeSingle()
+            .then(({ data: cli }) => {
+              setClienteIgnoraExcluidas(!!(cli as { ignora_categorias_excluidas?: boolean } | null)?.ignora_categorias_excluidas);
+            });
+        });
+    };
+    cargar();
+    // Recargar si el localStorage de auth cambia (login/logout en otra pestaña o evento manual)
+    const onStorage = (e: StorageEvent) => { if (!e.key || e.key === "cliente_auth") cargar(); };
+    window.addEventListener("storage", onStorage);
+    return () => window.removeEventListener("storage", onStorage);
+  }, []);
+
+  // Cuando cambian las categorías excluidas, traemos sus nombres para usar en UI.
+  useEffect(() => {
+    const ids = checkoutConfig.categoriasExcluidasEnvio;
+    if (ids.length === 0) {
+      setExcluidasNombres([]);
+      return;
+    }
+    supabase
+      .from("categorias")
+      .select("id, nombre")
+      .in("id", ids)
+      .then(({ data }) => {
+        if (!data) return;
+        setExcluidasNombres((data as { nombre: string }[]).map((c) => c.nombre));
+      });
+  }, [checkoutConfig.categoriasExcluidasEnvio]);
+
+  // Backfill categoria_id para items viejos del carrito que no la tengan persistida.
+  useEffect(() => {
+    const idsFaltantes = items
+      .filter((it) => !it.categoria_id)
+      .map((it) => it.id.split("_")[0])
+      .filter((pid) => !categoriaPorProducto[pid]);
+    const unicos = [...new Set(idsFaltantes)];
+    if (unicos.length === 0) return;
+    supabase
+      .from("productos")
+      .select("id, categoria_id")
+      .in("id", unicos)
+      .then(({ data }) => {
+        if (!data) return;
+        setCategoriaPorProducto((prev) => {
+          const next = { ...prev };
+          (data as { id: string; categoria_id: string | null }[]).forEach((p) => {
+            if (p.categoria_id) next[p.id] = p.categoria_id;
+          });
+          return next;
+        });
+      });
+  }, [items, categoriaPorProducto]);
 
   const persist = useCallback((next: CartItem[]) => {
     setItems(next);
@@ -179,6 +320,40 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
   const itemCount = (items || []).reduce((sum, i) => sum + i.cantidad, 0);
   const subtotal = (items || []).reduce((sum, i) => sum + i.precio * i.cantidad, 0);
 
+  const excluidasSet = new Set(checkoutConfig.categoriasExcluidasEnvio);
+  const getCategoriaIdItem = (it: CartItem): string | undefined =>
+    it.categoria_id || categoriaPorProducto[it.id.split("_")[0]];
+
+  const isCategoriaExcluidaEnvio = (categoriaId: string | null | undefined) =>
+    !!categoriaId && excluidasSet.has(categoriaId);
+
+  const isItemExcluidoEnvio = (item: { id: string; categoria_id?: string }) => {
+    if (clienteIgnoraExcluidas) return false;
+    const cat = item.categoria_id || categoriaPorProducto[item.id.split("_")[0]];
+    return isCategoriaExcluidaEnvio(cat);
+  };
+
+  const excluidasLabel = (() => {
+    if (excluidasNombres.length === 0) return "";
+    if (excluidasNombres.length === 1) return excluidasNombres[0];
+    if (excluidasNombres.length === 2) return `${excluidasNombres[0]} y ${excluidasNombres[1]}`;
+    return excluidasNombres.slice(0, -1).join(", ") + " y " + excluidasNombres[excluidasNombres.length - 1];
+  })();
+
+  // Si el cliente está marcado para ignorar la regla, las categorías excluidas no se descuentan.
+  const totalExcluidoEnvio = clienteIgnoraExcluidas
+    ? 0
+    : (items || []).reduce((sum, i) => {
+        const cat = getCategoriaIdItem(i);
+        return isCategoriaExcluidaEnvio(cat) ? sum + i.precio * i.cantidad : sum;
+      }, 0);
+
+  const subtotalElegibleEnvio = subtotal - totalExcluidoEnvio;
+  const subtotalElegibleRetiro = !clienteIgnoraExcluidas && checkoutConfig.excluidasAplicanARetiro
+    ? subtotalElegibleEnvio
+    : subtotal;
+  const hayExcluidosEnvio = totalExcluidoEnvio > 0;
+
   return (
     <CartContext.Provider
       value={{
@@ -192,8 +367,16 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
         clearCart,
         itemCount,
         subtotal,
+        subtotalElegibleEnvio,
+        subtotalElegibleRetiro,
+        totalExcluidoEnvio,
+        hayExcluidosEnvio,
         minimoRetiro,
         minimoEnvio,
+        checkoutConfig,
+        isCategoriaExcluidaEnvio,
+        isItemExcluidoEnvio,
+        excluidasLabel,
       }}
     >
       {children}
@@ -203,8 +386,25 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
 }
 
 function CartDrawer() {
-  const { items, isOpen, closeCart, clearCart, updateQuantity, removeItem, subtotal, itemCount, minimoRetiro, minimoEnvio } =
-    useCart();
+  const {
+    items,
+    isOpen,
+    closeCart,
+    clearCart,
+    updateQuantity,
+    removeItem,
+    subtotal,
+    subtotalElegibleEnvio,
+    subtotalElegibleRetiro,
+    totalExcluidoEnvio,
+    hayExcluidosEnvio,
+    itemCount,
+    minimoRetiro,
+    minimoEnvio,
+    checkoutConfig,
+    isCategoriaExcluidaEnvio,
+    excluidasLabel,
+  } = useCart();
 
   const [showClearConfirm, setShowClearConfirm] = useState(false);
 
@@ -417,11 +617,13 @@ function CartDrawer() {
 
             {/* Footer */}
             <div className="border-t border-gray-100 p-6 space-y-4">
-              {/* Progress bar */}
-              {(() => {
+              {/* Progress bar — usa subtotal elegible para evaluar el mínimo de envío */}
+              {checkoutConfig.mostrarProgreso && (() => {
                 const MINIMO_RETIRO = minimoRetiro;
                 const MINIMO_ENVIO = minimoEnvio;
-                if (subtotal >= MINIMO_ENVIO) {
+                const subtotalEnvio = subtotalElegibleEnvio;
+                const subtotalRetiro = subtotalElegibleRetiro;
+                if (subtotalEnvio >= MINIMO_ENVIO) {
                   return (
                     <div className="bg-green-50 rounded-lg px-3 py-2">
                       <p className="text-xs font-semibold text-green-700 text-center">
@@ -433,23 +635,26 @@ function CartDrawer() {
                     </div>
                   );
                 }
-                if (subtotal >= MINIMO_RETIRO) {
-                  const progress = Math.min(((subtotal - MINIMO_RETIRO) / (MINIMO_ENVIO - MINIMO_RETIRO)) * 100, 100);
-                  const falta = MINIMO_ENVIO - subtotal;
+                if (subtotalRetiro >= MINIMO_RETIRO) {
+                  const progress = Math.min(((subtotalEnvio - MINIMO_RETIRO) / Math.max(1, MINIMO_ENVIO - MINIMO_RETIRO)) * 100, 100);
+                  const falta = MINIMO_ENVIO - subtotalEnvio;
                   return (
                     <div className="bg-blue-50 rounded-lg px-3 py-2">
                       <p className="text-xs text-blue-700 text-center">
                         Agregá <strong>{formatCurrency(falta)}</strong> más para envío a domicilio
                       </p>
                       <div className="w-full h-1.5 bg-blue-200 rounded-full mt-1.5">
-                        <div className="h-full bg-blue-500 rounded-full transition-all" style={{ width: `${progress}%` }} />
+                        <div className="h-full bg-blue-500 rounded-full transition-all" style={{ width: `${Math.max(0, progress)}%` }} />
                       </div>
-                      <p className="text-[10px] text-blue-400 text-center mt-1">Retiro en local habilitado</p>
+                      <p className="text-[10px] text-blue-400 text-center mt-1">
+                        Retiro en local habilitado
+                        {hayExcluidosEnvio && excluidasLabel && ` · ${excluidasLabel} no suma al envío`}
+                      </p>
                     </div>
                   );
                 }
-                const progress = Math.min((subtotal / MINIMO_RETIRO) * 100, 100);
-                const falta = MINIMO_RETIRO - subtotal;
+                const progress = Math.min((subtotalRetiro / MINIMO_RETIRO) * 100, 100);
+                const falta = MINIMO_RETIRO - subtotalRetiro;
                 return (
                   <div className="bg-amber-50 rounded-lg px-3 py-2">
                     <p className="text-xs text-amber-700 text-center">
@@ -463,12 +668,33 @@ function CartDrawer() {
                 );
               })()}
 
-              <div className="flex items-center justify-between">
-                <span className="text-gray-500">Subtotal</span>
-                <span className="text-lg font-bold text-gray-900">
-                  {formatCurrency(subtotal)}
-                </span>
-              </div>
+              {/* Desglose: si hay excluidos del envío, mostramos ambos subtotales */}
+              {hayExcluidosEnvio && checkoutConfig.mostrarDesglose ? (
+                <div className="space-y-1 text-sm">
+                  <div className="flex items-center justify-between text-gray-700">
+                    <span className="flex items-center gap-1.5">
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                      Cuenta para envío
+                    </span>
+                    <span className="font-medium tabular-nums">{formatCurrency(subtotalElegibleEnvio)}</span>
+                  </div>
+                  <div className="flex items-center justify-between text-gray-400 pl-3.5">
+                    <span className="italic">{excluidasLabel || "Productos excluidos"} no suma al envío</span>
+                    <span className="tabular-nums">{formatCurrency(totalExcluidoEnvio)}</span>
+                  </div>
+                  <div className="flex items-center justify-between pt-1 border-t border-gray-100">
+                    <span className="text-gray-500">Total</span>
+                    <span className="text-lg font-bold text-gray-900 tabular-nums">{formatCurrency(subtotal)}</span>
+                  </div>
+                </div>
+              ) : (
+                <div className="flex items-center justify-between">
+                  <span className="text-gray-500">Subtotal</span>
+                  <span className="text-lg font-bold text-gray-900">
+                    {formatCurrency(subtotal)}
+                  </span>
+                </div>
+              )}
               <Link
                 href="/checkout"
                 onClick={() => { closeCart(); window.scrollTo(0, 0); }}

@@ -485,6 +485,7 @@ export default function OfertasClient({ initialProductos, initialDescuentos, ini
         cantidad: canAdd,
         presentacion: label,
         unidades_por_presentacion: presUnits,
+        categoria_id: prod.categoria_id,
       });
     }
     localStorage.setItem("carrito", JSON.stringify(carrito));

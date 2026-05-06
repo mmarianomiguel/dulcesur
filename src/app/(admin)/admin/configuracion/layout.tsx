@@ -7,7 +7,7 @@ import {
   Building2, Receipt, Printer, CreditCard,
   Store, Package, FolderOpen, LayoutTemplate, FileText,
   Palette, Users, Puzzle, HardDrive,
-  Settings, Menu,
+  Settings, Menu, ShoppingCart,
 } from "lucide-react";
 import { useState } from "react";
 
@@ -28,6 +28,7 @@ const NAV_GROUPS = [
       { href: "/admin/configuracion/catalogo", label: "Catálogo", icon: FolderOpen },
       { href: "/admin/configuracion/pagina-inicio", label: "Página de Inicio", icon: LayoutTemplate },
       { href: "/admin/configuracion/pedidos", label: "Pedidos y Envíos", icon: Package },
+      { href: "/admin/configuracion/checkout", label: "Checkout", icon: ShoppingCart },
       { href: "/admin/configuracion/footer", label: "Footer y Páginas", icon: FileText },
     ],
   },

@@ -10,6 +10,7 @@ import { formatCurrency, daysSinceAR } from "@/lib/formatters";
 import { slugify, productSlug } from "@/lib/utils";
 import { fuzzyMatch } from "@/lib/fuzzy";
 import { useCategoriasPermitidas } from "@/hooks/use-categorias-visibles";
+import { useCart } from "@/components/tienda/cart-drawer";
 import {
   Search,
   SlidersHorizontal,
@@ -159,6 +160,7 @@ function ProductosContent({ initialData }: { initialData?: InitialProductosData 
   const searchParams = useSearchParams();
   const router = useRouter();
   const { filtrarCategorias, permitidas, loaded: permisosLoaded } = useCategoriasPermitidas();
+  const { checkoutConfig, isCategoriaExcluidaEnvio } = useCart();
 
   const hasInitial = !!initialData;
   // Si arrancamos con datos del server y no hay filtros en la URL, evitamos
@@ -705,6 +707,7 @@ function ProductosContent({ initialData }: { initialData?: InitialProductosData 
         cantidad: canAdd,
         presentacion: presLabel || "Unidad",
         unidades_por_presentacion: presUnits,
+        categoria_id: producto.categoria_id,
       });
     }
     localStorage.setItem("carrito", JSON.stringify(carrito));
@@ -1677,6 +1680,12 @@ function ProductosContent({ initialData }: { initialData?: InitialProductosData 
                         </h3>
                       </Link>
 
+                      {checkoutConfig.mostrarBadge && isCategoriaExcluidaEnvio(producto.categoria_id) && (
+                        <span className="inline-block mb-2 self-start text-[10px] font-medium uppercase tracking-wide bg-amber-50 text-amber-700 border border-amber-200 rounded-full px-2 py-0.5">
+                          {checkoutConfig.textoBadge}
+                        </span>
+                      )}
+
                       {/* Price */}
                       <div className="mb-3">
                         <div className="flex items-baseline gap-2">
@@ -1885,6 +1894,11 @@ function ProductosContent({ initialData }: { initialData?: InitialProductosData 
                             {producto.nombre}
                           </h3>
                         </Link>
+                        {checkoutConfig.mostrarBadge && isCategoriaExcluidaEnvio(producto.categoria_id) && (
+                          <span className="inline-block mt-1 text-[10px] font-medium uppercase tracking-wide bg-amber-50 text-amber-700 border border-amber-200 rounded-full px-2 py-0.5">
+                            {checkoutConfig.textoBadge}
+                          </span>
+                        )}
                         <div className="flex items-baseline gap-2 mt-1">
                           <span className="text-lg font-bold text-gray-900">{formatCurrency(discountedPrice)}</span>
                           {disc > 0 && (

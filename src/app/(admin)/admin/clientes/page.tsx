@@ -99,6 +99,7 @@ const emptyForm = {
   zona_entrega: "",
   categorias_permitidas: [] as string[],
   maps_url: "",
+  ignora_categorias_excluidas: false,
 };
 
 export default function ClientesPage() {
@@ -351,6 +352,7 @@ export default function ClientesPage() {
       zona_entrega: c.zona_entrega || "",
       categorias_permitidas: (c as any).categorias_permitidas || [],
       maps_url: (c as any).maps_url || "",
+      ignora_categorias_excluidas: !!(c as any).ignora_categorias_excluidas,
     });
     setResetPw("");
     setResetMsg("");
@@ -397,6 +399,7 @@ export default function ClientesPage() {
       dias_entrega: selectedZona ? selectedZona.dias : null,
       categorias_permitidas: form.categorias_permitidas || [],
       maps_url: form.maps_url || null,
+      ignora_categorias_excluidas: form.ignora_categorias_excluidas || false,
     };
     if (editingClient) {
       await supabase.from("clientes").update(payload).eq("id", editingClient.id);
@@ -1412,7 +1415,7 @@ export default function ClientesPage() {
     </svg>
   );
 
-  const f = (key: keyof typeof form, value: string | string[]) => setForm({ ...form, [key]: value });
+  const f = (key: keyof typeof form, value: string | string[] | boolean) => setForm({ ...form, [key]: value });
 
   return (
     <div className="p-3 sm:p-6 lg:p-8 space-y-4 sm:space-y-6">
@@ -3474,6 +3477,31 @@ export default function ClientesPage() {
                   </p>
                 </div>
                 )}
+                <div className="sm:col-span-2">
+                  <button
+                    type="button"
+                    onClick={() => f("ignora_categorias_excluidas", !form.ignora_categorias_excluidas)}
+                    className="flex items-start gap-3 w-full text-left p-3 rounded-lg border border-border hover:bg-muted/30 transition-colors"
+                  >
+                    <span
+                      className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors mt-0.5 ${
+                        form.ignora_categorias_excluidas ? "bg-primary" : "bg-muted-foreground/30"
+                      }`}
+                    >
+                      <span
+                        className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white shadow-sm transition-transform ${
+                          form.ignora_categorias_excluidas ? "translate-x-5" : "translate-x-1"
+                        }`}
+                      />
+                    </span>
+                    <span className="flex-1">
+                      <span className="block text-sm font-medium">Las categorías excluidas SÍ cuentan al mínimo</span>
+                      <span className="block text-xs text-muted-foreground mt-0.5">
+                        Cliente exclusivo: para este cliente, los cigarros (y otras categorías que normalmente no suman) sí cuentan para llegar al mínimo de envío. El mínimo en sí (ej. {formatCurrency(50000)}) se sigue aplicando.
+                      </span>
+                    </span>
+                  </button>
+                </div>
                 <div className="sm:col-span-2 space-y-2">
                   <Label>Vendedor</Label>
                   <Select value={form.vendedor_id || "none"} onValueChange={(v) => f("vendedor_id", v === "none" ? "" : (v || ""))}>

@@ -363,6 +363,7 @@ export default function ProductoClient({
         presentacion: presLabel,
         unidades_por_presentacion: units,
         cantidad_minima: cantidadMinima,
+        categoria_id: prod.categoria_id,
       });
     }
     localStorage.setItem("carrito", JSON.stringify(carrito));

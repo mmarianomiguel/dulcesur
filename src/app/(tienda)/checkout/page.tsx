@@ -5,6 +5,7 @@ import Link from "next/link";
 import { supabase } from "@/lib/supabase";
 import { showToast } from "@/components/tienda/toast";
 import { formatCurrency } from "@/lib/formatters";
+import { useCart } from "@/components/tienda/cart-drawer";
 import { calculateOrderFinancials, calcTransferSurcharge } from "@/lib/order-calc";
 import {
   User,
@@ -39,6 +40,7 @@ interface CartItem {
   descuento?: number;
   cantidad: number;
   unidades_por_presentacion?: number;
+  categoria_id?: string;
 }
 
 interface Address {
@@ -67,6 +69,9 @@ interface TiendaConfig {
   horario_atencion_fin: string;
   dias_atencion: string[];
   minimo_unidades_mayorista: number;
+  categorias_excluidas_minimo: string[];
+  excluidas_aplican_a_retiro: boolean;
+  mensaje_minimo_no_alcanzado: string;
 }
 
 
@@ -194,6 +199,8 @@ export default function CheckoutPage() {
   const [email, setEmail] = useState("");
   const [telefono, setTelefono] = useState("");
   const [clienteId, setClienteId] = useState<string | null>(null);
+  // Si true: las categorías excluidas (cigarros, etc.) suman al mínimo igual que cualquier otro producto.
+  const [clienteIgnoraExcluidas, setClienteIgnoraExcluidas] = useState(false);
 
   // Delivery
   const [metodoEntrega, setMetodoEntrega] = useState<"retiro" | "envio" | "">("");
@@ -222,6 +229,18 @@ export default function CheckoutPage() {
   // Config
   const [config, setConfig] = useState<TiendaConfig | null>(null);
   const configRef = useRef<TiendaConfig | null>(null);
+
+  // Subtotales elegibles (excluyen categorías marcadas como no-suman al envío)
+  const {
+    subtotalElegibleEnvio,
+    subtotalElegibleRetiro,
+    totalExcluidoEnvio,
+    hayExcluidosEnvio,
+    checkoutConfig,
+    isItemExcluidoEnvio,
+    excluidasLabel,
+  } = useCart();
+
   const [whatsappUrl, setWhatsappUrl] = useState("");
 
   // Store hours
@@ -333,6 +352,11 @@ export default function CheckoutPage() {
         horario_atencion_fin: data.horario_atencion_fin ?? "18:00",
         dias_atencion: data.dias_atencion ?? [],
         minimo_unidades_mayorista: data.minimo_unidades_mayorista ?? 3,
+        categorias_excluidas_minimo: (data as Record<string, unknown>).categorias_excluidas_minimo as string[] ?? [],
+        excluidas_aplican_a_retiro: (data as Record<string, unknown>).excluidas_aplican_a_retiro as boolean ?? false,
+        mensaje_minimo_no_alcanzado:
+          ((data as Record<string, unknown>).mensaje_minimo_no_alcanzado as string) ??
+          "Te faltan {faltante} en productos para llegar al mínimo de envío.",
       };
       setConfig(cfg);
       configRef.current = cfg;
@@ -429,7 +453,8 @@ export default function CheckoutPage() {
 
             // Fetch client profile
             if (!authRec?.cliente_id) return;
-            const { data: cli } = await supabase.from("clientes").select("nombre, email, telefono, domicilio, localidad, provincia, codigo_postal, saldo, dias_entrega, zona_entrega").eq("id", authRec.cliente_id).single();
+            const { data: cli } = await supabase.from("clientes").select("nombre, email, telefono, domicilio, localidad, provincia, codigo_postal, saldo, dias_entrega, zona_entrega, ignora_categorias_excluidas").eq("id", authRec.cliente_id).single();
+            setClienteIgnoraExcluidas(!!(cli && (cli as { ignora_categorias_excluidas?: boolean }).ignora_categorias_excluidas));
             if (cli) {
               // Pre-fill contact fields from clientes table (more reliable than localStorage)
               if (cli.nombre) {
@@ -523,6 +548,12 @@ export default function CheckoutPage() {
   }, [loadConfig]);
 
   const subtotal = items.reduce((s, i) => s + i.precio * i.cantidad, 0);
+
+  // Si el cliente está marcado para ignorar excluidas, los cigarros (etc.) SÍ cuentan al mínimo.
+  // El mínimo en sí no cambia — solo la base contra la que se compara.
+  const subtotalParaMinimoEnvio = clienteIgnoraExcluidas ? subtotal : subtotalElegibleEnvio;
+  const subtotalParaMinimoRetiro = clienteIgnoraExcluidas ? subtotal : subtotalElegibleRetiro;
+  const mostrarSeparacionExcluidos = !clienteIgnoraExcluidas && hayExcluidosEnvio;
   const totalSavings = items.reduce((s, i) => i.precio_original ? s + (i.precio_original - i.precio) * i.cantidad : s, 0);
   const costoEnvioBase = config?.costo_envio ?? 0;
   const envioGratis =
@@ -566,11 +597,16 @@ export default function CheckoutPage() {
     if (!email) errs.push("El email es obligatorio.");
     else if (!/^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/.test(email)) errs.push("Ingresá un email válido.");
     if (!metodoEntrega) errs.push("Seleccioná un método de entrega.");
-    if (metodoEntrega === "retiro" && config && config.monto_minimo_pedido > 0 && subtotal < config.monto_minimo_pedido) {
+    if (metodoEntrega === "retiro" && config && config.monto_minimo_pedido > 0 && subtotalParaMinimoRetiro < config.monto_minimo_pedido) {
       errs.push(`El monto mínimo para retiro en local es ${formatCurrency(config.monto_minimo_pedido)}.`);
     }
-    if (metodoEntrega === "envio" && config && subtotal < config.monto_minimo_envio) {
-      errs.push(`El monto mínimo para envío a domicilio es ${formatCurrency(config.monto_minimo_envio)}.`);
+    if (metodoEntrega === "envio" && config && subtotalParaMinimoEnvio < config.monto_minimo_envio) {
+      const faltante = config.monto_minimo_envio - subtotalParaMinimoEnvio;
+      const tpl = (config.mensaje_minimo_no_alcanzado || "Te faltan {faltante} en productos para llegar al mínimo de envío.")
+        .replace("{faltante}", formatCurrency(faltante))
+        .replace("{minimo}", formatCurrency(config.monto_minimo_envio))
+        .replace("{subtotal}", formatCurrency(subtotalParaMinimoEnvio));
+      errs.push(tpl);
     }
     if (metodoEntrega === "envio" && !selectedAddressId && !showNewAddress) {
       errs.push("Seleccioná una dirección de envío.");
@@ -1752,6 +1788,11 @@ export default function CheckoutPage() {
                         <p className="text-xs text-gray-400">
                           {item.presentacion && `${item.presentacion} · `}x{(item.id.includes("Medio Cartón") || (item.presentacion && item.presentacion.toLowerCase().includes("medio"))) ? item.cantidad * 0.5 : item.cantidad}
                           {item.descuento ? <span className="ml-1.5 inline-flex items-center bg-red-100 text-red-600 text-[10px] font-bold px-1.5 py-0.5 rounded-full">-{item.descuento}%</span> : null}
+                          {metodoEntrega === "envio" && !clienteIgnoraExcluidas && isItemExcluidoEnvio(item) && (
+                            <span className="ml-1.5 inline-flex items-center bg-amber-50 text-amber-700 border border-amber-200 text-[10px] font-medium px-1.5 py-0.5 rounded-full">
+                              No suma al envío
+                            </span>
+                          )}
                         </p>
                       </div>
                       <div className="text-right flex-shrink-0">
@@ -1919,22 +1960,100 @@ export default function CheckoutPage() {
               )}
             </div>
 
+            {/* Aviso pre-totales: si falta para envío, mostrar barra + CTA + tono según cercanía */}
+            {config && metodoEntrega === "envio" && subtotalParaMinimoEnvio < config.monto_minimo_envio && (() => {
+              const minimo = config.monto_minimo_envio;
+              const falta = minimo - subtotalParaMinimoEnvio;
+              const progreso = Math.min((subtotalParaMinimoEnvio / minimo) * 100, 100);
+              const muyCerca = falta <= minimo * 0.15;
+              const palette = muyCerca
+                ? { bg: "bg-emerald-50", border: "border-emerald-200", title: "text-emerald-900", body: "text-emerald-800", accentText: "text-emerald-700", bar: "bg-emerald-500", barTrack: "bg-emerald-100", btnBg: "bg-emerald-600 hover:bg-emerald-700", noteBg: "bg-white/70 text-emerald-700" }
+                : { bg: "bg-blue-50", border: "border-blue-200", title: "text-blue-900", body: "text-blue-800", accentText: "text-blue-700", bar: "bg-blue-500", barTrack: "bg-blue-100", btnBg: "bg-blue-600 hover:bg-blue-700", noteBg: "bg-white/60 text-blue-700" };
+              const titulo = muyCerca ? "¡A un paso del envío!" : "¡Casi listo para el envío!";
+              // Cuerpo del mensaje viene del admin (mensaje_minimo_no_alcanzado), con templating de {faltante}/{minimo}/{subtotal}.
+              const tplBody = config.mensaje_minimo_no_alcanzado || "Sumá {faltante} más en productos para llegar al mínimo de {minimo} y activar el envío a domicilio.";
+              const cuerpoRaw = tplBody
+                .replace(/\{faltante\}/g, formatCurrency(falta))
+                .replace(/\{minimo\}/g, formatCurrency(minimo))
+                .replace(/\{subtotal\}/g, formatCurrency(subtotalParaMinimoEnvio));
+              return (
+                <div className={`mt-4 rounded-xl ${palette.bg} border ${palette.border} px-4 py-3.5 text-sm`}>
+                  <p className={`font-semibold ${palette.title}`}>{titulo}</p>
+                  <p className={`text-xs mt-1 leading-relaxed ${palette.body}`}>
+                    {cuerpoRaw}
+                  </p>
+                  {/* Barra de progreso (configurable desde admin/configuracion/checkout) */}
+                  {checkoutConfig.mostrarProgreso && (
+                    <div className="mt-2.5">
+                      <div className={`w-full h-1.5 rounded-full ${palette.barTrack}`}>
+                        <div
+                          className={`h-full rounded-full ${palette.bar} transition-all`}
+                          style={{ width: `${progreso}%` }}
+                        />
+                      </div>
+                      <div className={`flex justify-between text-[10px] mt-1 ${palette.accentText} tabular-nums`}>
+                        <span>{formatCurrency(subtotalParaMinimoEnvio)}</span>
+                        <span>{formatCurrency(minimo)}</span>
+                      </div>
+                    </div>
+                  )}
+                  {/* CTA volver al catálogo */}
+                  <Link
+                    href="/productos"
+                    className={`mt-3 inline-flex items-center gap-1.5 text-xs font-semibold text-white ${palette.btnBg} rounded-lg px-3 py-2 transition`}
+                  >
+                    Ver más productos →
+                  </Link>
+                  {/* Aclaración sobre las categorías excluidas (solo si aplican a este cliente) */}
+                  {mostrarSeparacionExcluidos && excluidasLabel && (
+                    <p className={`text-[11px] mt-3 ${palette.noteBg} rounded-lg px-2 py-1.5 leading-relaxed`}>
+                      Recordá que <strong>{excluidasLabel}</strong> se puede comprar igual y se entrega junto con el pedido,
+                      pero no cuenta para llegar al mínimo de envío.
+                    </p>
+                  )}
+                </div>
+              );
+            })()}
+
+            {/* Aviso pre-totales: retiro */}
+            {config && metodoEntrega === "retiro" && config.monto_minimo_pedido > 0 && subtotalParaMinimoRetiro < config.monto_minimo_pedido && (
+              <div className="mt-4 rounded-xl bg-amber-50 border border-amber-200 px-4 py-3 text-sm text-amber-700">
+                <p className="font-medium">Monto mínimo no alcanzado</p>
+                <p className="text-xs mt-0.5">Para retiro en local el mínimo es {formatCurrency(config.monto_minimo_pedido)}. Te faltan {formatCurrency(config.monto_minimo_pedido - subtotalParaMinimoRetiro)}.</p>
+              </div>
+            )}
+
             {/* Totals */}
             <div className="border-t border-gray-100 pt-4 space-y-2.5">
-              <div className="flex justify-between text-sm">
-                <span className="text-gray-500">Subtotal</span>
-                <span className="text-gray-900">{formatCurrency(subtotal)}</span>
-              </div>
+              {mostrarSeparacionExcluidos && checkoutConfig.mostrarDesglose && metodoEntrega === "envio" ? (
+                <>
+                  <div className="flex justify-between text-sm">
+                    <span className="text-gray-700 flex items-center gap-1.5">
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                      Productos que cuentan para el envío
+                    </span>
+                    <span className="text-gray-900 font-medium tabular-nums">{formatCurrency(subtotalElegibleEnvio)}</span>
+                  </div>
+                  <div className="flex justify-between text-xs pl-3.5">
+                    <span className="text-gray-400 italic">{excluidasLabel || "Productos excluidos"} — no suma al mínimo de envío</span>
+                    <span className="text-gray-400 tabular-nums">{formatCurrency(totalExcluidoEnvio)}</span>
+                  </div>
+                  <div className="flex justify-between text-sm border-t border-gray-100 pt-2 mt-1">
+                    <span className="text-gray-500">Subtotal</span>
+                    <span className="text-gray-900 tabular-nums">{formatCurrency(subtotal)}</span>
+                  </div>
+                </>
+              ) : (
+                <div className="flex justify-between text-sm">
+                  <span className="text-gray-500">Subtotal</span>
+                  <span className="text-gray-900">{formatCurrency(subtotal)}</span>
+                </div>
+              )}
               {totalSavings > 0 && (
                 <div className="flex justify-between text-sm">
                   <span className="text-green-600">Ahorro por descuentos</span>
                   <span className="text-green-600 font-medium">-{formatCurrency(totalSavings)}</span>
                 </div>
-              )}
-              {config && metodoEntrega === "envio" && config.monto_minimo_envio > 0 && subtotal < config.monto_minimo_envio && (
-                <p className="text-xs text-primary">
-                  Mínimo: {formatCurrency(config.monto_minimo_envio)} (faltan {formatCurrency(config.monto_minimo_envio - subtotal)})
-                </p>
               )}
               <div className="flex justify-between text-sm">
                 <span className="text-gray-500">Envío</span>
@@ -1958,25 +2077,11 @@ export default function CheckoutPage() {
               </div>
             </div>
 
-            {/* Minimum order warning */}
-            {config && metodoEntrega === "retiro" && config.monto_minimo_pedido > 0 && subtotal < config.monto_minimo_pedido && (
-              <div className="mt-4 rounded-xl bg-amber-50 border border-amber-200 px-4 py-3 text-sm text-amber-700">
-                <p className="font-medium">Monto mínimo no alcanzado</p>
-                <p className="text-xs mt-0.5">Para retiro en local el mínimo es {formatCurrency(config.monto_minimo_pedido)}. Te faltan {formatCurrency(config.monto_minimo_pedido - subtotal)}.</p>
-              </div>
-            )}
-            {config && metodoEntrega === "envio" && subtotal < config.monto_minimo_envio && (
-              <div className="mt-4 rounded-xl bg-amber-50 border border-amber-200 px-4 py-3 text-sm text-amber-700">
-                <p className="font-medium">Monto mínimo no alcanzado</p>
-                <p className="text-xs mt-0.5">Para envío a domicilio el mínimo es {formatCurrency(config.monto_minimo_envio)}. Te faltan {formatCurrency(config.monto_minimo_envio - subtotal)}.</p>
-              </div>
-            )}
-
             {/* Confirm button */}
             {clienteId ? (
               <button
                 onClick={handleConfirm}
-                disabled={submitting || (metodoEntrega === "retiro" && !!config && config.monto_minimo_pedido > 0 && subtotal < config.monto_minimo_pedido) || (metodoEntrega === "envio" && !!config && subtotal < config.monto_minimo_envio)}
+                disabled={submitting || (metodoEntrega === "retiro" && !!config && config.monto_minimo_pedido > 0 && subtotalParaMinimoRetiro < config.monto_minimo_pedido) || (metodoEntrega === "envio" && !!config && subtotalParaMinimoEnvio < config.monto_minimo_envio)}
                 className="mt-5 w-full bg-primary hover:bg-primary/90 text-white rounded-xl py-3 font-semibold transition flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {submitting ? (
