@@ -42,10 +42,20 @@ import {
   Download,
   ChevronDown,
   DollarSign,
+  Users,
+  Fuel,
+  Zap,
+  Home,
+  Receipt as ReceiptIcon,
+  Wrench,
+  Sparkles,
+  Package as PackageIcon,
+  MoreHorizontal,
 } from "lucide-react";
 
 import { formatCurrency, todayARG, nowTimeARG, formatDatePDF } from "@/lib/formatters";
 import { formatCuentaCanonica, type CuentaMasterRef } from "@/lib/cuenta-bancaria";
+import { EGRESO_CATEGORIAS } from "@/lib/constants";
 
 import { VentaDetailDialog } from "@/components/venta-detail-dialog";
 import { useAsyncData } from "@/hooks/use-async-data";
@@ -879,6 +889,21 @@ export default function CajaPage() {
     deps: [turno],
   });
 
+  // Fetch cobro_items para detectar cobros que aplican a ventas del mismo turno
+  // (necesario para reclasificar correctamente lo que es "cobrado del día" vs "CC anterior")
+  const fetchCobroItemsTurno = useCallback(async () => {
+    if (!turno) return [];
+    const cobroIds = (movements || []).filter((m: any) => m.referencia_tipo === "cobro" && m.referencia_id).map((m: any) => m.referencia_id);
+    if (cobroIds.length === 0) return [];
+    const { data } = await supabase.from("cobro_items").select("cobro_id, venta_id, monto_aplicado").in("cobro_id", cobroIds).range(0, 9999);
+    return (data || []) as Array<{ cobro_id: string; venta_id: string; monto_aplicado: number }>;
+  }, [turno, movements]);
+  const { data: cobroItemsTurno } = useAsyncData({
+    fetcher: fetchCobroItemsTurno,
+    initialData: [] as Array<{ cobro_id: string; venta_id: string; monto_aplicado: number }>,
+    deps: [turno, movements],
+  });
+
   // Fetch NC (Nota de Crédito) amounts linked to today's ventas
   const fetchNCEntries = useCallback(async () => {
     if (!turno) return [];
@@ -905,11 +930,15 @@ export default function CajaPage() {
   const [movsOpen, setMovsOpen] = useState(false);
   const toggleCard = (key: string) => setExpandedCard((prev) => prev === key ? null : key);
 
+  // Dialog de detalle para las cards del resumen del día
+  type ResumenDetailType = "cobros_cc" | "egresos" | "devoluciones" | "cc_generada" | "cobrado_caja" | "efectivo_dia" | "transf_dia" | "cobros_recibidos" | null;
+  const [resumenDetail, setResumenDetail] = useState<ResumenDetailType>(null);
+
   // ─── Dialogs ───
   const movDialog = useDialog<"ingreso" | "egreso">();
   const cierreDialog = useDialog();
   const abrirDialog = useDialog();
-  const [movForm, setMovForm] = useState({ descripcion: "", metodo_pago: "Efectivo", monto: 0, proveedor: "", sub_tipo: "gasto" });
+  const [movForm, setMovForm] = useState({ descripcion: "", metodo_pago: "Efectivo", monto: 0, proveedor: "", sub_tipo: "gasto", categoria: "" });
   const [cierreForm, setCierreForm] = useState({ efectivo_real: 0, notas: "" });
   const [proveedores, setProveedores] = useState<{ id: string; nombre: string }[]>([]);
 
@@ -1008,7 +1037,7 @@ export default function CajaPage() {
   };
 
   const openMovDialog = (type: "ingreso" | "egreso") => {
-    setMovForm({ descripcion: "", metodo_pago: "Efectivo", monto: 0, proveedor: "", sub_tipo: "gasto" });
+    setMovForm({ descripcion: "", metodo_pago: "Efectivo", monto: 0, proveedor: "", sub_tipo: "gasto", categoria: "" });
     movDialog.onOpen(type);
   };
 
@@ -1017,6 +1046,10 @@ export default function CajaPage() {
     if (!movForm.descripcion.trim()) { showAdminToast("Ingresá una descripción", "error"); return; }
     if (movForm.monto < 1) { showAdminToast("El monto debe ser al menos $1", "error"); return; }
     const type = movDialog.data || "ingreso";
+    if (type === "egreso" && !movForm.categoria) {
+      showAdminToast("Seleccioná una categoría para el egreso", "error");
+      return;
+    }
     try {
       const provNombre = movForm.proveedor ? proveedores.find(p => p.id === movForm.proveedor)?.nombre : null;
       const desc = provNombre ? `${movForm.descripcion} — Prov: ${provNombre}` : movForm.descripcion;
@@ -1028,7 +1061,7 @@ export default function CajaPage() {
       if (type === "ingreso") {
         await cajaService.registrarIngreso(opts);
       } else {
-        await cajaService.registrarEgreso({ ...opts, subTipo: movForm.sub_tipo });
+        await cajaService.registrarEgreso({ ...opts, subTipo: movForm.sub_tipo, categoria: movForm.categoria });
       }
       movDialog.onClose();
       refetchMov();
@@ -2059,177 +2092,113 @@ export default function CajaPage() {
             ))}
           </div>
 
-          <p className="text-[10px] font-medium uppercase tracking-widest text-muted-foreground mt-2 mb-2">Ingresos por método</p>
-          {/* Detalle por método + deudores + egresos + cobros CC */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-
-            {/* Efectivo */}
-            <Card className="border-border/60">
-              <CardContent className="pt-4 pb-4">
-                <p className="text-[10px] font-medium uppercase tracking-widest text-muted-foreground mb-1.5">Efectivo</p>
-                <p className="text-lg font-medium">{formatCurrency(ventasEfectivo)}</p>
-              </CardContent>
-            </Card>
-
-            {/* Transferencia con desglose por cuenta */}
-            <Card className="border-border/60">
-              <CardContent className="pt-4 pb-4">
-                <p className="text-[10px] font-medium uppercase tracking-widest text-muted-foreground mb-1.5">Transferencia</p>
-                <p className="text-lg font-medium">{formatCurrency(ventasTransferencia)}</p>
-                {totalTransferSurcharge > 0 && (
-                  <p className="text-[11px] text-muted-foreground mt-0.5">
-                    inc. recargo {formatCurrency(totalTransferSurcharge)}
-                  </p>
-                )}
-                {Object.keys(transferenciaPorCuenta).length > 0 && (
-                  <div className="mt-2 pt-2 border-t space-y-1">
-                    {Object.entries(transferenciaPorCuenta)
-                      .sort((a, b) => b[1] - a[1])
-                      .map(([cuenta, monto]) => (
-                        <div key={cuenta} className="flex justify-between text-[11px]">
-                          <span className="text-muted-foreground truncate">{cuenta}</span>
-                          <span className="font-medium shrink-0 ml-2">{formatCurrency(monto)}</span>
-                        </div>
-                      ))}
+          {/* Resumen del día estilo historial — calculado en vivo desde ventas/movements/cobros */}
+          {(() => {
+            const r = calcResumenDia(ventas, movements, cobroItemsTurno);
+            const cardCls = "rounded-lg border p-3.5 cursor-pointer hover:bg-muted/40 transition-colors";
+            return (
+              <div className="space-y-5 mt-6">
+                {/* SECCIÓN 1: VENTAS DEL DÍA */}
+                <div>
+                  <p className="text-[11px] uppercase tracking-wide text-muted-foreground font-semibold mb-2">Ventas del día</p>
+                  <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+                    <div className={cardCls + " flex-1"} onClick={() => setResumenDetail("cobrado_caja")} title="Click para ver detalle">
+                      <p className="text-xs text-muted-foreground">Total ventas</p>
+                      <p className="font-bold text-lg sm:text-xl mt-0.5">{formatCurrency(r.totalVentas)}</p>
+                      <p className="text-[11px] text-muted-foreground mt-1">{ventas.length} ventas</p>
+                    </div>
+                    <span className="hidden sm:block text-2xl text-muted-foreground font-light">=</span>
+                    <div className={cardCls + " flex-1"} onClick={() => setResumenDetail("cobrado_caja")} title="Click para ver detalle">
+                      <p className="text-xs text-muted-foreground">Cobrado en caja</p>
+                      <p className="font-bold text-lg sm:text-xl text-emerald-600 mt-0.5">{formatCurrency(r.cobradoTotal)}</p>
+                      <p className="text-[11px] text-muted-foreground mt-1 truncate">
+                        Efvo {formatCurrency(r.cobradoEfectivo)} · Tr {formatCurrency(r.cobradoTransf)}
+                        {r.cobradoOtros > 0 && ` · Otros ${formatCurrency(r.cobradoOtros)}`}
+                      </p>
+                    </div>
+                    <span className="hidden sm:block text-2xl text-muted-foreground font-light">+</span>
+                    <div className={cardCls + " flex-1"} onClick={() => setResumenDetail("cc_generada")} title="Click para ver deudores">
+                      <p className="text-xs text-muted-foreground">CC generada</p>
+                      <p className={`font-bold text-lg sm:text-xl mt-0.5 ${r.ccGenerada > 0 ? "text-orange-600" : "text-muted-foreground"}`}>{formatCurrency(r.ccGenerada)}</p>
+                      <p className="text-[11px] text-muted-foreground mt-1">{r.deudores.length === 0 ? "sin deudas nuevas" : `${r.deudores.length} ${r.deudores.length === 1 ? "deudor" : "deudores"}`}</p>
+                    </div>
                   </div>
-                )}
-              </CardContent>
-            </Card>
+                </div>
 
-            {/* Cuenta Corriente con lista de deudores */}
-            {(ventasDesglose["Cuenta Corriente"]?.total || 0) > 0 && (() => {
-              const deudoresHoy: { nombre: string; monto: number }[] = [];
-              const ccByCliente: Record<string, number> = {};
-              // Re-key NC haber entries to the original venta so the client
-              // name resolves correctly instead of "Sin cliente".
-              const ncIdToOrigenLocal: Record<string, string> = {};
-              for (const nc of (ncEntries || [])) {
-                if (nc.id && nc.remito_origen_id) ncIdToOrigenLocal[nc.id] = nc.remito_origen_id;
-              }
-              for (const e of (ccEntries || [])) {
-                const effectiveId = ncIdToOrigenLocal[e.venta_id] || e.venta_id;
-                const venta = ventas.find(v => v.id === effectiveId);
-                const nombre = (venta as any)?.clientes?.nombre || "Sin cliente";
-                ccByCliente[nombre] = (ccByCliente[nombre] || 0) + (e.debe || 0) - ((e as any).haber || 0);
-              }
-              for (const [nombre, monto] of Object.entries(ccByCliente)) {
-                if (monto > 0) deudoresHoy.push({ nombre, monto });
-              }
-              deudoresHoy.sort((a, b) => b.monto - a.monto);
-              return (
-                <Card className="border-border/60">
+                {/* SECCIÓN 2: OTROS MOVIMIENTOS */}
+                <div>
+                  <p className="text-[11px] uppercase tracking-wide text-muted-foreground font-semibold mb-2">
+                    Otros movimientos <span className="normal-case font-normal">(no son parte de las ventas de hoy)</span>
+                  </p>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                    <div className={cardCls} onClick={() => setResumenDetail("cobros_cc")} title="Click para ver detalle">
+                      <p className="text-xs text-muted-foreground">Cobros CC anterior</p>
+                      <p className={`font-bold text-lg sm:text-xl mt-0.5 ${r.cobrosCCAnterior > 0 ? "text-emerald-600" : "text-muted-foreground"}`}>{formatCurrency(r.cobrosCCAnterior)}</p>
+                      <p className="text-[11px] text-muted-foreground mt-1">deuda vieja saldada</p>
+                    </div>
+                    <div className={cardCls} onClick={() => setResumenDetail("egresos")} title="Click para ver detalle">
+                      <p className="text-xs text-muted-foreground">Egresos</p>
+                      <p className={`font-bold text-lg sm:text-xl mt-0.5 ${r.egresos > 0 ? "text-red-500" : "text-muted-foreground"}`}>{formatCurrency(r.egresos)}</p>
+                      <p className="text-[11px] text-muted-foreground mt-1">retiros y gastos</p>
+                    </div>
+                    <div className={cardCls} onClick={() => setResumenDetail("devoluciones")} title="Click para ver detalle">
+                      <p className="text-xs text-muted-foreground">Devoluciones</p>
+                      <p className={`font-bold text-lg sm:text-xl mt-0.5 ${(r.devolucionesNC + r.devolucionesAnul) > 0 ? "text-red-500" : "text-muted-foreground"}`}>{formatCurrency(r.devolucionesNC + r.devolucionesAnul)}</p>
+                      <p className="text-[11px] text-muted-foreground mt-1">NC y anulaciones</p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* SECCIÓN 3: EN CAJA AL CIERRE */}
+                <div>
+                  <p className="text-[11px] uppercase tracking-wide text-muted-foreground font-semibold mb-2">
+                    En caja al momento <span className="normal-case font-normal">(plata que efectivamente está hoy)</span>
+                  </p>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div className="rounded-lg border-2 border-emerald-200 dark:border-emerald-900 p-4 bg-emerald-50/50 dark:bg-emerald-950/20 cursor-pointer hover:bg-emerald-100/50 transition-colors" onClick={() => setResumenDetail("efectivo_dia")} title="Click para ver desglose">
+                      <p className="text-sm text-muted-foreground">Efectivo del día</p>
+                      <p className="font-bold text-2xl text-emerald-700 dark:text-emerald-400 mt-1">{formatCurrency(r.efectivoFinal)}</p>
+                      <p className="text-[11px] text-muted-foreground mt-2 leading-tight">
+                        Cobrado {formatCurrency(r.cobradoEfectivo)} + CC anterior {formatCurrency(r.cobrosCCEfvo)}
+                        {r.egresosEfvo > 0 && ` − Egresos ${formatCurrency(r.egresosEfvo)}`}
+                        {r.devolucionesEfvo > 0 && ` − Devoluciones ${formatCurrency(r.devolucionesEfvo)}`}
+                      </p>
+                    </div>
+                    <div className="rounded-lg border-2 border-blue-200 dark:border-blue-900 p-4 bg-blue-50/50 dark:bg-blue-950/20 cursor-pointer hover:bg-blue-100/50 transition-colors" onClick={() => setResumenDetail("transf_dia")} title="Click para ver desglose">
+                      <p className="text-sm text-muted-foreground">Transferencias del día</p>
+                      <p className="font-bold text-2xl text-blue-700 dark:text-blue-400 mt-1">{formatCurrency(r.transferenciaFinal)}</p>
+                      <p className="text-[11px] text-muted-foreground mt-2 leading-tight">
+                        Cobrado {formatCurrency(r.cobradoTransf)} + CC anterior {formatCurrency(r.cobrosCCTransf)}
+                        {r.egresosTransf > 0 && ` − Egresos ${formatCurrency(r.egresosTransf)}`}
+                        {r.devolucionesTransf > 0 && ` − Devoluciones ${formatCurrency(r.devolucionesTransf)}`}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            );
+          })()}
+
+          {/* Cobros de deuda recibidos hoy — única card que queda en este nivel
+              (Egresos e Ingresos manuales se ven desde las cards superiores y el bloque resumen) */}
+          {cobrosCCTotal > 0 && (
+            <>
+              <p className="text-[10px] font-medium uppercase tracking-widest text-muted-foreground mt-2 mb-2">Detalle</p>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <Card className="border-border/60 cursor-pointer hover:bg-muted/30 transition-colors" onClick={() => setResumenDetail("cobros_recibidos")} title="Click para ver detalle">
                   <CardContent className="pt-4 pb-4">
-                    <p className="text-[10px] font-medium uppercase tracking-widest text-muted-foreground mb-1.5">Cuenta corriente</p>
-                    <p className="text-lg font-medium text-amber-600">
-                      {formatCurrency(ventasDesglose["Cuenta Corriente"].total)}
+                    <p className="text-[10px] font-medium uppercase tracking-widest text-muted-foreground mb-1.5">Cobros de deuda recibidos</p>
+                    <p className="text-lg font-medium text-emerald-600">{formatCurrency(cobrosCCTotal)}</p>
+                    <p className="text-[11px] text-muted-foreground mt-1">
+                      {movements.filter(m => m.tipo === "ingreso" && (m.referencia_tipo === "cobro_saldo" || m.referencia_tipo === "cobro")).length} cobros
+                      {cobrosCCEfectivo > 0 && ` · Efvo ${formatCurrency(cobrosCCEfectivo)}`}
+                      {cobrosCCTransferencia > 0 && ` · Tr ${formatCurrency(cobrosCCTransferencia)}`}
                     </p>
-                    {deudoresHoy.length > 0 && (
-                      <div className="mt-2 pt-2 border-t space-y-1">
-                        {deudoresHoy.map((d, i) => (
-                          <div key={i} className="flex justify-between text-[11px]">
-                            <span className="text-muted-foreground truncate">{d.nombre}</span>
-                            <span className="font-medium text-amber-600 shrink-0 ml-2">
-                              {formatCurrency(d.monto)}
-                            </span>
-                          </div>
-                        ))}
-                      </div>
-                    )}
                   </CardContent>
                 </Card>
-              );
-            })()}
-
-          </div>
-
-          <p className="text-[10px] font-medium uppercase tracking-widest text-muted-foreground mt-2 mb-2">Detalle</p>
-          {/* Cobros CC + Egresos + Ingresos manuales */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-
-            {/* Cobros de deuda recibidos hoy */}
-            {cobrosCCTotal > 0 && (
-              <Card className="border-border/60">
-                <CardContent className="pt-4 pb-4">
-                  <p className="text-[10px] font-medium uppercase tracking-widest text-muted-foreground mb-1.5">Cobros de deuda recibidos</p>
-                  <p className="text-lg font-medium text-emerald-600">{formatCurrency(cobrosCCTotal)}</p>
-                  <div className="mt-2 pt-2 border-t space-y-1.5">
-                    {movements
-                      .filter(m => m.tipo === "ingreso" && (m.referencia_tipo === "cobro_saldo" || m.referencia_tipo === "cobro"))
-                      .map((m, i) => {
-                        const desc = m.descripcion || "";
-                        const nombreMatch = desc.match(/—\s*(.+?)(\s*→|\s*$)/);
-                        const nombre = nombreMatch?.[1]?.trim() || desc;
-                        const saldado = !desc.toLowerCase().includes("parcial");
-                        return (
-                          <div key={i} className="flex justify-between items-start text-[11px]">
-                            <div className="min-w-0">
-                              <p className="text-foreground truncate">{nombre}</p>
-                              <p className="text-muted-foreground">{m.metodo_pago}</p>
-                            </div>
-                            <div className="text-right shrink-0 ml-2">
-                              <p className="font-medium text-emerald-600">{formatCurrency(m.monto)}</p>
-                              {saldado && (
-                                <p className="text-[10px] text-emerald-500">saldado</p>
-                              )}
-                            </div>
-                          </div>
-                        );
-                      })
-                    }
-                  </div>
-                  {(cobrosCCEfectivo > 0 || cobrosCCTransferencia > 0) && (
-                    <div className="mt-2 pt-2 border-t flex justify-between text-[11px] text-muted-foreground">
-                      {cobrosCCEfectivo > 0 && <span>Efectivo: {formatCurrency(cobrosCCEfectivo)}</span>}
-                      {cobrosCCTransferencia > 0 && <span>Transf.: {formatCurrency(cobrosCCTransferencia)}</span>}
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
-            )}
-
-            {/* Egresos del día con detalle */}
-            {(gastos + retiros + notasCreditoEgresos + anulaciones) > 0 && (
-              <Card className="border-border/60">
-                <CardContent className="pt-4 pb-4">
-                  <p className="text-[10px] font-medium uppercase tracking-widest text-muted-foreground mb-1.5">Egresos</p>
-                  <p className="text-lg font-medium text-red-500">
-                    -{formatCurrency(gastos + retiros + notasCreditoEgresos + anulaciones)}
-                  </p>
-                  {egresosDetalle.length > 0 && (
-                    <div className="mt-2 pt-2 border-t space-y-1">
-                      {egresosDetalle.map((d, i) => (
-                        <div key={i} className="flex justify-between text-[11px]">
-                          <span className="text-muted-foreground truncate mr-2">{d.descripcion}</span>
-                          <span className="font-medium text-red-500 shrink-0">-{formatCurrency(d.monto)}</span>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
-            )}
-
-            {/* Ingresos manuales si los hay */}
-            {depositos > 0 && (
-              <Card className="border-border/60">
-                <CardContent className="pt-4 pb-4">
-                  <p className="text-[10px] font-medium uppercase tracking-widest text-muted-foreground mb-1.5">Ingresos manuales</p>
-                  <p className="text-lg font-medium text-emerald-600">{formatCurrency(depositos)}</p>
-                  {ingresosDetalle.length > 0 && (
-                    <div className="mt-2 pt-2 border-t space-y-1">
-                      {ingresosDetalle.map((d, i) => (
-                        <div key={i} className="flex justify-between text-[11px]">
-                          <span className="text-muted-foreground truncate mr-2">{d.descripcion}</span>
-                          <span className="font-medium text-emerald-600 shrink-0">{formatCurrency(d.monto)}</span>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
-            )}
-
-          </div>
+              </div>
+            </>
+          )}
 
           <p className="text-[10px] font-medium uppercase tracking-widest text-muted-foreground mt-2 mb-2">
             Ventas del día
@@ -2677,89 +2646,177 @@ export default function CajaPage() {
 
       {/* ─── Ingreso/Egreso Dialog ─── */}
       <Dialog open={movDialog.open} onOpenChange={movDialog.setOpen}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle>
-              {movDialog.data === "ingreso" ? "Nuevo Ingreso" : "Nuevo Egreso"}
-            </DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4 mt-2">
-            <div className="space-y-2">
-              <Label>Descripción</Label>
-              <Input
-                value={movForm.descripcion}
-                onChange={(e) => setMovForm({ ...movForm, descripcion: e.target.value })}
-                placeholder="Motivo del movimiento"
-              />
-            </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label>Monto</Label>
-                <MoneyInput
-                  value={movForm.monto}
-                  onValueChange={(val) => setMovForm({ ...movForm, monto: val })}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label>Método de pago</Label>
-                <Select
-                  value={movForm.metodo_pago}
-                  onValueChange={(v) => setMovForm({ ...movForm, metodo_pago: v ?? "" })}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Seleccionar método" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="Efectivo">Efectivo</SelectItem>
-                    <SelectItem value="Transferencia">Transferencia</SelectItem>
-                    <SelectItem value="Tarjeta">Tarjeta</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-            {movDialog.data === "egreso" && (
-              <div className="space-y-2">
-                <Label>Tipo de egreso</Label>
-                <Select
-                  value={movForm.sub_tipo}
-                  onValueChange={(v) => setMovForm({ ...movForm, sub_tipo: v ?? "gasto" })}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Seleccionar tipo" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="gasto">Gasto</SelectItem>
-                    <SelectItem value="retiro">Retiro</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            )}
-            {movDialog.data === "egreso" && proveedores.length > 0 && (
-              <div className="space-y-2">
-                <Label>Proveedor (opcional)</Label>
-                <Select
-                  value={movForm.proveedor || "none"}
-                  onValueChange={(v) => setMovForm({ ...movForm, proveedor: v === "none" ? "" : (v || "") })}
-                >
-                  <SelectTrigger>
-                    {movForm.proveedor ? proveedores.find(p => p.id === movForm.proveedor)?.nombre || "Sin proveedor" : "Sin proveedor"}
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="none">Sin proveedor</SelectItem>
-                    {proveedores.map((p) => (
-                      <SelectItem key={p.id} value={p.id}>{p.nombre}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            )}
-            <div className="flex justify-end gap-2">
-              <Button variant="outline" onClick={movDialog.onClose}>
-                Cancelar
-              </Button>
-              <Button onClick={handleSaveMov}>Registrar</Button>
-            </div>
-          </div>
+        <DialogContent className="max-w-md p-0">
+          {(() => {
+            const isEgreso = movDialog.data === "egreso";
+            const tone = isEgreso ? "red" : "emerald";
+            const HeaderIcon = isEgreso ? ArrowDownRight : ArrowUpRight;
+            const categoriaIcons: Record<string, React.ComponentType<{ className?: string }>> = {
+              "Sueldos": Users,
+              "Nafta / Combustible": Fuel,
+              "Servicios": Zap,
+              "Alquiler": Home,
+              "Impuestos": ReceiptIcon,
+              "Mantenimiento": Wrench,
+              "Insumos": Sparkles,
+              "Mercadería": PackageIcon,
+              "Retiro personal": Wallet,
+              "Otros": MoreHorizontal,
+            };
+            return (
+              <>
+                {/* Header con accent de color */}
+                <div className={`px-5 pt-5 pb-4 border-b ${isEgreso ? "bg-red-50/40 dark:bg-red-950/10" : "bg-emerald-50/40 dark:bg-emerald-950/10"}`}>
+                  <div className="flex items-center gap-3">
+                    <div className={`flex items-center justify-center w-9 h-9 rounded-lg ${isEgreso ? "bg-red-500/15 text-red-600" : "bg-emerald-500/15 text-emerald-600"}`}>
+                      <HeaderIcon className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <DialogHeader>
+                        <DialogTitle className="text-base">
+                          {isEgreso ? "Nuevo egreso" : "Nuevo ingreso"}
+                        </DialogTitle>
+                      </DialogHeader>
+                      <p className="text-[11px] text-muted-foreground mt-0.5">
+                        {isEgreso ? "Retiros, gastos y pagos desde la caja" : "Plata que entra fuera de las ventas"}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="px-5 pb-5 pt-4 space-y-4">
+                  {/* Monto destacado */}
+                  <div>
+                    <Label className="text-[11px] uppercase tracking-wider text-muted-foreground">Monto</Label>
+                    <div className="mt-1.5 relative">
+                      <span className={`absolute left-3 top-1/2 -translate-y-1/2 text-xl font-light ${isEgreso ? "text-red-500" : "text-emerald-600"}`}>
+                        {isEgreso ? "−$" : "+$"}
+                      </span>
+                      <MoneyInput
+                        value={movForm.monto}
+                        onValueChange={(val) => setMovForm({ ...movForm, monto: val })}
+                        className="pl-12 h-14 text-2xl font-semibold tabular-nums"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Método de pago como pills */}
+                  <div>
+                    <Label className="text-[11px] uppercase tracking-wider text-muted-foreground">Método de pago</Label>
+                    <div className="grid grid-cols-3 gap-1.5 mt-1.5">
+                      {[
+                        { v: "Efectivo", icon: Banknote },
+                        { v: "Transferencia", icon: ArrowRightLeft },
+                        { v: "Tarjeta", icon: CreditCard },
+                      ].map((m) => {
+                        const active = movForm.metodo_pago === m.v;
+                        const Icon = m.icon;
+                        return (
+                          <button
+                            key={m.v}
+                            type="button"
+                            onClick={() => setMovForm({ ...movForm, metodo_pago: m.v })}
+                            className={`flex items-center justify-center gap-1.5 px-3 h-10 rounded-lg border text-xs font-medium transition-colors ${
+                              active
+                                ? "border-foreground bg-foreground text-background"
+                                : "border-border bg-background text-muted-foreground hover:border-foreground/40 hover:text-foreground"
+                            }`}
+                          >
+                            <Icon className="w-3.5 h-3.5" />
+                            {m.v}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Categoría como grid de chips con íconos — solo egreso */}
+                  {isEgreso && (
+                    <div>
+                      <Label className="text-[11px] uppercase tracking-wider text-muted-foreground">
+                        Categoría <span className="text-red-500">*</span>
+                      </Label>
+                      <div className="grid grid-cols-2 sm:grid-cols-2 gap-1.5 mt-1.5">
+                        {EGRESO_CATEGORIAS.map((c) => {
+                          const active = movForm.categoria === c;
+                          const Icon = categoriaIcons[c] || MoreHorizontal;
+                          return (
+                            <button
+                              key={c}
+                              type="button"
+                              onClick={() => {
+                                const subTipo = c === "Retiro personal" ? "retiro" : "gasto";
+                                setMovForm({ ...movForm, categoria: c, sub_tipo: subTipo });
+                              }}
+                              className={`flex items-center gap-2 px-3 h-10 rounded-lg border text-xs font-medium text-left transition-colors ${
+                                active
+                                  ? "border-red-500 bg-red-50 text-red-700 dark:bg-red-950/30"
+                                  : "border-border bg-background text-foreground hover:border-red-300 hover:bg-red-50/50"
+                              }`}
+                            >
+                              <Icon className={`w-3.5 h-3.5 shrink-0 ${active ? "text-red-600" : "text-muted-foreground"}`} />
+                              <span className="truncate">{c}</span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Descripción */}
+                  <div>
+                    <Label className="text-[11px] uppercase tracking-wider text-muted-foreground">
+                      Descripción
+                    </Label>
+                    <Input
+                      value={movForm.descripcion}
+                      onChange={(e) => setMovForm({ ...movForm, descripcion: e.target.value })}
+                      placeholder={isEgreso ? "Ej: Sueldo Marzo - Juan, Carga Shell ruta 8..." : "Motivo del ingreso"}
+                      className="mt-1.5"
+                    />
+                  </div>
+
+                  {/* Proveedor opcional */}
+                  {isEgreso && proveedores.length > 0 && (
+                    <div>
+                      <Label className="text-[11px] uppercase tracking-wider text-muted-foreground">
+                        Proveedor <span className="text-muted-foreground/70 font-normal">(opcional)</span>
+                      </Label>
+                      <Select
+                        value={movForm.proveedor || "none"}
+                        onValueChange={(v) => setMovForm({ ...movForm, proveedor: v === "none" ? "" : (v || "") })}
+                      >
+                        <SelectTrigger className="mt-1.5">
+                          {movForm.proveedor ? proveedores.find(p => p.id === movForm.proveedor)?.nombre || "Sin proveedor" : "Sin proveedor"}
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="none">Sin proveedor</SelectItem>
+                          {proveedores.map((p) => (
+                            <SelectItem key={p.id} value={p.id}>{p.nombre}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  )}
+
+                  {/* Footer con botones */}
+                  <div className="flex justify-end gap-2 pt-2 border-t -mx-5 px-5 -mb-1 mt-2">
+                    <Button variant="outline" size="sm" onClick={movDialog.onClose} className="mt-3">
+                      Cancelar
+                    </Button>
+                    <Button
+                      size="sm"
+                      onClick={handleSaveMov}
+                      className={`mt-3 ${isEgreso ? "bg-red-600 hover:bg-red-700 text-white" : "bg-emerald-600 hover:bg-emerald-700 text-white"}`}
+                    >
+                      {isEgreso ? <ArrowDownRight className="w-4 h-4 mr-1.5" /> : <ArrowUpRight className="w-4 h-4 mr-1.5" />}
+                      Registrar {isEgreso ? "egreso" : "ingreso"}
+                    </Button>
+                  </div>
+                </div>
+              </>
+            );
+          })()}
         </DialogContent>
       </Dialog>
 
@@ -3078,6 +3135,379 @@ export default function CajaPage() {
           </div>
         ) : undefined}
       />
+
+      {/* Dialog detalle de cards del resumen del día */}
+      <Dialog open={resumenDetail !== null} onOpenChange={(o) => !o && setResumenDetail(null)}>
+        <DialogContent className="max-w-lg overflow-x-hidden">
+          {resumenDetail && (() => {
+            const r = calcResumenDia(ventas, movements, cobroItemsTurno);
+            const isCobroCC = (m: CajaMovimiento) =>
+              m.tipo === "ingreso" && (
+                (m.referencia_tipo !== "venta" && (m.descripcion || "").includes("Cobro CC")) ||
+                m.referencia_tipo === "cobro_saldo" ||
+                m.referencia_tipo === "cobro"
+              );
+            const turnoVentaIds = new Set(ventas.map((v) => v.id));
+
+            if (resumenDetail === "cobros_recibidos") {
+              // Todos los cobros de CC recibidos hoy (mezcla intra-turno + CC anterior)
+              const cobros = movements.filter(isCobroCC);
+              const totalCobros = cobros.reduce((a, m) => a + m.monto, 0);
+              return (
+                <>
+                  <DialogHeader>
+                    <DialogTitle>Cobros de deuda recibidos — {formatCurrency(totalCobros)}</DialogTitle>
+                  </DialogHeader>
+                  <p className="text-xs text-muted-foreground mb-2">Todos los cobros de cuenta corriente recibidos durante el turno.</p>
+                  {cobros.length === 0 ? (
+                    <p className="text-sm text-muted-foreground py-4 text-center">No hay cobros recibidos.</p>
+                  ) : (
+                    <div className="rounded-lg border divide-y">
+                      {cobros.map((m) => {
+                        const desc = m.descripcion || "Cobro";
+                        const nombreMatch = desc.match(/—\s*(.+?)(\s*→|\s*$)/);
+                        const nombre = nombreMatch?.[1]?.trim() || desc;
+                        const saldado = !desc.toLowerCase().includes("parcial");
+                        return (
+                          <div key={m.id} className="flex items-start justify-between gap-3 px-3 py-2">
+                            <div className="min-w-0 flex-1">
+                              <p className="text-sm font-medium truncate">{nombre}</p>
+                              <p className="text-[11px] text-muted-foreground">
+                                {m.metodo_pago || "Efectivo"} · {m.hora?.substring(0, 5)}
+                                {saldado ? <span className="ml-1.5 text-emerald-600">· saldado</span> : <span className="ml-1.5 text-amber-600">· parcial</span>}
+                              </p>
+                            </div>
+                            <span className="text-sm font-semibold text-emerald-600 tabular-nums shrink-0">{formatCurrency(m.monto)}</span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </>
+              );
+            }
+
+            if (resumenDetail === "cobros_cc") {
+              // Listar cobros CC anterior con monto neto (excluyendo porción intra-turno)
+              const cobros = movements.filter(isCobroCC).map((m) => {
+                let intraRatio = 0;
+                if (m.referencia_id) {
+                  const items = cobroItemsTurno.filter((it) => it.cobro_id === m.referencia_id);
+                  const totalApp = items.reduce((a, x) => a + (x.monto_aplicado || 0), 0);
+                  const intraApp = items.filter((x) => turnoVentaIds.has(x.venta_id)).reduce((a, x) => a + (x.monto_aplicado || 0), 0);
+                  if (totalApp > 0) intraRatio = intraApp / totalApp;
+                }
+                const ccPart = m.monto * (1 - intraRatio);
+                return { ...m, ccPart };
+              }).filter((m) => m.ccPart > 0.01);
+              return (
+                <>
+                  <DialogHeader>
+                    <DialogTitle>Cobros CC anterior — {formatCurrency(r.cobrosCCAnterior)}</DialogTitle>
+                  </DialogHeader>
+                  <p className="text-xs text-muted-foreground mb-2">Cobros recibidos hoy que pagan deuda anterior al turno.</p>
+                  {cobros.length === 0 ? (
+                    <p className="text-sm text-muted-foreground py-4 text-center">No hay cobros CC anterior.</p>
+                  ) : (
+                    <div className="rounded-lg border divide-y">
+                      {cobros.map((m) => (
+                        <div key={m.id} className="flex items-start justify-between gap-3 px-3 py-2">
+                          <div className="min-w-0 flex-1">
+                            <p className="text-sm font-medium truncate">{m.descripcion || "Cobro CC"}</p>
+                            <p className="text-[11px] text-muted-foreground">{m.metodo_pago || "Efectivo"} · {m.hora?.substring(0, 5)}</p>
+                          </div>
+                          <span className="text-sm font-semibold text-emerald-600 tabular-nums shrink-0">{formatCurrency(m.ccPart)}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </>
+              );
+            }
+
+            if (resumenDetail === "egresos") {
+              const egs = movements.filter((m) => m.tipo === "egreso");
+              // Agrupar por categoría
+              const porCategoria: Record<string, { total: number; items: typeof egs }> = {};
+              for (const m of egs) {
+                const cat = (m as any).categoria || "Sin categoría";
+                if (!porCategoria[cat]) porCategoria[cat] = { total: 0, items: [] };
+                porCategoria[cat].total += Math.abs(m.monto);
+                porCategoria[cat].items.push(m);
+              }
+              const grupos = Object.entries(porCategoria).sort((a, b) => b[1].total - a[1].total);
+              return (
+                <>
+                  <DialogHeader>
+                    <DialogTitle>Egresos — {formatCurrency(r.egresos)}</DialogTitle>
+                  </DialogHeader>
+                  <p className="text-xs text-muted-foreground mb-2">Retiros, gastos y pagos hechos desde la caja, agrupados por categoría.</p>
+                  {egs.length === 0 ? (
+                    <p className="text-sm text-muted-foreground py-4 text-center">No hay egresos registrados.</p>
+                  ) : (
+                    <div className="space-y-3">
+                      {grupos.map(([cat, g]) => (
+                        <div key={cat}>
+                          <div className="flex items-baseline justify-between mb-1.5 px-1">
+                            <span className="text-[11px] uppercase tracking-wide text-muted-foreground font-semibold">{cat}</span>
+                            <span className="text-sm font-bold text-red-500 tabular-nums">−{formatCurrency(g.total)}</span>
+                          </div>
+                          <div className="rounded-lg border divide-y">
+                            {g.items.map((m) => (
+                              <div key={m.id} className="flex items-start justify-between gap-3 px-3 py-2">
+                                <div className="min-w-0 flex-1">
+                                  <p className="text-sm font-medium truncate">{m.descripcion || "Egreso"}</p>
+                                  <p className="text-[11px] text-muted-foreground">{m.metodo_pago || "Efectivo"} · {m.hora?.substring(0, 5)}</p>
+                                </div>
+                                <span className="text-sm font-semibold text-red-500 tabular-nums shrink-0">−{formatCurrency(Math.abs(m.monto))}</span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </>
+              );
+            }
+
+            if (resumenDetail === "devoluciones") {
+              const ncs = movements.filter((m) => m.tipo === "cancelacion" && m.referencia_tipo === "nota_credito");
+              const anuls = movements.filter((m) => m.tipo === "cancelacion" && m.referencia_tipo === "anulacion");
+              return (
+                <>
+                  <DialogHeader>
+                    <DialogTitle>Devoluciones — {formatCurrency(r.devolucionesNC + r.devolucionesAnul)}</DialogTitle>
+                  </DialogHeader>
+                  <p className="text-xs text-muted-foreground mb-2">Notas de crédito y anulaciones de ventas que devuelven plata.</p>
+                  {(ncs.length === 0 && anuls.length === 0) ? (
+                    <p className="text-sm text-muted-foreground py-4 text-center">Sin devoluciones.</p>
+                  ) : (
+                    <div className="space-y-3">
+                      {ncs.length > 0 && (
+                        <div>
+                          <p className="text-[11px] uppercase tracking-wide text-muted-foreground font-semibold mb-1">Notas de crédito</p>
+                          <div className="rounded-lg border divide-y">
+                            {ncs.map((m) => (
+                              <div key={m.id} className="flex items-start justify-between gap-3 px-3 py-2">
+                                <div className="min-w-0 flex-1">
+                                  <p className="text-sm font-medium truncate">{m.descripcion || "Nota de crédito"}</p>
+                                  <p className="text-[11px] text-muted-foreground">{m.metodo_pago || "Efectivo"} · {m.hora?.substring(0, 5)}</p>
+                                </div>
+                                <span className="text-sm font-semibold text-red-500 tabular-nums shrink-0">−{formatCurrency(Math.abs(m.monto))}</span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                      {anuls.length > 0 && (
+                        <div>
+                          <p className="text-[11px] uppercase tracking-wide text-muted-foreground font-semibold mb-1">Anulaciones</p>
+                          <div className="rounded-lg border divide-y">
+                            {anuls.map((m) => (
+                              <div key={m.id} className="flex items-start justify-between gap-3 px-3 py-2">
+                                <div className="min-w-0 flex-1">
+                                  <p className="text-sm font-medium truncate">{m.descripcion || "Anulación"}</p>
+                                  <p className="text-[11px] text-muted-foreground">{m.metodo_pago || "Efectivo"} · {m.hora?.substring(0, 5)}</p>
+                                </div>
+                                <span className="text-sm font-semibold text-red-500 tabular-nums shrink-0">−{formatCurrency(Math.abs(m.monto))}</span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </>
+              );
+            }
+
+            if (resumenDetail === "cc_generada") {
+              return (
+                <>
+                  <DialogHeader>
+                    <DialogTitle>CC generada hoy — {formatCurrency(r.ccGenerada)}</DialogTitle>
+                  </DialogHeader>
+                  <p className="text-xs text-muted-foreground mb-2">Clientes que se llevan mercadería sin pagar todo (deuda nueva).</p>
+                  {r.deudores.length === 0 ? (
+                    <p className="text-sm text-muted-foreground py-4 text-center">Sin deudas nuevas hoy.</p>
+                  ) : (
+                    <div className="rounded-lg border divide-y">
+                      {r.deudores.map((d, i) => (
+                        <div key={i} className="flex items-start justify-between gap-3 px-3 py-2">
+                          <div className="min-w-0 flex-1">
+                            <p className="text-sm font-medium truncate">{d.cliente}</p>
+                            <p className="text-[11px] text-muted-foreground font-mono">{d.numero}</p>
+                          </div>
+                          <span className="text-sm font-semibold text-orange-600 tabular-nums shrink-0">{formatCurrency(d.monto)}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </>
+              );
+            }
+
+            if (resumenDetail === "cobrado_caja") {
+              return (
+                <>
+                  <DialogHeader>
+                    <DialogTitle>Cobrado en caja — {formatCurrency(r.cobradoTotal)}</DialogTitle>
+                  </DialogHeader>
+                  <p className="text-xs text-muted-foreground mb-2">Plata efectivamente recibida hoy por ventas del día.</p>
+                  <div className="rounded-lg border divide-y">
+                    <div className="flex justify-between px-3 py-2.5 text-sm">
+                      <span className="text-muted-foreground">Efectivo</span>
+                      <span className="font-semibold tabular-nums">{formatCurrency(r.cobradoEfectivo)}</span>
+                    </div>
+                    <div className="flex justify-between px-3 py-2.5 text-sm">
+                      <span className="text-muted-foreground">Transferencia</span>
+                      <span className="font-semibold tabular-nums">{formatCurrency(r.cobradoTransf)}</span>
+                    </div>
+                    {r.cobradoOtros > 0 && (
+                      <div className="flex justify-between px-3 py-2.5 text-sm">
+                        <span className="text-muted-foreground">Otros</span>
+                        <span className="font-semibold tabular-nums">{formatCurrency(r.cobradoOtros)}</span>
+                      </div>
+                    )}
+                  </div>
+                  <p className="text-[11px] text-muted-foreground mt-3">Incluye la porción de cobros recibidos hoy que pagan ventas del propio turno (reclasificada automáticamente).</p>
+                </>
+              );
+            }
+
+            if (resumenDetail === "efectivo_dia" || resumenDetail === "transf_dia") {
+              const isEfvo = resumenDetail === "efectivo_dia";
+              const titulo = isEfvo ? "Efectivo del día" : "Transferencias del día";
+              const final = isEfvo ? r.efectivoFinal : r.transferenciaFinal;
+              const cobrado = isEfvo ? r.cobradoEfectivo : r.cobradoTransf;
+              const ccAnt = isEfvo ? r.cobrosCCEfvo : r.cobrosCCTransf;
+              const eg = isEfvo ? r.egresosEfvo : r.egresosTransf;
+              const dev = isEfvo ? r.devolucionesEfvo : r.devolucionesTransf;
+
+              // Desglose por cuenta — solo para transferencias
+              let porCuenta: Array<{ cuenta: string; ventas: number; cobrosCC: number; egresos: number; devoluciones: number; total: number }> = [];
+              if (!isEfvo) {
+                const acc: Record<string, { ventas: number; cobrosCC: number; egresos: number; devoluciones: number }> = {};
+                const bumpVentas = (k: string, n: number) => { (acc[k] ||= { ventas: 0, cobrosCC: 0, egresos: 0, devoluciones: 0 }).ventas += n; };
+                const bumpCC = (k: string, n: number) => { (acc[k] ||= { ventas: 0, cobrosCC: 0, egresos: 0, devoluciones: 0 }).cobrosCC += n; };
+                const bumpEg = (k: string, n: number) => { (acc[k] ||= { ventas: 0, cobrosCC: 0, egresos: 0, devoluciones: 0 }).egresos += n; };
+                const bumpDev = (k: string, n: number) => { (acc[k] ||= { ventas: 0, cobrosCC: 0, egresos: 0, devoluciones: 0 }).devoluciones += n; };
+
+                // Ventas: movs con referencia_tipo=venta + ventas sin movimiento
+                const ventasConMov = new Set(movements.filter((m) => m.referencia_tipo === "venta" && m.tipo === "ingreso").map((m) => m.referencia_id));
+                const ventasSinMov = ventas.filter((v) => !ventasConMov.has(v.id));
+                movements.filter((m) => m.tipo === "ingreso" && m.referencia_tipo === "venta" && m.metodo_pago === "Transferencia")
+                  .forEach((m) => { const c = formatCuentaCanonica((m as any).cuenta_bancaria, cajaCuentasBancarias) || "Sin asignar"; bumpVentas(c, m.monto); });
+                for (const v of ventasSinMov) {
+                  const ef = (v as any).monto_efectivo || 0;
+                  const cc = (v as any).monto_cuenta_corriente || 0;
+                  const tr = (v as any).monto_transferencia || 0;
+                  let mt = 0;
+                  if (v.forma_pago === "Transferencia") mt = v.total;
+                  else if (v.forma_pago === "Mixto") mt = tr > 0 ? tr : Math.max(0, v.total - ef - cc);
+                  if (mt > 0) { const c = formatCuentaCanonica((v as any).cuenta_transferencia_alias, cajaCuentasBancarias) || "Sin asignar"; bumpVentas(c, mt); }
+                }
+
+                // Cobros CC anterior por cuenta (porción no intra-turno)
+                movements.filter(isCobroCC).filter((m) => m.metodo_pago === "Transferencia").forEach((m) => {
+                  let intraRatio = 0;
+                  if (m.referencia_id) {
+                    const items = cobroItemsTurno.filter((it) => it.cobro_id === m.referencia_id);
+                    const totalApp = items.reduce((a, x) => a + (x.monto_aplicado || 0), 0);
+                    const intraApp = items.filter((x) => turnoVentaIds.has(x.venta_id)).reduce((a, x) => a + (x.monto_aplicado || 0), 0);
+                    if (totalApp > 0) intraRatio = intraApp / totalApp;
+                  }
+                  const ccPart = m.monto * (1 - intraRatio);
+                  const intraPart = m.monto - ccPart;
+                  const c = formatCuentaCanonica((m as any).cuenta_bancaria, cajaCuentasBancarias) || "Sin asignar";
+                  if (ccPart > 0) bumpCC(c, ccPart);
+                  if (intraPart > 0) bumpVentas(c, intraPart);
+                });
+
+                // Egresos por cuenta
+                movements.filter((m) => m.tipo === "egreso" && m.metodo_pago === "Transferencia").forEach((m) => {
+                  const c = formatCuentaCanonica((m as any).cuenta_bancaria, cajaCuentasBancarias) || "Sin asignar";
+                  bumpEg(c, Math.abs(m.monto));
+                });
+
+                // Devoluciones por cuenta
+                movements.filter((m) => m.tipo === "cancelacion" && m.metodo_pago === "Transferencia").forEach((m) => {
+                  const c = formatCuentaCanonica((m as any).cuenta_bancaria, cajaCuentasBancarias) || "Sin asignar";
+                  bumpDev(c, Math.abs(m.monto));
+                });
+
+                porCuenta = Object.entries(acc).map(([cuenta, v]) => ({
+                  cuenta,
+                  ventas: v.ventas,
+                  cobrosCC: v.cobrosCC,
+                  egresos: v.egresos,
+                  devoluciones: v.devoluciones,
+                  total: v.ventas + v.cobrosCC - v.egresos - v.devoluciones,
+                })).sort((a, b) => b.total - a.total);
+              }
+
+              return (
+                <>
+                  <DialogHeader>
+                    <DialogTitle>{titulo} — {formatCurrency(final)}</DialogTitle>
+                  </DialogHeader>
+                  <p className="text-xs text-muted-foreground mb-2">Plata por método que efectivamente está hoy.</p>
+                  <div className="rounded-lg border divide-y">
+                    <div className="flex justify-between px-3 py-2.5 text-sm">
+                      <span className="text-muted-foreground">Cobrado del día</span>
+                      <span className="font-semibold text-emerald-600 tabular-nums">+{formatCurrency(cobrado)}</span>
+                    </div>
+                    <div className="flex justify-between px-3 py-2.5 text-sm">
+                      <span className="text-muted-foreground">+ Cobros CC anterior</span>
+                      <span className="font-semibold text-emerald-600 tabular-nums">+{formatCurrency(ccAnt)}</span>
+                    </div>
+                    {eg > 0 && (
+                      <div className="flex justify-between px-3 py-2.5 text-sm">
+                        <span className="text-muted-foreground">− Egresos</span>
+                        <span className="font-semibold text-red-500 tabular-nums">−{formatCurrency(eg)}</span>
+                      </div>
+                    )}
+                    {dev > 0 && (
+                      <div className="flex justify-between px-3 py-2.5 text-sm">
+                        <span className="text-muted-foreground">− Devoluciones</span>
+                        <span className="font-semibold text-red-500 tabular-nums">−{formatCurrency(dev)}</span>
+                      </div>
+                    )}
+                    <div className="flex justify-between px-3 py-2.5 text-sm bg-muted/30">
+                      <span className="font-semibold">Total</span>
+                      <span className="font-bold tabular-nums">{formatCurrency(final)}</span>
+                    </div>
+                  </div>
+
+                  {!isEfvo && porCuenta.length > 0 && (
+                    <div className="mt-4">
+                      <p className="text-[11px] uppercase tracking-wide text-muted-foreground font-semibold mb-2">Desglose por cuenta</p>
+                      <div className="rounded-lg border divide-y">
+                        {porCuenta.map((c) => (
+                          <div key={c.cuenta} className="px-3 py-2.5">
+                            <div className="flex justify-between items-baseline">
+                              <span className="text-sm font-medium truncate mr-2">{c.cuenta}</span>
+                              <span className="text-sm font-bold text-blue-600 tabular-nums shrink-0">{formatCurrency(c.total)}</span>
+                            </div>
+                            <div className="text-[11px] text-muted-foreground mt-1 leading-tight">
+                              {c.ventas > 0 && <>Ventas {formatCurrency(c.ventas)}</>}
+                              {c.cobrosCC > 0 && <> · CC {formatCurrency(c.cobrosCC)}</>}
+                              {c.egresos > 0 && <> · −Eg {formatCurrency(c.egresos)}</>}
+                              {c.devoluciones > 0 && <> · −Dev {formatCurrency(c.devoluciones)}</>}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </>
+              );
+            }
+            return null;
+          })()}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

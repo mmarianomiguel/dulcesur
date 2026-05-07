@@ -1327,10 +1327,11 @@ export default function DetalleCompra({
                 </div>
               ))}
             </div>
-            <div className="flex flex-col sm:flex-row gap-2 pt-2 border-t">
+            <div className="flex flex-col sm:flex-row justify-end gap-2 pt-2 border-t">
               <Button
                 variant="outline"
-                className="flex-1 gap-2"
+                size="sm"
+                className="gap-2"
                 onClick={() => {
                   const productIds =
                     detailItems
@@ -1349,9 +1350,7 @@ export default function DetalleCompra({
                 <Printer className="w-4 h-4" />
                 Imprimir carteles
               </Button>
-            </div>
-            <div className="flex justify-end">
-              <Button onClick={() => setShowPreciosDialog(false)}>
+              <Button variant="outline" size="sm" onClick={() => setShowPreciosDialog(false)}>
                 Cerrar
               </Button>
             </div>
@@ -1559,6 +1558,7 @@ export default function DetalleCompra({
           <div className="flex justify-end gap-2 pt-4">
             <Button
               variant="outline"
+              size="sm"
               onClick={() =>
                 setConfirmDialog((prev) => ({ ...prev, open: false }))
               }
@@ -1566,7 +1566,7 @@ export default function DetalleCompra({
               Cancelar
             </Button>
             <Button
-              variant="destructive"
+              size="sm"
               onClick={() => {
                 confirmDialogRef.current();
                 setConfirmDialog((prev) => ({ ...prev, open: false }));

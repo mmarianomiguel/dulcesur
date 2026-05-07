@@ -116,6 +116,7 @@ const navigation: NavItem[] = [
       { name: "General", href: "/admin/reportes" },
       { name: "Resumen Mensual", href: "/admin/reportes/resumen-mensual" },
       { name: "Ranking Clientes", href: "/admin/reportes/ranking-clientes" },
+      { name: "Egresos por Categoría", href: "/admin/reportes/egresos-categoria" },
       { name: "Resumen por Vendedor", href: "/admin/ventas/resumen-vendedor" },
       { name: "Percepciones", href: "/admin/ventas/percepciones" },
     ],

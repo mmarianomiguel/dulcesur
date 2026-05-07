@@ -322,8 +322,7 @@ export default function NuevoPedido({
       .single();
 
     if (compraError || !compra) {
-      console.error("Error creando compra pendiente:", compraError?.message);
-      return;
+      throw new Error(compraError?.message || "No se pudo crear la compra pendiente");
     }
 
     const compraItems = itemsData.map((item) => ({
@@ -335,7 +334,12 @@ export default function NuevoPedido({
       precio_unitario: item.precio_unitario,
       subtotal: item.subtotal,
     }));
-    await supabase.from("compra_items").insert(compraItems);
+    const { error: itemsError } = await supabase.from("compra_items").insert(compraItems);
+    if (itemsError) {
+      // rollback de la cabecera de compra para no dejarla huérfana
+      await supabase.from("compras").delete().eq("id", compra.id);
+      throw new Error(itemsError.message);
+    }
   };
 
   /* ── save pedido ── */
@@ -388,7 +392,16 @@ export default function NuevoPedido({
           precio_unitario: item.precio_unitario,
           subtotal: item.subtotal,
         }));
-        await crearCompraPendiente(pedido.id, selectedProveedorId, compraItemsData, totalEstimado);
+        try {
+          await crearCompraPendiente(pedido.id, selectedProveedorId, compraItemsData, totalEstimado);
+        } catch (compraErr: any) {
+          // Rollback: si no se pudo crear la compra pendiente, no dejamos el pedido como Enviado
+          await supabase.from("pedido_proveedor_items").delete().eq("pedido_id", pedido.id);
+          await supabase.from("pedidos_proveedor").delete().eq("id", pedido.id);
+          setSaveError(`No se pudo confirmar el pedido: ${compraErr?.message || "error al crear la compra pendiente"}`);
+          setSaving(false);
+          return;
+        }
       }
 
       showAdminToast(
@@ -723,10 +736,6 @@ export default function NuevoPedido({
             )}
             <div className="flex flex-col sm:flex-row justify-end gap-2">
               <Button variant="outline" onClick={() => { setSaveError(""); onBack(); }}>Cancelar</Button>
-              <Button variant="secondary" onClick={() => savePedido("Borrador")} disabled={saving}>
-                {saving ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Save className="w-4 h-4 mr-2" />}
-                Guardar Borrador
-              </Button>
               <Button onClick={() => savePedido("Enviado")} disabled={saving}>
                 {saving ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Send className="w-4 h-4 mr-2" />}
                 Confirmar Pedido

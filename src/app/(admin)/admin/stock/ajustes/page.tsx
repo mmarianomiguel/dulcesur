@@ -18,10 +18,11 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle,
 } from "@/components/ui/dialog";
 import {
-  Plus, Search, Loader2, AlertTriangle, X, PackageSearch, Package,
+  Plus, Search, Loader2, AlertTriangle, X, PackageSearch, Package, Printer, Download, Ban,
 } from "lucide-react";
 import { todayARG, currentMonthPadded } from "@/lib/formatters";
 import { logAudit } from "@/lib/audit";
+import { APP_NAME } from "@/lib/constants";
 
 /* ─── Types ─── */
 interface Producto {
@@ -65,6 +66,10 @@ interface Ajuste {
   motivo: string;
   observacion: string | null;
   usuario: string | null;
+  anulado?: boolean;
+  anulado_at?: string | null;
+  anulado_por?: string | null;
+  anulado_motivo?: string | null;
 }
 
 const MOTIVOS_GLOBALES = [
@@ -91,6 +96,367 @@ const MOTIVOS_ITEM = [
 
 function formatDate(fecha: string) {
   return new Date(fecha + "T12:00:00").toLocaleDateString("es-AR", { day: "2-digit", month: "2-digit", year: "numeric" });
+}
+
+/* ─── Detail dialog (printable comprobante) ─── */
+function AjusteDetailDialog({
+  ajuste,
+  items,
+  onClose,
+  onAnular,
+  autoAction,
+  onAutoActionConsumed,
+}: {
+  ajuste: Ajuste;
+  items: any[];
+  onClose: () => void;
+  onAnular: (motivo: string) => Promise<void>;
+  autoAction?: "print" | "pdf" | "anular" | null;
+  onAutoActionConsumed?: () => void;
+}) {
+  const printRef = useRef<HTMLDivElement>(null);
+  const [savingPdf, setSavingPdf] = useState(false);
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [motivoAnulacion, setMotivoAnulacion] = useState("");
+  const [anulando, setAnulando] = useState(false);
+  const numero = ajuste.id.slice(0, 8).toUpperCase();
+  const isIntercambio = ajuste.motivo === "Intercambio";
+  const isAnulado = !!ajuste.anulado;
+  const total = items.reduce((a, it) => a + (Number(it.subtotal) || 0), 0);
+  const totalCantidad = items.reduce((a, it) => a + (Number(it.cantidad) || 0), 0);
+  const fileName = `Ajuste-${numero}-${ajuste.fecha}`;
+
+  const submitAnular = async () => {
+    setAnulando(true);
+    try {
+      await onAnular(motivoAnulacion.trim());
+    } finally {
+      setAnulando(false);
+      setConfirmOpen(false);
+    }
+  };
+
+  // Auto-action triggered desde el context menu (print / pdf / anular)
+  // Espera un tick para que el printRef esté montado y los items cargados.
+  useEffect(() => {
+    if (!autoAction || items.length === 0) return;
+    const t = setTimeout(() => {
+      if (autoAction === "print") handlePrint();
+      else if (autoAction === "pdf") handlePdf();
+      else if (autoAction === "anular" && !isAnulado) {
+        setMotivoAnulacion("");
+        setConfirmOpen(true);
+      }
+      onAutoActionConsumed?.();
+    }, 250);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoAction, items.length]);
+
+  const handlePrint = () => {
+    if (!printRef.current) return;
+    const content = printRef.current.innerHTML;
+    const w = window.open("", "_blank");
+    if (!w) return;
+    w.document.write(
+      `<!DOCTYPE html><html><head><title>${fileName}</title><style>@page{size:A4;margin:14mm}body{margin:0;font-family:system-ui,-apple-system,Segoe UI,sans-serif;color:#111}@media print{body{-webkit-print-color-adjust:exact;print-color-adjust:exact}}</style></head><body>${content}</body></html>`
+    );
+    w.document.close();
+    w.focus();
+    w.onload = () => { w.print(); w.close(); };
+  };
+
+  const handlePdf = async () => {
+    if (!printRef.current) return;
+    setSavingPdf(true);
+    try {
+      const { default: html2canvas } = await import("html2canvas-pro");
+      const { jsPDF } = await import("jspdf");
+      const clone = printRef.current.cloneNode(true) as HTMLElement;
+      clone.style.transform = "none";
+      clone.style.width = "210mm";
+      clone.style.position = "absolute";
+      clone.style.left = "-9999px";
+      document.body.appendChild(clone);
+      const canvas = await html2canvas(clone, { scale: 2, useCORS: true });
+      document.body.removeChild(clone);
+      const imgData = canvas.toDataURL("image/png");
+      const pdf = new jsPDF("p", "mm", "a4");
+      const pdfW = pdf.internal.pageSize.getWidth();
+      const pdfH = (canvas.height * pdfW) / canvas.width;
+      pdf.addImage(imgData, "PNG", 0, 0, pdfW, pdfH);
+      pdf.save(`${fileName}.pdf`);
+    } catch (err) {
+      console.error("PDF generation failed, fallback a imprimir:", err);
+      handlePrint();
+    } finally {
+      setSavingPdf(false);
+    }
+  };
+
+  return (
+    <Dialog open onOpenChange={(v) => !v && onClose()}>
+      <DialogContent className="max-w-3xl max-h-[92vh] flex flex-col overflow-hidden p-0">
+        <DialogHeader className="px-5 py-3 border-b shrink-0">
+          <DialogTitle className="flex items-center gap-2 text-base">
+            <Printer className="w-4 h-4" />
+            Comprobante de ajuste — N.º {numero}
+          </DialogTitle>
+        </DialogHeader>
+
+        <div className="flex-1 min-h-0 overflow-y-auto bg-muted/30 p-5">
+          {/* Printable area — estilo factura, todo inline para PDF/print */}
+          <div
+            ref={printRef}
+            style={{
+              background: "#fff",
+              maxWidth: "780px",
+              margin: "0 auto",
+              padding: "30px 34px",
+              boxShadow: "0 1px 3px rgba(0,0,0,0.08)",
+              fontFamily: "Arial, Helvetica, sans-serif",
+              fontSize: "12px",
+              color: "#000",
+              lineHeight: 1.35,
+              border: "1px solid #d4d4d4",
+            }}
+          >
+            {/* ===== Encabezado tipo factura ===== */}
+            <table style={{ width: "100%", borderCollapse: "collapse", marginBottom: "14px" }}>
+              <tbody>
+                <tr>
+                  {/* Emisor */}
+                  <td style={{ width: "55%", verticalAlign: "top", paddingRight: "8px" }}>
+                    <div style={{ fontSize: "22px", fontWeight: 700, letterSpacing: "0.5px" }}>{APP_NAME}</div>
+                    <div style={{ fontSize: "10px", color: "#555", marginTop: "3px" }}>Comprobante interno de movimiento de mercadería</div>
+                    <div style={{ fontSize: "10px", color: "#555", marginTop: "2px" }}>Documento sin valor fiscal</div>
+                  </td>
+                  {/* Letra X (no fiscal) — caja centrada al estilo factura */}
+                  <td style={{ width: "10%", verticalAlign: "top", textAlign: "center", borderLeft: "1px solid #999", borderRight: "1px solid #999", padding: "4px 0" }}>
+                    <div style={{ fontSize: "32px", fontWeight: 700, lineHeight: 1, marginTop: "4px" }}>X</div>
+                    <div style={{ fontSize: "8px", color: "#555", marginTop: "4px", letterSpacing: "0.5px" }}>DOC. NO FISCAL</div>
+                  </td>
+                  {/* Datos comprobante */}
+                  <td style={{ width: "35%", verticalAlign: "top", paddingLeft: "10px" }}>
+                    <div style={{ fontSize: "13px", fontWeight: 700, letterSpacing: "0.5px", textTransform: "uppercase" }}>
+                      {isIntercambio ? "Intercambio de stock" : "Ajuste de stock"}
+                    </div>
+                    <div style={{ fontSize: "10px", marginTop: "6px" }}>
+                      <span style={{ color: "#555" }}>N.º </span>
+                      <span style={{ fontFamily: "Consolas, monospace", fontWeight: 700 }}>{numero}</span>
+                    </div>
+                    <div style={{ fontSize: "10px", marginTop: "2px" }}>
+                      <span style={{ color: "#555" }}>Fecha de emisión: </span>
+                      <span style={{ fontWeight: 600 }}>{formatDate(ajuste.fecha)}</span>
+                    </div>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+
+            <div style={{ borderTop: "2px solid #000", marginBottom: "12px" }} />
+
+            {isAnulado && (
+              <div style={{ position: "relative", marginBottom: "12px" }}>
+                <div
+                  style={{
+                    border: "2px solid #b91c1c",
+                    background: "#fef2f2",
+                    color: "#7f1d1d",
+                    padding: "8px 12px",
+                    fontSize: "11px",
+                    fontWeight: 600,
+                    textAlign: "center",
+                    letterSpacing: "0.5px",
+                  }}
+                >
+                  ANULADO
+                  {ajuste.anulado_at && (
+                    <span style={{ fontWeight: 400 }}>
+                      {" "} · {new Date(ajuste.anulado_at).toLocaleString("es-AR")}
+                    </span>
+                  )}
+                  {ajuste.anulado_por && (
+                    <span style={{ fontWeight: 400 }}>
+                      {" "} · por {ajuste.anulado_por}
+                    </span>
+                  )}
+                  {ajuste.anulado_motivo && (
+                    <div style={{ fontSize: "10px", fontWeight: 400, marginTop: "3px" }}>
+                      {ajuste.anulado_motivo}
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* ===== Bloque Emisor / Destinatario ===== */}
+            <table style={{ width: "100%", borderCollapse: "collapse", marginBottom: "12px" }}>
+              <tbody>
+                <tr>
+                  <td style={{ width: "50%", verticalAlign: "top", border: "1px solid #999", padding: "8px 10px" }}>
+                    <div style={{ fontSize: "9px", color: "#666", textTransform: "uppercase", letterSpacing: "0.6px", marginBottom: "3px" }}>Emisor</div>
+                    <div style={{ fontSize: "11px", fontWeight: 700 }}>{APP_NAME}</div>
+                    <div style={{ fontSize: "10px", color: "#444", marginTop: "4px" }}>
+                      <strong>Responsable:</strong> {ajuste.usuario || "—"}
+                    </div>
+                    <div style={{ fontSize: "10px", color: "#444" }}>
+                      <strong>Concepto:</strong> {ajuste.motivo}
+                    </div>
+                  </td>
+                  <td style={{ width: "50%", verticalAlign: "top", border: "1px solid #999", borderLeft: "none", padding: "8px 10px" }}>
+                    <div style={{ fontSize: "9px", color: "#666", textTransform: "uppercase", letterSpacing: "0.6px", marginBottom: "3px" }}>Destinatario / Observaciones</div>
+                    <div style={{ fontSize: "10px", color: "#222", whiteSpace: "pre-wrap", minHeight: "32px" }}>
+                      {ajuste.observacion || "—"}
+                    </div>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+
+            {/* ===== Tabla de ítems ===== */}
+            <table style={{ width: "100%", fontSize: "11px", borderCollapse: "collapse", border: "1px solid #999" }}>
+              <thead>
+                <tr style={{ background: "#e8e8e8" }}>
+                  <th style={{ textAlign: "center", padding: "6px 6px", fontSize: "10px", fontWeight: 700, borderBottom: "1px solid #999", borderRight: "1px solid #ccc", width: "40px" }}>Cant.</th>
+                  <th style={{ textAlign: "left", padding: "6px 8px", fontSize: "10px", fontWeight: 700, borderBottom: "1px solid #999", borderRight: "1px solid #ccc" }}>Descripción</th>
+                  <th style={{ textAlign: "left", padding: "6px 6px", fontSize: "10px", fontWeight: 700, borderBottom: "1px solid #999", borderRight: "1px solid #ccc", width: "95px" }}>Código</th>
+                  <th style={{ textAlign: "right", padding: "6px 6px", fontSize: "10px", fontWeight: 700, borderBottom: "1px solid #999", borderRight: "1px solid #ccc", width: "95px" }}>P. Unitario</th>
+                  <th style={{ textAlign: "right", padding: "6px 6px", fontSize: "10px", fontWeight: 700, borderBottom: "1px solid #999", width: "100px" }}>Importe</th>
+                </tr>
+              </thead>
+              <tbody>
+                {items.map((it, i) => (
+                  <tr key={i} style={{ borderBottom: i < items.length - 1 ? "1px solid #eee" : "none", verticalAlign: "top" }}>
+                    <td style={{ padding: "7px 6px", textAlign: "center", borderRight: "1px solid #eee", fontVariantNumeric: "tabular-nums" }}>{it.cantidad}</td>
+                    <td style={{ padding: "7px 8px", borderRight: "1px solid #eee" }}>
+                      <div style={{ fontWeight: 500 }}>
+                        {it.direccion === "out" && <span style={{ fontSize: "8px", fontWeight: 700, padding: "1px 4px", marginRight: "5px", border: "1px solid #b91c1c", color: "#b91c1c", borderRadius: "2px" }}>SALE</span>}
+                        {it.direccion === "in" && <span style={{ fontSize: "8px", fontWeight: 700, padding: "1px 4px", marginRight: "5px", border: "1px solid #047857", color: "#047857", borderRadius: "2px" }}>ENTRA</span>}
+                        {it.producto?.nombre || it.producto_id}
+                      </div>
+                    </td>
+                    <td style={{ padding: "7px 6px", borderRight: "1px solid #eee", fontFamily: "Consolas, monospace", fontSize: "10px", color: "#555" }}>
+                      {it.producto?.codigo || "—"}
+                    </td>
+                    <td style={{ padding: "7px 6px", textAlign: "right", borderRight: "1px solid #eee", fontVariantNumeric: "tabular-nums" }}>
+                      {it.costo != null ? formatCurrency(it.costo) : "—"}
+                    </td>
+                    <td style={{ padding: "7px 6px", textAlign: "right", fontVariantNumeric: "tabular-nums", fontWeight: 500 }}>
+                      {it.subtotal != null ? formatCurrency(it.subtotal) : "—"}
+                    </td>
+                  </tr>
+                ))}
+                {items.length === 0 && (
+                  <tr><td colSpan={5} style={{ padding: "24px 8px", textAlign: "center", color: "#999" }}>Sin items</td></tr>
+                )}
+              </tbody>
+            </table>
+
+            {/* ===== Totales ===== */}
+            <table style={{ width: "100%", borderCollapse: "collapse", marginTop: "10px" }}>
+              <tbody>
+                <tr>
+                  <td style={{ width: "55%", verticalAlign: "top", fontSize: "10px", color: "#555", paddingTop: "6px" }}>
+                    {items.length} {items.length === 1 ? "ítem" : "ítems"} · {totalCantidad} unidades en total
+                  </td>
+                  <td style={{ width: "45%", verticalAlign: "top" }}>
+                    <table style={{ width: "100%", borderCollapse: "collapse", border: "1px solid #999" }}>
+                      <tbody>
+                        <tr>
+                          <td style={{ padding: "6px 10px", fontSize: "10px", color: "#444", borderBottom: "1px solid #ddd" }}>Subtotal</td>
+                          <td style={{ padding: "6px 10px", fontSize: "11px", textAlign: "right", fontVariantNumeric: "tabular-nums", borderBottom: "1px solid #ddd" }}>{formatCurrency(total)}</td>
+                        </tr>
+                        <tr style={{ background: "#f4f4f4" }}>
+                          <td style={{ padding: "8px 10px", fontSize: "12px", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.5px" }}>Total</td>
+                          <td style={{ padding: "8px 10px", fontSize: "15px", fontWeight: 700, textAlign: "right", fontVariantNumeric: "tabular-nums" }}>{formatCurrency(total)}</td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+
+            {/* ===== Pie ===== */}
+            <div style={{ marginTop: "22px", paddingTop: "8px", borderTop: "1px solid #ccc", fontSize: "9px", color: "#777", display: "flex", justifyContent: "space-between" }}>
+              <span>Generado el {new Date().toLocaleString("es-AR")}</span>
+              <span>Documento sin valor fiscal · {APP_NAME}</span>
+            </div>
+          </div>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2 px-5 py-3 border-t shrink-0 bg-card">
+          {!isAnulado && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => { setMotivoAnulacion(""); setConfirmOpen(true); }}
+              className="text-red-600 border-red-200 hover:bg-red-50 hover:text-red-700"
+            >
+              <Ban className="w-4 h-4 mr-1" /> Anular ajuste
+            </Button>
+          )}
+          <div className="flex-1" />
+          <Button variant="outline" size="sm" onClick={onClose}>
+            <X className="w-4 h-4 mr-1" /> Cerrar
+          </Button>
+          <Button variant="outline" size="sm" onClick={handlePdf} disabled={savingPdf}>
+            {savingPdf ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : <Download className="w-4 h-4 mr-1" />}
+            PDF
+          </Button>
+          <Button size="sm" onClick={handlePrint}>
+            <Printer className="w-4 h-4 mr-1" /> Imprimir
+          </Button>
+        </div>
+      </DialogContent>
+
+      {/* Confirmación de anulación */}
+      <Dialog open={confirmOpen} onOpenChange={(v) => !v && !anulando && setConfirmOpen(false)}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-red-600">
+              <Ban className="w-4 h-4" /> Anular ajuste N.º {numero}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3 text-sm">
+            <p>
+              Se va a <strong>revertir el stock</strong> de los {items.length} {items.length === 1 ? "ítem" : "ítems"} de
+              este ajuste y queda registrada la anulación. Esta acción no se puede deshacer.
+            </p>
+            {isIntercambio && (
+              <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded p-2">
+                Es un intercambio: la reversa hace volver al stock las salidas y descontar las entradas.
+              </p>
+            )}
+            <div className="space-y-1">
+              <label className="text-xs font-medium text-muted-foreground">Motivo de anulación (opcional)</label>
+              <Input
+                value={motivoAnulacion}
+                onChange={(e) => setMotivoAnulacion(e.target.value)}
+                placeholder="Ej: cargué el producto equivocado"
+                disabled={anulando}
+              />
+            </div>
+          </div>
+          <div className="flex justify-end gap-2 mt-3">
+            <Button variant="outline" size="sm" onClick={() => setConfirmOpen(false)} disabled={anulando}>
+              Cancelar
+            </Button>
+            <Button
+              size="sm"
+              onClick={submitAnular}
+              disabled={anulando}
+              className="bg-red-600 hover:bg-red-700 text-white"
+            >
+              {anulando ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : <Ban className="w-4 h-4 mr-1" />}
+              Confirmar anulación
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+    </Dialog>
+  );
 }
 
 /* ─── Main component ─── */
@@ -134,6 +500,7 @@ export default function AjustesStockPage() {
   // Product search
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchHl, setSearchHl] = useState(0);
+  const [searchPresIdx, setSearchPresIdx] = useState(-1); // -1 = Unidad, 0+ = pres index
   const [productSearch, setProductSearch] = useState("");
 
   // Filters
@@ -150,6 +517,10 @@ export default function AjustesStockPage() {
   // Detail
   const [detailAjuste, setDetailAjuste] = useState<Ajuste | null>(null);
   const [detailItems, setDetailItems] = useState<any[]>([]);
+  const [detailAutoAction, setDetailAutoAction] = useState<"print" | "pdf" | "anular" | null>(null);
+
+  // Context menu (right-click) on the ajustes list
+  const [contextMenu, setContextMenu] = useState<{ x: number; y: number; ajuste: Ajuste } | null>(null);
 
   const codigoInputRef = useRef<HTMLInputElement>(null);
   const [presMap, setPresMap] = useState<Record<string, PresData[]>>({});
@@ -195,15 +566,103 @@ export default function AjustesStockPage() {
   useEffect(() => {
     if (!dialogOpen) return;
     function onKey(e: KeyboardEvent) {
-      if (e.key === "F1") { e.preventDefault(); setSearchOpen(true); }
-      if (e.key === "Delete" && selectedRowIdx !== null) {
-        setRows((prev) => prev.filter((_, i) => i !== selectedRowIdx));
+      if (e.key === "F1") { e.preventDefault(); setSearchOpen(true); return; }
+
+      // Don't intercept if typing in an input/textarea/select
+      const tag = (e.target as HTMLElement)?.tagName;
+      if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
+      if (searchOpen) return;
+
+      const len = rows.length;
+      if (len === 0) return;
+
+      if (e.key === "ArrowDown") {
+        e.preventDefault();
+        setSelectedRowIdx((prev) => {
+          const next = prev === null ? 0 : Math.min(prev + 1, len - 1);
+          setTimeout(() => {
+            document.querySelectorAll("[data-ajuste-row]")[next]?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+          }, 0);
+          return next;
+        });
+      } else if (e.key === "ArrowUp") {
+        e.preventDefault();
+        setSelectedRowIdx((prev) => {
+          const next = prev === null ? 0 : Math.max(prev - 1, 0);
+          setTimeout(() => {
+            document.querySelectorAll("[data-ajuste-row]")[next]?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+          }, 0);
+          return next;
+        });
+      } else if (e.key === "ArrowRight" || e.key === "+") {
+        e.preventDefault();
+        if (selectedRowIdx === null || selectedRowIdx >= len) return;
+        setRows((prev) => prev.map((r, i) => {
+          if (i !== selectedRowIdx) return r;
+          const upp = r.unidades_por_presentacion || 1;
+          if (upp > 1) {
+            const newCajas = (r.cajas || 0) + 1;
+            const cantidad = newCajas * upp + (r.sueltas || 0);
+            return { ...r, cajas: newCajas, cantidad, subtotal: cantidad * r.costo };
+          }
+          const newSueltas = (r.sueltas || 0) + 1;
+          return { ...r, sueltas: newSueltas, cantidad: newSueltas, subtotal: newSueltas * r.costo };
+        }));
+      } else if (e.key === "ArrowLeft" || e.key === "-") {
+        e.preventDefault();
+        if (selectedRowIdx === null || selectedRowIdx >= len) return;
+        setRows((prev) => prev.map((r, i) => {
+          if (i !== selectedRowIdx) return r;
+          const upp = r.unidades_por_presentacion || 1;
+          if (upp > 1) {
+            const newCajas = Math.max(0, (r.cajas || 0) - 1);
+            const cantidad = newCajas * upp + (r.sueltas || 0);
+            return { ...r, cajas: newCajas, cantidad, subtotal: cantidad * r.costo };
+          }
+          const newSueltas = Math.max(0, (r.sueltas || 0) - 1);
+          return { ...r, sueltas: newSueltas, cantidad: newSueltas, subtotal: newSueltas * r.costo };
+        }));
+      } else if (e.key === "Delete" || e.key === "Backspace") {
+        e.preventDefault();
+        if (selectedRowIdx !== null && selectedRowIdx < len) {
+          setRows((prev) => prev.filter((_, i) => i !== selectedRowIdx));
+          setSelectedRowIdx((prev) => prev !== null && prev >= len - 1 ? Math.max(0, len - 2) : prev);
+        }
+      } else if (e.key === "Escape") {
         setSelectedRowIdx(null);
       }
     }
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
-  }, [dialogOpen, selectedRowIdx]);
+  }, [dialogOpen, rows.length, selectedRowIdx, searchOpen]);
+
+  // Close context menu on click outside / scroll / Escape
+  useEffect(() => {
+    if (!contextMenu) return;
+    const close = () => setContextMenu(null);
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") close(); };
+    document.addEventListener("click", close);
+    document.addEventListener("keydown", onKey);
+    window.addEventListener("scroll", close, true);
+    return () => {
+      document.removeEventListener("click", close);
+      document.removeEventListener("keydown", onKey);
+      window.removeEventListener("scroll", close, true);
+    };
+  }, [contextMenu]);
+
+  // Auto-scroll & select last row when a new product is added
+  const prevRowsLen = useRef(0);
+  useEffect(() => {
+    if (rows.length > prevRowsLen.current) {
+      const lastIdx = rows.length - 1;
+      setSelectedRowIdx(lastIdx);
+      setTimeout(() => {
+        document.querySelectorAll("[data-ajuste-row]")[lastIdx]?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+      }, 50);
+    }
+    prevRowsLen.current = rows.length;
+  }, [rows.length]);
 
   const openNew = () => {
     setFecha(todayARG());
@@ -363,6 +822,8 @@ export default function AjustesStockPage() {
           stock_antes: stockAntes,
           stock_despues: stockDespues,
           direccion: row.direccion || null,
+          costo: row.costo,
+          subtotal: row.subtotal,
         });
 
         const descBase = tipoAjuste === "intercambio"
@@ -400,7 +861,8 @@ export default function AjustesStockPage() {
     setSaving(false);
   };
 
-  const viewDetail = async (aj: Ajuste) => {
+  const viewDetail = async (aj: Ajuste, autoAction: "print" | "pdf" | "anular" | null = null) => {
+    setDetailAutoAction(autoAction);
     setDetailAjuste(aj);
     const { data } = await supabase.from("ajuste_stock_items").select("*").eq("ajuste_id", aj.id);
     const itemsWithProd = (data || []).map((d: any) => ({
@@ -408,6 +870,105 @@ export default function AjustesStockPage() {
       producto: productos.find((p) => p.id === d.producto_id),
     }));
     setDetailItems(itemsWithProd);
+  };
+
+  const openContextMenu = (e: React.MouseEvent, aj: Ajuste) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const menuWidth = 220;
+    const menuHeight = 240;
+    const vw = window.innerWidth;
+    const vh = window.innerHeight;
+    let x = e.clientX;
+    let y = e.clientY;
+    if (x + menuWidth > vw - 8) x = vw - menuWidth - 8;
+    if (y + menuHeight > vh - 8) y = vh - menuHeight - 8;
+    if (y < 8) y = 8;
+    setContextMenu({ x, y, ajuste: aj });
+  };
+
+  const handleAnular = async (aj: Ajuste, items: any[], motivoAnulacion: string) => {
+    if (aj.anulado) {
+      showAdminToast("Este ajuste ya está anulado", "error");
+      return;
+    }
+
+    // Determinar el delta original que se aplicó cuando se creó el ajuste
+    // (mismo signo que en handleSave). La anulación aplica el opuesto.
+    const tipo = aj.motivo === "Intercambio" ? "intercambio" : null;
+
+    let warnedNegative = false;
+    for (const it of items) {
+      const cantidad = Number(it.cantidad) || 0;
+      if (cantidad <= 0) continue;
+
+      // delta original que se aplicó al crear el ajuste:
+      // - Intercambio: in => +cant, out => -cant
+      // - Egreso: -cant
+      // - Ingreso: +cant
+      let originalDelta: number;
+      if (tipo === "intercambio") {
+        originalDelta = it.direccion === "in" ? cantidad : -cantidad;
+      } else if (it.stock_despues > it.stock_antes) {
+        originalDelta = cantidad;   // ingreso
+      } else {
+        originalDelta = -cantidad;  // egreso
+      }
+      const reverso = -originalDelta;
+
+      const { data: stockResult } = await supabase.rpc("atomic_update_stock", {
+        p_producto_id: it.producto_id,
+        p_change: reverso,
+        p_allow_negative: true,
+      });
+      const stockAntes = stockResult?.stock_antes ?? 0;
+      const stockDespues = stockResult?.stock_despues ?? stockAntes + reverso;
+
+      if (reverso < 0 && stockDespues < 0 && !warnedNegative) {
+        warnedNegative = true;
+        showAdminToast("Algún producto quedó con stock negativo tras la anulación", "info");
+      }
+
+      const prodNombre = it.producto?.nombre || it.producto_id;
+      await supabase.from("stock_movimientos").insert({
+        producto_id: it.producto_id,
+        tipo: "ajuste_anulado",
+        cantidad_antes: stockAntes,
+        cantidad_despues: stockDespues,
+        cantidad: reverso,
+        referencia: `Anulación de ajuste ${aj.id.slice(0, 8).toUpperCase()}`,
+        descripcion: `Anulación: ${aj.motivo} (${prodNombre})${motivoAnulacion ? ` — ${motivoAnulacion}` : ""}`,
+        usuario: currentUserName,
+        orden_id: aj.id,
+      });
+    }
+
+    const { error: updErr } = await supabase
+      .from("ajustes_stock")
+      .update({
+        anulado: true,
+        anulado_at: new Date().toISOString(),
+        anulado_por: currentUserName,
+        anulado_motivo: motivoAnulacion || null,
+      })
+      .eq("id", aj.id);
+
+    if (updErr) {
+      showAdminToast(`Error al marcar como anulado: ${updErr.message}`, "error");
+      return;
+    }
+
+    logAudit({
+      userName: currentUserName,
+      action: "CANCEL",
+      module: "stock",
+      entityId: aj.id,
+      after: { motivo: aj.motivo, items: items.length, motivoAnulacion },
+    });
+
+    showAdminToast("Ajuste anulado y stock revertido", "success");
+    setDetailAjuste(null);
+    fetchData();
   };
 
   const filteredSearch = productos.filter(
@@ -533,6 +1094,7 @@ export default function AjustesStockPage() {
               {rows.map((row, idx) => (
                 <tr
                   key={row.producto_id + idx}
+                  data-ajuste-row={idx}
                   onClick={() => setSelectedRowIdx(idx)}
                   className={`border-b cursor-pointer transition-colors ${
                     selectedRowIdx === idx ? "bg-blue-50 dark:bg-blue-950/20" :
@@ -645,6 +1207,7 @@ export default function AjustesStockPage() {
             return (
               <div
                 key={row.producto_id + idx}
+                data-ajuste-row={idx}
                 className={`rounded-lg border p-3 space-y-2 ${
                   row.direccion === "out" ? "border-red-200 bg-red-50/40" :
                   row.direccion === "in" ? "border-emerald-200 bg-emerald-50/40" :
@@ -784,12 +1347,34 @@ export default function AjustesStockPage() {
                 ref={codigoInputRef}
                 placeholder="Buscar por nombre o código..."
                 value={productSearch}
-                onChange={(e) => { setProductSearch(e.target.value); setSearchHl(0); }}
+                onChange={(e) => { setProductSearch(e.target.value); setSearchHl(0); setSearchPresIdx(-1); }}
                 onKeyDown={(e) => {
                   const results = filteredSearch.slice(0, 20);
-                  if (e.key === "ArrowDown") { e.preventDefault(); setSearchHl((h) => { const next = Math.min(h + 1, results.length - 1); document.querySelector(`[data-saidx="${next}"]`)?.scrollIntoView({ block: "nearest" }); return next; }); }
-                  else if (e.key === "ArrowUp") { e.preventDefault(); setSearchHl((h) => { const next = Math.max(h - 1, 0); document.querySelector(`[data-saidx="${next}"]`)?.scrollIntoView({ block: "nearest" }); return next; }); }
-                  else if (e.key === "Enter" && results[searchHl]) { e.preventDefault(); addProduct(results[searchHl]); setSearchOpen(false); setProductSearch(""); }
+                  const current = results[searchHl];
+                  const currentPres = current ? (presMap[current.id] || []) : [];
+                  if (e.key === "ArrowDown") {
+                    e.preventDefault();
+                    setSearchPresIdx(-1);
+                    setSearchHl((h) => { const next = Math.min(h + 1, results.length - 1); document.querySelector(`[data-saidx="${next}"]`)?.scrollIntoView({ block: "nearest" }); return next; });
+                  } else if (e.key === "ArrowUp") {
+                    e.preventDefault();
+                    setSearchPresIdx(-1);
+                    setSearchHl((h) => { const next = Math.max(h - 1, 0); document.querySelector(`[data-saidx="${next}"]`)?.scrollIntoView({ block: "nearest" }); return next; });
+                  } else if (e.key === "ArrowRight") {
+                    e.preventDefault();
+                    if (currentPres.length > 0) setSearchPresIdx((i) => Math.min(i + 1, currentPres.length - 1));
+                  } else if (e.key === "ArrowLeft") {
+                    e.preventDefault();
+                    setSearchPresIdx((i) => Math.max(i - 1, -1));
+                  } else if (e.key === "Enter" && current) {
+                    e.preventDefault();
+                    if (searchPresIdx >= 0 && currentPres[searchPresIdx]) {
+                      addProduct(current, currentPres[searchPresIdx]);
+                    } else {
+                      addProduct(current);
+                    }
+                    setSearchOpen(false); setProductSearch(""); setSearchPresIdx(-1);
+                  }
                 }}
                 className="pl-9"
                 autoFocus
@@ -817,9 +1402,9 @@ export default function AjustesStockPage() {
                       </div>
                     </div>
                     <div className="flex gap-2 mt-2">
-                      <button onClick={() => { addProduct(p); setSearchOpen(false); setProductSearch(""); }} className="flex-1 py-1.5 rounded-lg border text-xs font-medium hover:bg-muted transition">+ Unidad</button>
-                      {pres && pres.map((pr) => (
-                        <button key={pr.id} onClick={() => { addProduct(p, pr); setSearchOpen(false); setProductSearch(""); }} className="flex-1 py-1.5 rounded-lg bg-primary text-white text-xs font-medium hover:bg-primary/90 transition">+ {pr.nombre} ({pr.cantidad} un.)</button>
+                      <button onClick={() => { addProduct(p); setSearchOpen(false); setProductSearch(""); setSearchPresIdx(-1); }} className={`flex-1 py-1.5 rounded-lg border text-xs font-medium hover:bg-muted transition ${isHl && searchPresIdx === -1 ? "ring-2 ring-primary border-primary" : ""}`}>+ Unidad</button>
+                      {pres && pres.map((pr, prIdx) => (
+                        <button key={pr.id} onClick={() => { addProduct(p, pr); setSearchOpen(false); setProductSearch(""); setSearchPresIdx(-1); }} className={`flex-1 py-1.5 rounded-lg bg-primary text-white text-xs font-medium hover:bg-primary/90 transition ${isHl && searchPresIdx === prIdx ? "ring-2 ring-offset-1 ring-primary" : ""}`}>+ {pr.nombre} ({pr.cantidad} un.)</button>
                       ))}
                     </div>
                   </div>
@@ -919,10 +1504,15 @@ export default function AjustesStockPage() {
               </thead>
               <tbody>
                 {ajustes.map((aj) => (
-                  <tr key={aj.id} className="border-b last:border-0 hover:bg-muted/30 cursor-pointer" onClick={() => viewDetail(aj)}>
-                    <td className="py-2.5 px-4">{formatDate(aj.fecha)}</td>
+                  <tr key={aj.id} className={`border-b last:border-0 hover:bg-muted/30 cursor-pointer ${aj.anulado ? "bg-red-50/40" : ""}`} onClick={() => viewDetail(aj)} onContextMenu={(e) => openContextMenu(e, aj)}>
+                    <td className={`py-2.5 px-4 ${aj.anulado ? "line-through text-muted-foreground" : ""}`}>{formatDate(aj.fecha)}</td>
                     <td className="py-2.5 px-4 text-muted-foreground">{aj.usuario || "—"}</td>
-                    <td className="py-2.5 px-4"><Badge variant="outline">{aj.motivo}</Badge></td>
+                    <td className="py-2.5 px-4">
+                      <div className="flex items-center gap-1.5">
+                        <Badge variant="outline" className={aj.anulado ? "line-through text-muted-foreground" : ""}>{aj.motivo}</Badge>
+                        {aj.anulado && <Badge variant="outline" className="border-red-300 text-red-700 bg-red-50 text-[10px]">ANULADO</Badge>}
+                      </div>
+                    </td>
                     <td className="py-2.5 px-4 text-muted-foreground text-xs">{aj.observacion || "—"}</td>
                     <td className="py-2.5 px-4 text-right">
                       <Badge variant="secondary" className="cursor-pointer">Ver detalle</Badge>
@@ -941,16 +1531,20 @@ export default function AjustesStockPage() {
                 <button
                   key={aj.id}
                   onClick={() => viewDetail(aj)}
-                  className="w-full text-left rounded-lg border p-3 bg-card hover:bg-muted/30 transition-colors"
+                  onContextMenu={(e) => openContextMenu(e, aj)}
+                  className={`w-full text-left rounded-lg border p-3 hover:bg-muted/30 transition-colors ${aj.anulado ? "bg-red-50/40 border-red-200" : "bg-card"}`}
                 >
                   <div className="flex items-center justify-between gap-2 mb-1">
-                    <span className="text-sm font-semibold">{formatDate(aj.fecha)}</span>
-                    <Badge
-                      variant="outline"
-                      className={`text-[10px] ${isIntercambio ? "border-violet-300 text-violet-700 bg-violet-50" : ""}`}
-                    >
-                      {aj.motivo}
-                    </Badge>
+                    <span className={`text-sm font-semibold ${aj.anulado ? "line-through text-muted-foreground" : ""}`}>{formatDate(aj.fecha)}</span>
+                    <div className="flex items-center gap-1.5">
+                      {aj.anulado && <Badge variant="outline" className="border-red-300 text-red-700 bg-red-50 text-[10px]">ANULADO</Badge>}
+                      <Badge
+                        variant="outline"
+                        className={`text-[10px] ${aj.anulado ? "line-through text-muted-foreground" : isIntercambio ? "border-violet-300 text-violet-700 bg-violet-50" : ""}`}
+                      >
+                        {aj.motivo}
+                      </Badge>
+                    </div>
                   </div>
                   <div className="flex items-center gap-2 text-xs text-muted-foreground">
                     <span>{aj.usuario || "—"}</span>
@@ -965,53 +1559,66 @@ export default function AjustesStockPage() {
         </>
       )}
 
-      {/* Detail dialog */}
+      {/* Detail dialog — comprobante imprimible */}
       {detailAjuste && (
-        <Dialog open={!!detailAjuste} onOpenChange={() => setDetailAjuste(null)}>
-          <DialogContent className="max-w-lg">
-            <DialogHeader>
-              <DialogTitle>Ajuste de stock — {formatDate(detailAjuste.fecha)}</DialogTitle>
-            </DialogHeader>
-            <div className="text-sm text-muted-foreground mb-3">
-              <span className="font-medium">{detailAjuste.motivo}</span>
-              {detailAjuste.observacion && <span> · {detailAjuste.observacion}</span>}
-              {detailAjuste.usuario && <span> · {detailAjuste.usuario}</span>}
+        <AjusteDetailDialog
+          ajuste={detailAjuste}
+          items={detailItems}
+          onClose={() => { setDetailAjuste(null); setDetailAutoAction(null); }}
+          onAnular={(motivo) => handleAnular(detailAjuste, detailItems, motivo)}
+          autoAction={detailAutoAction}
+          onAutoActionConsumed={() => setDetailAutoAction(null)}
+        />
+      )}
+
+      {/* Context menu */}
+      {contextMenu && (
+        <div
+          className="fixed z-50 bg-background border border-border rounded-xl shadow-lg py-1 min-w-[220px]"
+          style={{ left: contextMenu.x, top: contextMenu.y, maxHeight: "calc(100vh - 16px)", overflowY: "auto" }}
+          onClick={(e) => e.stopPropagation()}
+          onContextMenu={(e) => e.preventDefault()}
+        >
+          <div className="px-3 py-2 border-b">
+            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide truncate">
+              Ajuste {contextMenu.ajuste.id.slice(0, 8).toUpperCase()}
+              {contextMenu.ajuste.anulado && <span className="ml-1.5 text-red-600">· ANULADO</span>}
+            </p>
+            <p className="text-[11px] text-muted-foreground truncate mt-0.5">
+              {formatDate(contextMenu.ajuste.fecha)} · {contextMenu.ajuste.motivo}
+            </p>
+          </div>
+          <div className="py-1">
+            <button
+              className="flex items-center gap-2.5 w-full px-3 py-2 text-sm hover:bg-muted/60 transition-colors text-left"
+              onClick={() => { const aj = contextMenu.ajuste; setContextMenu(null); viewDetail(aj); }}
+            >
+              <PackageSearch className="w-4 h-4 text-muted-foreground" /> Ver detalle
+            </button>
+            <button
+              className="flex items-center gap-2.5 w-full px-3 py-2 text-sm hover:bg-muted/60 transition-colors text-left"
+              onClick={() => { const aj = contextMenu.ajuste; setContextMenu(null); viewDetail(aj, "print"); }}
+            >
+              <Printer className="w-4 h-4 text-muted-foreground" /> Imprimir comprobante
+            </button>
+            <button
+              className="flex items-center gap-2.5 w-full px-3 py-2 text-sm hover:bg-muted/60 transition-colors text-left"
+              onClick={() => { const aj = contextMenu.ajuste; setContextMenu(null); viewDetail(aj, "pdf"); }}
+            >
+              <Download className="w-4 h-4 text-muted-foreground" /> Descargar PDF
+            </button>
+          </div>
+          {!contextMenu.ajuste.anulado && (
+            <div className="border-t py-1">
+              <button
+                className="flex items-center gap-2.5 w-full px-3 py-2 text-sm hover:bg-muted/60 transition-colors text-left text-red-600"
+                onClick={() => { const aj = contextMenu.ajuste; setContextMenu(null); viewDetail(aj, "anular"); }}
+              >
+                <Ban className="w-4 h-4" /> Anular ajuste
+              </button>
             </div>
-            <div className="border rounded-lg overflow-hidden">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="bg-muted/50 border-b text-xs text-muted-foreground">
-                    <th className="text-left py-2 px-3 font-medium">Producto</th>
-                    <th className="text-center py-2 px-3 font-medium">Cant.</th>
-                    <th className="text-right py-2 px-3 font-medium">Stock</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {detailItems.map((item, i) => (
-                    <tr key={i} className={`border-b last:border-0 ${item.direccion === "out" ? "bg-red-50/40" : item.direccion === "in" ? "bg-emerald-50/40" : ""}`}>
-                      <td className="py-2 px-3">
-                        <div className="flex items-center gap-1.5">
-                          {item.direccion === "out" && <Badge variant="outline" className="h-5 px-1.5 text-[9px] font-semibold border-red-300 text-red-700 bg-red-50">SALE</Badge>}
-                          {item.direccion === "in" && <Badge variant="outline" className="h-5 px-1.5 text-[9px] font-semibold border-emerald-300 text-emerald-700 bg-emerald-50">ENTRA</Badge>}
-                          <p className="font-medium">{item.producto?.nombre || item.producto_id}</p>
-                        </div>
-                        <p className="text-xs text-muted-foreground font-mono mt-0.5">{item.producto?.codigo}</p>
-                      </td>
-                      <td className="py-2 px-3 text-center">
-                        <Badge variant={item.stock_despues >= item.stock_antes ? "default" : "destructive"}>
-                          {item.stock_despues >= item.stock_antes ? "+" : "-"}{item.cantidad}
-                        </Badge>
-                      </td>
-                      <td className="py-2 px-3 text-right text-xs text-muted-foreground">
-                        {item.stock_antes} → {item.stock_despues}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </DialogContent>
-        </Dialog>
+          )}
+        </div>
       )}
 
     </div>

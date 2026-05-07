@@ -45,6 +45,22 @@ export const SITUACIONES_IVA = [
 // ─── Units ───
 export const UNIDADES_MEDIDA = ["Unidad", "Kg", "Litro", "Metro", "Caja"] as const;
 
+// ─── Categorías de egresos de caja ───
+// Usadas en el form de egreso (admin/caja) y en reportes mensuales.
+export const EGRESO_CATEGORIAS = [
+  "Sueldos",
+  "Nafta / Combustible",
+  "Servicios",
+  "Alquiler",
+  "Impuestos",
+  "Mantenimiento",
+  "Insumos",
+  "Mercadería",
+  "Retiro personal",
+  "Otros",
+] as const;
+export type EgresoCategoria = (typeof EGRESO_CATEGORIAS)[number];
+
 // ─── Stock Movement Types ───
 export const STOCK_MOVIMIENTO_TIPOS = {
   VENTA: "venta",

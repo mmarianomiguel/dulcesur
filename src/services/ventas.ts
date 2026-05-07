@@ -114,6 +114,7 @@ class CajaService extends BaseService<{
     referenciaId?: string;
     referenciaTipo?: string;
     subTipo?: string;
+    categoria?: string;
   }) {
     return this.create({
       fecha: todayARG(),
@@ -125,6 +126,7 @@ class CajaService extends BaseService<{
       referencia_id: opts.referenciaId || null,
       referencia_tipo: opts.referenciaTipo || null,
       sub_tipo: opts.subTipo || null,
+      categoria: opts.categoria || null,
     } as never);
   }
 

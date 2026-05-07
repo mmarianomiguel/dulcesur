@@ -690,31 +690,23 @@ export default function DetallePedido({
       {/* Delete Confirmation Dialog */}
       <Dialog open={deleteConfirm} onOpenChange={(open) => !open && setDeleteConfirm(false)}>
         <DialogContent className="max-w-sm">
-          <div className="flex flex-col items-center gap-4 py-4">
-            <div className="w-14 h-14 rounded-full bg-red-100 dark:bg-red-900/30 flex items-center justify-center">
-              <AlertTriangle className="w-7 h-7 text-red-500" />
-            </div>
-            <div className="text-center">
-              <p className="text-lg font-semibold">Eliminar pedido</p>
-              <p className="text-sm text-muted-foreground mt-2">
-                Estas seguro de eliminar el pedido <strong>{pedidoDisplayNum(detailPedido.id)}</strong>?
-              </p>
-              <p className="text-xs text-muted-foreground mt-1">Esta accion no se puede deshacer.</p>
-            </div>
-            <div className="flex gap-2 w-full">
-              <Button variant="outline" className="flex-1" onClick={() => setDeleteConfirm(false)}>
-                Cancelar
-              </Button>
-              <Button
-                variant="destructive"
-                className="flex-1"
-                onClick={handleDelete}
-                disabled={deleting}
-              >
-                {deleting ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Trash2 className="w-4 h-4 mr-2" />}
-                Eliminar
-              </Button>
-            </div>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-red-600">
+              <AlertTriangle className="w-5 h-5" /> Eliminar pedido
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-2 text-sm">
+            <p>¿Seguro que querés eliminar el pedido <strong>{pedidoDisplayNum(detailPedido.id)}</strong>?</p>
+            <p className="text-xs text-muted-foreground">Esta acción no se puede deshacer.</p>
+          </div>
+          <div className="flex justify-end gap-2 mt-3">
+            <Button variant="outline" size="sm" onClick={() => setDeleteConfirm(false)} disabled={deleting}>
+              Cancelar
+            </Button>
+            <Button variant="destructive" size="sm" onClick={handleDelete} disabled={deleting}>
+              {deleting ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Trash2 className="w-4 h-4 mr-2" />}
+              Eliminar
+            </Button>
           </div>
         </DialogContent>
       </Dialog>

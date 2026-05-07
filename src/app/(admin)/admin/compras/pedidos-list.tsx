@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -16,6 +16,8 @@ import {
 import {
   Dialog,
   DialogContent,
+  DialogHeader,
+  DialogTitle,
 } from "@/components/ui/dialog";
 import {
   FileText,
@@ -142,6 +144,32 @@ export function PedidosList({
   const [deleteConfirm, setDeleteConfirm] = useState<{ open: boolean; pedido: PedidoRow | null }>({ open: false, pedido: null });
   const [deleting, setDeleting] = useState(false);
   const [mostrarIngresados, setMostrarIngresados] = useState(false);
+  const [contextMenu, setContextMenu] = useState<{ x: number; y: number; pedido: PedidoRow } | null>(null);
+
+  const openContextMenu = (e: React.MouseEvent, pedido: PedidoRow) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const menuW = 220, menuH = 240;
+    let x = e.clientX, y = e.clientY;
+    if (x + menuW > window.innerWidth - 8) x = window.innerWidth - menuW - 8;
+    if (y + menuH > window.innerHeight - 8) y = window.innerHeight - menuH - 8;
+    if (y < 8) y = 8;
+    setContextMenu({ x, y, pedido });
+  };
+
+  useEffect(() => {
+    if (!contextMenu) return;
+    const close = () => setContextMenu(null);
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") close(); };
+    document.addEventListener("click", close);
+    document.addEventListener("keydown", onKey);
+    window.addEventListener("scroll", close, true);
+    return () => {
+      document.removeEventListener("click", close);
+      document.removeEventListener("keydown", onKey);
+      window.removeEventListener("scroll", close, true);
+    };
+  }, [contextMenu]);
 
   /* ── Stats ── */
   const borradores = pedidos.filter((p) => p.estado === "Borrador").length;
@@ -342,6 +370,7 @@ export function PedidosList({
                 key={p.id}
                 className={`rounded-xl border border-l-4 ${cfg.borderColor} bg-card p-4 hover:shadow-md transition-all cursor-pointer group`}
                 onClick={() => onOpenDetail(p)}
+                onContextMenu={(e) => openContextMenu(e, p)}
               >
                 {/* Top row: PED number + cost */}
                 <div className="flex items-start justify-between gap-2 mb-1">
@@ -421,34 +450,76 @@ export function PedidosList({
         </div>
       )}
 
+      {/* Context menu */}
+      {contextMenu && (() => {
+        const p = contextMenu.pedido;
+        const canDelete = p.estado === "Borrador" || p.estado === "Enviado";
+        const canConfirmar = p.estado === "Borrador";
+        const canRegistrar = p.estado === "Enviado" || p.estado === "Recibido Parcial";
+        return (
+          <div
+            className="fixed z-50 bg-background border border-border rounded-xl shadow-lg py-1 min-w-[220px]"
+            style={{ left: contextMenu.x, top: contextMenu.y, maxHeight: "calc(100vh - 16px)", overflowY: "auto" }}
+            onClick={(e) => e.stopPropagation()}
+            onContextMenu={(e) => e.preventDefault()}
+          >
+            <div className="px-3 py-2 border-b">
+              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide truncate">
+                {pedidoDisplayNum(p.id)} · {p.estado}
+              </p>
+              <p className="text-[11px] text-muted-foreground truncate mt-0.5">
+                {p.proveedores?.nombre || "—"}
+              </p>
+            </div>
+            <div className="py-1">
+              <button className="flex items-center gap-2.5 w-full px-3 py-2 text-sm hover:bg-muted/60 text-left" onClick={() => { setContextMenu(null); onOpenDetail(p); }}>
+                <Eye className="w-4 h-4 text-muted-foreground" /> Ver detalle
+              </button>
+              {canConfirmar && (
+                <button className="flex items-center gap-2.5 w-full px-3 py-2 text-sm hover:bg-muted/60 text-left text-blue-600" onClick={() => { setContextMenu(null); onRegistrarCompra(p); }}>
+                  <Send className="w-4 h-4" /> Confirmar pedido
+                </button>
+              )}
+              {canRegistrar && (
+                <button className="flex items-center gap-2.5 w-full px-3 py-2 text-sm hover:bg-muted/60 text-left text-emerald-600" onClick={() => { setContextMenu(null); onRegistrarCompra(p); }}>
+                  <Package className="w-4 h-4" /> Registrar recepción
+                </button>
+              )}
+            </div>
+            {canDelete && (
+              <div className="border-t py-1">
+                <button className="flex items-center gap-2.5 w-full px-3 py-2 text-sm hover:bg-muted/60 text-left text-red-600" onClick={() => { setContextMenu(null); setDeleteConfirm({ open: true, pedido: p }); }}>
+                  <Trash2 className="w-4 h-4" /> Eliminar pedido
+                </button>
+              </div>
+            )}
+          </div>
+        );
+      })()}
+
       {/* Delete Confirmation Dialog */}
       <Dialog open={deleteConfirm.open} onOpenChange={(open) => !open && setDeleteConfirm({ open: false, pedido: null })}>
         <DialogContent className="max-w-sm">
-          <div className="flex flex-col items-center gap-4 py-4">
-            <div className="w-14 h-14 rounded-full bg-red-100 dark:bg-red-900/30 flex items-center justify-center">
-              <AlertTriangle className="w-7 h-7 text-red-500" />
-            </div>
-            <div className="text-center">
-              <p className="text-lg font-semibold">Eliminar pedido</p>
-              <p className="text-sm text-muted-foreground mt-2">
-                Estas seguro de eliminar el pedido <strong>{deleteConfirm.pedido ? pedidoDisplayNum(deleteConfirm.pedido.id) : ""}</strong>?
-              </p>
-              <p className="text-xs text-muted-foreground mt-1">Esta accion no se puede deshacer.</p>
-            </div>
-            <div className="flex gap-2 w-full">
-              <Button variant="outline" className="flex-1" onClick={() => setDeleteConfirm({ open: false, pedido: null })}>
-                Cancelar
-              </Button>
-              <Button
-                variant="destructive"
-                className="flex-1"
-                onClick={handleDelete}
-                disabled={deleting}
-              >
-                {deleting ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Trash2 className="w-4 h-4 mr-2" />}
-                Eliminar
-              </Button>
-            </div>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-red-600">
+              <AlertTriangle className="w-5 h-5" /> Eliminar pedido
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-2 text-sm">
+            <p>
+              ¿Seguro que querés eliminar el pedido{" "}
+              <strong>{deleteConfirm.pedido ? pedidoDisplayNum(deleteConfirm.pedido.id) : ""}</strong>?
+            </p>
+            <p className="text-xs text-muted-foreground">Esta acción no se puede deshacer.</p>
+          </div>
+          <div className="flex justify-end gap-2 mt-3">
+            <Button variant="outline" size="sm" onClick={() => setDeleteConfirm({ open: false, pedido: null })} disabled={deleting}>
+              Cancelar
+            </Button>
+            <Button variant="destructive" size="sm" onClick={handleDelete} disabled={deleting}>
+              {deleting ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Trash2 className="w-4 h-4 mr-2" />}
+              Eliminar
+            </Button>
           </div>
         </DialogContent>
       </Dialog>
