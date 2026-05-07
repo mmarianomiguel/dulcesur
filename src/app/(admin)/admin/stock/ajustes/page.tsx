@@ -960,7 +960,7 @@ export default function AjustesStockPage() {
 
     logAudit({
       userName: currentUserName,
-      action: "CANCEL",
+      action: "ANULACION",
       module: "stock",
       entityId: aj.id,
       after: { motivo: aj.motivo, items: items.length, motivoAnulacion },
