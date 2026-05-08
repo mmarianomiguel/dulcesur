@@ -31,8 +31,10 @@ const fetchProductoData = unstable_cache(async (productId: string) => {
   ] = await Promise.all([
     supabase
       .from("productos")
-      .select("id, nombre, descripcion_detallada, precio, precio_oferta, precio_oferta_hasta, imagen_url, codigo, unidad_medida, stock, categoria_id, subcategoria_id, marca_id, es_combo, updated_at, fecha_actualizacion, created_at, precio_anterior, categorias(nombre, restringida), marcas(nombre)")
+      .select("id, nombre, descripcion_detallada, precio, precio_oferta, precio_oferta_hasta, imagen_url, codigo, unidad_medida, stock, categoria_id, subcategoria_id, marca_id, es_combo, updated_at, fecha_actualizacion, created_at, precio_anterior, visibilidad, activo, categorias(nombre, restringida), marcas(nombre)")
       .eq("id", productId)
+      .eq("activo", true)
+      .neq("visibilidad", "oculto")
       .single(),
     supabase
       .from("presentaciones")

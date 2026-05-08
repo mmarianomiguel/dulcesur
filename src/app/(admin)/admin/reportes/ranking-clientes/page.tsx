@@ -67,8 +67,11 @@ export default function RankingClientesPage() {
 
     const clientMap: Record<string, ClienteRank> = {};
     vList.forEach((v: any) => {
-      const id = v.cliente_id || "sin-cliente";
-      const name = v.clientes?.nombre || "Consumidor Final";
+      // Excluir ventas sin cliente para no inflar el ranking con "Consumidor Final"
+      // (que agrupa todas las ventas anónimas bajo un único id falso).
+      if (!v.cliente_id) return;
+      const id = v.cliente_id;
+      const name = v.clientes?.nombre || "Cliente sin nombre";
       if (!clientMap[id]) {
         clientMap[id] = { cliente_id: id, nombre: name, total: 0, qty: 0, ticketPromedio: 0, ultimaCompra: "" };
       }
@@ -83,12 +86,12 @@ export default function RankingClientesPage() {
       c.ticketPromedio = c.qty > 0 ? Math.round(c.total / c.qty) : 0;
     });
 
-    // Get top product per client from venta_items
+    // Get top product per client from venta_items — solo ventas con cliente.
     const ventasByClient: Record<string, string[]> = {};
     vList.forEach((v: any) => {
-      const cid = v.cliente_id || "sin-cliente";
-      if (!ventasByClient[cid]) ventasByClient[cid] = [];
-      ventasByClient[cid].push(v.id);
+      if (!v.cliente_id) return;
+      if (!ventasByClient[v.cliente_id]) ventasByClient[v.cliente_id] = [];
+      ventasByClient[v.cliente_id].push(v.id);
     });
 
     const allVentaIds = vList.map((v: any) => v.id);
