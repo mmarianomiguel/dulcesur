@@ -221,6 +221,9 @@ export default function DescuentosPage() {
         if (error) throw error;
         showAdminToast("Descuento creado correctamente", "success");
       }
+      // Invalidar el cache de la tienda — la página /ofertas usa unstable_cache
+      // con tag "productos" y no se enteraba sola de cambios en descuentos.
+      fetch("/api/revalidate-tienda", { method: "POST" }).catch(() => {});
       setSaving(false); setDialogOpen(false); resetWizard(); fetchDescuentos();
     } catch (err: any) {
       const msg = err.message || "Error al guardar el descuento";
@@ -231,6 +234,7 @@ export default function DescuentosPage() {
   const toggleActivo = async (d: Descuento) => {
     const { error } = await supabase.from("descuentos").update({ activo: !d.activo, updated_at: new Date().toISOString() }).eq("id", d.id);
     if (error) { showAdminToast("Error al cambiar estado: " + error.message, "error"); return; }
+    fetch("/api/revalidate-tienda", { method: "POST" }).catch(() => {});
     fetchDescuentos();
   };
 
@@ -240,6 +244,7 @@ export default function DescuentosPage() {
       onConfirm: async () => {
         const { error } = await supabase.from("descuentos").delete().eq("id", id);
         if (error) { showAdminToast("Error al eliminar: " + error.message, "error"); return; }
+        fetch("/api/revalidate-tienda", { method: "POST" }).catch(() => {});
         showAdminToast("Descuento eliminado", "success"); fetchDescuentos();
       },
     });

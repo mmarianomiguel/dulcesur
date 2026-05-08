@@ -404,6 +404,14 @@ export default function NotaCreditoPage() {
   const handleSave = async () => {
     const validItems = items.filter((i) => i.qty > 0 && i.subtotal > 0);
     if (validItems.length === 0) { showAdminToast("Agregá al menos un item con cantidad mayor a 0", "error"); setSaving(false); return; }
+    // Bloquear NC sobre venta origen anulada — antes se permitía y dejaba NC fantasma.
+    if (origenId && origenId !== "none") {
+      const origenVenta = clientVentas.find((v) => v.id === origenId);
+      if (origenVenta && (origenVenta as any).estado === "anulada") {
+        showAdminToast("No se puede crear una nota de crédito sobre una venta anulada", "error");
+        return;
+      }
+    }
     setSaving(true);
 
     const letra = getTipoFactura(selectedClient);

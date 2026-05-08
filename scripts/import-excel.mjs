@@ -146,7 +146,8 @@ async function main() {
         stock_minimo: stockMin,
         stock_maximo: stockMax,
         activo: true,
-        visibilidad: "visible",
+        // Preservar visibilidad existente — si admin ocultó el producto manualmente
+        // (descontinuado, no listo para vender), no debe re-aparecer al re-importar.
         updated_at: new Date().toISOString(),
       };
 

@@ -99,7 +99,9 @@ export default function DireccionesPage() {
     const payload = { ...form, cliente_auth_id: clienteId };
 
     if (editingId) {
-      await supabase.from("cliente_direcciones").update(payload).eq("id", editingId);
+      // Filtrar por cliente_auth_id también — defensa contra IDOR desde DevTools.
+      // (RLS apropiada todavía pendiente — ver TODO en audit-fixes README.)
+      await supabase.from("cliente_direcciones").update(payload).eq("id", editingId).eq("cliente_auth_id", clienteId);
       showToast("Dirección actualizada");
     } else {
       await supabase.from("cliente_direcciones").insert(payload);
@@ -135,7 +137,8 @@ export default function DireccionesPage() {
 
   const executeDelete = async () => {
     if (!clienteId || confirmDeleteId === null) return;
-    await supabase.from("cliente_direcciones").delete().eq("id", confirmDeleteId);
+    // Defensa contra IDOR: filtrar también por cliente_auth_id.
+    await supabase.from("cliente_direcciones").delete().eq("id", confirmDeleteId).eq("cliente_auth_id", clienteId);
     showToast("Dirección eliminada", "info");
     setConfirmDeleteId(null);
     fetchDirecciones(clienteId);

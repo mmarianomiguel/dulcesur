@@ -294,22 +294,28 @@ export default function DetalleCompra({
         0
       );
 
-      // 1. Subtract returned quantities from product stock (fresh read first)
+      // 1. Subtract returned quantities from product stock — atomic vía RPC.
+      // Si alguno falla, abortamos antes de tocar caja/CC para evitar quedar
+      // con stock decrementado y movimientos financieros sin contraparte.
+      const stockReverts: Array<{ producto_id: string; cantidad: number }> = [];
       for (const item of itemsToReturn) {
         if (!item.producto_id) continue;
-        const { data: prod } = await supabase
-          .from("productos")
-          .select("stock")
-          .eq("id", item.producto_id)
-          .maybeSingle();
-        if (!prod) continue;
-        const stockAntes = prod.stock;
-        const newStock = stockAntes - item.cantidad_devolver;
-        await supabase
-          .from("productos")
-          .update(buildStockUpdate(newStock, stockAntes))
-          .eq("id", item.producto_id);
+        const { data: stockResult, error: stockErr } = await supabase.rpc("atomic_update_stock", {
+          p_producto_id: item.producto_id,
+          p_change: -item.cantidad_devolver,
+          p_allow_negative: true,
+        });
+        if (stockErr) {
+          // Rollback de los stocks ya descontados antes de abortar
+          for (const r of stockReverts) {
+            await supabase.rpc("atomic_update_stock", { p_producto_id: r.producto_id, p_change: r.cantidad, p_allow_negative: true });
+          }
+          throw new Error(`Error descontando stock de ${item.descripcion}: ${stockErr.message}`);
+        }
+        stockReverts.push({ producto_id: item.producto_id, cantidad: item.cantidad_devolver });
 
+        const stockAntes = stockResult?.stock_antes ?? 0;
+        const newStock = stockResult?.stock_despues ?? (stockAntes - item.cantidad_devolver);
         await supabase.from("stock_movimientos").insert({
           producto_id: item.producto_id,
           tipo: "devolucion_proveedor",
@@ -613,19 +619,20 @@ export default function DetalleCompra({
                 const doConfirm = async () => {
                   setSaving(true);
                   try {
-                    // Execute stock, caja, price updates for pending purchase
+                    // Stock atómico vía RPC para evitar race con doble click
+                    // o dos pestañas confirmando la misma compra simultáneamente.
                     for (const item of detailItems) {
-                      const { data: prodData } = await supabase
-                        .from("productos")
-                        .select("stock")
-                        .eq("id", item.producto_id)
-                        .maybeSingle();
-                      const stockAntes = prodData?.stock ?? 0;
-                      const newStock = stockAntes + item.cantidad;
-                      await supabase
-                        .from("productos")
-                        .update(buildStockUpdate(newStock, stockAntes))
-                        .eq("id", item.producto_id);
+                      const { data: stockResult, error: stockErr } = await supabase.rpc("atomic_update_stock", {
+                        p_producto_id: item.producto_id,
+                        p_change: item.cantidad,
+                      });
+                      if (stockErr) {
+                        showAdminToast(`Error actualizando stock de ${item.descripcion}: ${stockErr.message}`, "error");
+                        setSaving(false);
+                        return;
+                      }
+                      const stockAntes = stockResult?.stock_antes ?? 0;
+                      const newStock = stockResult?.stock_despues ?? (stockAntes + item.cantidad);
                       await supabase.from("stock_movimientos").insert({
                         producto_id: item.producto_id,
                         tipo: "compra",
@@ -638,9 +645,10 @@ export default function DetalleCompra({
                         orden_id: detailCompra.id,
                       });
                     }
-                    // Register caja
+                    // Register caja — sólo si forma_pago es válida (no NULL)
                     if (
                       detailCompra.total > 0 &&
+                      detailCompra.forma_pago &&
                       detailCompra.forma_pago !== "Cuenta Corriente"
                     ) {
                       await supabase.from("caja_movimientos").insert({

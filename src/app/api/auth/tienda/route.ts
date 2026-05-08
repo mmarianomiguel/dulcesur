@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { createServerClient } from "@supabase/ssr";
 import bcrypt from "bcryptjs";
 import webpush from "web-push";
 
@@ -7,6 +8,25 @@ const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 );
+
+// Verifica que el caller es un usuario activo del sistema admin.
+// Cualquier usuario activo puede resetear contraseñas de clientes (lo hacen al
+// crear cuenta para un cliente o cuando el cliente lo pide telefónicamente).
+async function isAdminCaller(req: NextRequest): Promise<boolean> {
+  const ssr = createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    { cookies: { getAll() { return req.cookies.getAll(); }, setAll() {} } }
+  );
+  const { data: { user } } = await ssr.auth.getUser();
+  if (!user) return false;
+  const { data: usuario } = await supabase
+    .from("usuarios")
+    .select("activo")
+    .eq("auth_id", user.id)
+    .maybeSingle();
+  return !!usuario?.activo;
+}
 
 if (process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY && process.env.VAPID_PRIVATE_KEY) {
   webpush.setVapidDetails(
@@ -78,6 +98,11 @@ export async function POST(req: NextRequest) {
     } else if (action === "change-password") {
       return handleChangePassword(body);
     } else if (action === "reset-password") {
+      // Solo el panel admin puede invocar este endpoint sin contraseña actual.
+      // Antes era llamable por cualquiera con un clienteAuthId — agujero crítico.
+      if (!(await isAdminCaller(req))) {
+        return NextResponse.json({ error: "No autorizado" }, { status: 401 });
+      }
       return handleResetPassword(body);
     } else if (action === "create-from-admin") {
       return handleCreateFromAdmin(body);
