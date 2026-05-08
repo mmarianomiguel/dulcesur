@@ -697,6 +697,29 @@ export default function ListadoVentasPage() {
   const handleAnular = async () => {
     if (!anularVenta) return;
     if (anularVenta.estado === "anulada") { showAdminToast("Esta venta ya fue anulada", "error"); setAnularVenta(null); return; }
+
+    // Bloquear anulación si la venta tiene NCs activas — el reverso de saldo
+    // sería incorrecto porque las NCs ya redujeron lo adeudado por el cliente.
+    // Hay que revertir/anular la NC primero.
+    const isNCSelf = anularVenta.tipo_comprobante?.includes("Nota de Crédito");
+    if (!isNCSelf) {
+      const { data: ncsActivas } = await supabase
+        .from("ventas")
+        .select("id, numero")
+        .eq("remito_origen_id", anularVenta.id)
+        .ilike("tipo_comprobante", "Nota de Crédito%")
+        .neq("estado", "anulada")
+        .limit(5);
+      if (ncsActivas && ncsActivas.length > 0) {
+        const numeros = ncsActivas.map((n: any) => n.numero).join(", ");
+        showAdminToast(
+          `No se puede anular: la venta tiene Nota(s) de Crédito asociadas (${numeros}). Anulá primero la NC.`,
+          "error",
+        );
+        return;
+      }
+    }
+
     setAnulando(true);
     const v = anularVenta;
     const hoy = new Date().toLocaleDateString("en-CA", { timeZone: "America/Argentina/Buenos_Aires" });
