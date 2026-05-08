@@ -633,23 +633,34 @@ export default function NuevaCompra({
           const aplicarCosto = item.actualizarCosto && costoCambio;
           const aplicarPrecio = item.actualizarPrecio && item.costo_original > 0;
           if (aplicarCosto || aplicarPrecio) {
-            // fecha_actualizacion solo se bumpea cuando cambia el PRECIO (es lo que usa "aumentos recientes").
+            // fecha_actualizacion solo se bumpea cuando cambia el PRECIO real
+            // (es lo que usa "aumentos recientes" y el orden por cambio de precio).
+            // Antes se bumpeaba aunque el cálculo diera el mismo precio (cuando
+            // el costo de la compra es igual al actual, el marginRatio mantiene
+            // el precio igual). Eso hacía aparecer productos como "modificados"
+            // tras ingresar compras donde no cambiaba el PVP.
             const productoUpdate: Record<string, any> = {};
             let newPrecio = item.precio_original;
             if (aplicarCosto) {
               productoUpdate.costo = item.costo_unitario;
             }
             if (aplicarPrecio) {
-              productoUpdate.fecha_actualizacion = todayString();
               const marginRatio = item.precio_original / item.costo_original;
               newPrecio = item.precio_nuevo_custom || roundPrice(item.costo_unitario * marginRatio);
-              productoUpdate.precio = newPrecio;
-              productoUpdate.precio_anterior = item.precio_original;
+              const precioRealmenteCambio = Math.abs(newPrecio - item.precio_original) > 0.01;
+              if (precioRealmenteCambio) {
+                productoUpdate.fecha_actualizacion = todayString();
+                productoUpdate.precio = newPrecio;
+                productoUpdate.precio_anterior = item.precio_original;
+              }
             }
-            await supabase
-              .from("productos")
-              .update(productoUpdate)
-              .eq("id", item.producto_id);
+            // Si solo cambió costo (sin precio que se haya tocado), igual hay que actualizar
+            if (Object.keys(productoUpdate).length > 0) {
+              await supabase
+                .from("productos")
+                .update(productoUpdate)
+                .eq("id", item.producto_id);
+            }
 
             // Actualizar presentaciones si cambió precio o costo
             if (aplicarPrecio || aplicarCosto) {
