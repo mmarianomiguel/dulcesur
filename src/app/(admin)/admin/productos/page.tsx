@@ -21,6 +21,9 @@ import {
   SelectItem,
   SelectTrigger,
   SelectValue,
+  SelectGroup,
+  SelectLabel,
+  SelectSeparator,
 } from "@/components/ui/select";
 import {
   Dialog,
@@ -1421,8 +1424,11 @@ export default function ProductosPage() {
               if (marcaId) updatePayload.marca_id = marcaId;
 
               if (Object.keys(updatePayload).length > 0) {
-                // Only update fecha_actualizacion when price/cost changed
-                if (updatePayload.precio || updatePayload.costo) {
+                // fecha_actualizacion SOLO se bumpea cuando cambia el PRECIO
+                // (alimenta "última modificación" y página de aumentos recientes).
+                // Cambios de costo o stock no la tocan — sino al ingresar una
+                // compra el producto aparecía como "recién modificado".
+                if (updatePayload.precio) {
                   updatePayload.fecha_actualizacion = new Date().toISOString();
                 }
                 await supabase.from("productos").update(updatePayload).eq("id", existing.id);
@@ -1719,6 +1725,7 @@ export default function ProductosPage() {
         if (sortBy === "precio_asc") return a.precio - b.precio;
         if (sortBy === "precio_desc") return b.precio - a.precio;
         if (sortBy === "stock_asc") return a.stock - b.stock;
+        if (sortBy === "stock_desc") return b.stock - a.stock;
         return 0;
       });
     }
@@ -2901,23 +2908,40 @@ export default function ProductosPage() {
                   <Select value={sortBy} onValueChange={(v) => { setSortBy(v ?? "nombre_asc"); setPage(1); }}>
                     <SelectTrigger className="w-full">
                       {{
-                        nombre_asc: "Nombre A→Z",
-                        nombre_desc: "Nombre Z→A",
-                        updated_desc: "Últ. modificación (reciente)",
-                        updated_asc: "Últ. modificación (antigua)",
-                        precio_asc: "Precio (menor)",
-                        precio_desc: "Precio (mayor)",
-                        stock_asc: "Stock (menor)",
-                      }[sortBy] || "Nombre A→Z"}
+                        nombre_asc: "Nombre · A → Z",
+                        nombre_desc: "Nombre · Z → A",
+                        precio_desc: "Precio · de mayor a menor",
+                        precio_asc: "Precio · de menor a mayor",
+                        stock_desc: "Stock · de mayor a menor",
+                        stock_asc: "Stock · de menor a mayor",
+                        updated_desc: "Cambio de precio · más reciente",
+                        updated_asc: "Cambio de precio · más antiguo",
+                      }[sortBy] || "Nombre · A → Z"}
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="nombre_asc">Nombre A→Z</SelectItem>
-                      <SelectItem value="nombre_desc">Nombre Z→A</SelectItem>
-                      <SelectItem value="updated_desc">Últ. modificación (reciente)</SelectItem>
-                      <SelectItem value="updated_asc">Últ. modificación (antigua)</SelectItem>
-                      <SelectItem value="precio_asc">Precio (menor)</SelectItem>
-                      <SelectItem value="precio_desc">Precio (mayor)</SelectItem>
-                      <SelectItem value="stock_asc">Stock (menor)</SelectItem>
+                      <SelectGroup>
+                        <SelectLabel>Nombre</SelectLabel>
+                        <SelectItem value="nombre_asc">A → Z</SelectItem>
+                        <SelectItem value="nombre_desc">Z → A</SelectItem>
+                      </SelectGroup>
+                      <SelectSeparator />
+                      <SelectGroup>
+                        <SelectLabel>Precio</SelectLabel>
+                        <SelectItem value="precio_desc">De mayor a menor</SelectItem>
+                        <SelectItem value="precio_asc">De menor a mayor</SelectItem>
+                      </SelectGroup>
+                      <SelectSeparator />
+                      <SelectGroup>
+                        <SelectLabel>Stock</SelectLabel>
+                        <SelectItem value="stock_desc">De mayor a menor</SelectItem>
+                        <SelectItem value="stock_asc">De menor a mayor</SelectItem>
+                      </SelectGroup>
+                      <SelectSeparator />
+                      <SelectGroup>
+                        <SelectLabel>Cambio de precio</SelectLabel>
+                        <SelectItem value="updated_desc">Más reciente arriba</SelectItem>
+                        <SelectItem value="updated_asc">Más antiguo arriba</SelectItem>
+                      </SelectGroup>
                     </SelectContent>
                   </Select>
                 </div>
