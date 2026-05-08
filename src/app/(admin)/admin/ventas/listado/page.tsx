@@ -1422,10 +1422,14 @@ export default function ListadoVentasPage() {
       .order("created_at", { ascending: false })
       .limit(200);
 
-    // Apply same date filter as ventas
+    // Apply same date filter as ventas — usar offset ART (-03:00) para que el rango
+    // local en Argentina mapee correctamente al created_at en UTC. Sin esto, los pedidos
+    // creados después de las 21hs local quedan fuera del filtro (su created_at UTC cae
+    // al día siguiente).
+    const TZ = "-03:00";
     const todayStr = todayARG();
     if (quickPeriod === "today") {
-      ptQuery = ptQuery.gte("created_at", todayStr + "T00:00:00").lte("created_at", todayStr + "T23:59:59");
+      ptQuery = ptQuery.gte("created_at", todayStr + "T00:00:00" + TZ).lte("created_at", todayStr + "T23:59:59" + TZ);
     } else if (quickPeriod === "week") {
       const now = new Date();
       const dayOfWeek = now.getDay();
@@ -1433,22 +1437,22 @@ export default function ListadoVentasPage() {
       const monday = new Date(now);
       monday.setDate(now.getDate() - diffToMonday);
       const mondayStr = monday.toLocaleDateString("en-CA", { timeZone: "America/Argentina/Buenos_Aires" });
-      ptQuery = ptQuery.gte("created_at", mondayStr + "T00:00:00").lte("created_at", todayStr + "T23:59:59");
+      ptQuery = ptQuery.gte("created_at", mondayStr + "T00:00:00" + TZ).lte("created_at", todayStr + "T23:59:59" + TZ);
     } else if (quickPeriod === "month") {
       const now = new Date();
       const firstDay = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-01`;
-      ptQuery = ptQuery.gte("created_at", firstDay + "T00:00:00").lte("created_at", todayStr + "T23:59:59");
+      ptQuery = ptQuery.gte("created_at", firstDay + "T00:00:00" + TZ).lte("created_at", todayStr + "T23:59:59" + TZ);
     } else if (filterMode === "day") {
-      ptQuery = ptQuery.gte("created_at", filterDay + "T00:00:00").lte("created_at", filterDay + "T23:59:59");
+      ptQuery = ptQuery.gte("created_at", filterDay + "T00:00:00" + TZ).lte("created_at", filterDay + "T23:59:59" + TZ);
     } else if (filterMode === "month") {
       const m = filterMonth.padStart(2, "0");
       const start = `${filterYear}-${m}-01`;
       const nextMonth = Number(filterMonth) === 12 ? 1 : Number(filterMonth) + 1;
       const nextYear = Number(filterMonth) === 12 ? Number(filterYear) + 1 : Number(filterYear);
       const end = `${nextYear}-${String(nextMonth).padStart(2, "0")}-01`;
-      ptQuery = ptQuery.gte("created_at", start + "T00:00:00").lt("created_at", end + "T00:00:00");
+      ptQuery = ptQuery.gte("created_at", start + "T00:00:00" + TZ).lt("created_at", end + "T00:00:00" + TZ);
     } else if (filterMode === "range" && filterFrom && filterTo) {
-      ptQuery = ptQuery.gte("created_at", filterFrom + "T00:00:00").lte("created_at", filterTo + "T23:59:59");
+      ptQuery = ptQuery.gte("created_at", filterFrom + "T00:00:00" + TZ).lte("created_at", filterTo + "T23:59:59" + TZ);
     }
 
     const { data } = await ptQuery;
