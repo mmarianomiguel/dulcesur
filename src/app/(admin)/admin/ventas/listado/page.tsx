@@ -1348,8 +1348,19 @@ export default function ListadoVentasPage() {
       else if (v.forma_pago === "Transferencia") pagoTr = v.total;
       else if (v.forma_pago === "Cuenta Corriente") pagoCC = v.total;
       else if (v.forma_pago === "Mixto") {
-        pagoEf = ptPrint?.monto_efectivo || (v as any).monto_efectivo || 0;
-        pagoTr = ptPrint?.monto_transferencia || (v as any).monto_transferencia || 0;
+        // Pedido Mixto pendiente de pago (típico web): el cliente declaró
+        // "monto_efectivo" en el checkout. Si después se modifica el pedido y el
+        // total cambia, el efectivo declarado queda firme y la diferencia
+        // (incluyendo el recargo de transferencia) va por transferencia.
+        // Sino el comprobante mostraba el split viejo y no cuadraba con el total.
+        const efectivoDeclarado = ptPrint?.monto_efectivo || (v as any).monto_efectivo || 0;
+        if (efectivoDeclarado >= v.total) {
+          pagoEf = v.total;
+          pagoTr = 0;
+        } else {
+          pagoEf = efectivoDeclarado;
+          pagoTr = Math.max(0, v.total - efectivoDeclarado);
+        }
       }
     }
     // Derive formaPago from actual payments (v.forma_pago may be stale if cobro was just registered)
