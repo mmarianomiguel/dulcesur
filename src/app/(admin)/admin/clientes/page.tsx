@@ -373,6 +373,22 @@ export default function ClientesPage() {
   const handleSave = async () => {
     if (savingClient) return;
     if (!form.nombre.trim()) { showAdminToast("El nombre del cliente es obligatorio.", "error"); return; }
+
+    // Validar CUIT / DNI duplicado contra otros clientes activos
+    if (form.cuit?.trim() || form.numero_documento?.trim()) {
+      let dupQuery = supabase.from("clientes").select("id, nombre").limit(1);
+      const orParts: string[] = [];
+      if (form.cuit?.trim()) orParts.push(`cuit.eq.${form.cuit.trim()}`);
+      if (form.numero_documento?.trim()) orParts.push(`numero_documento.eq.${form.numero_documento.trim()}`);
+      if (orParts.length > 0) dupQuery = dupQuery.or(orParts.join(","));
+      if (editingClient?.id) dupQuery = dupQuery.neq("id", editingClient.id);
+      const { data: duplicado } = await dupQuery.maybeSingle();
+      if (duplicado) {
+        showAdminToast(`Ya existe un cliente con ese CUIT/DNI: ${duplicado.nombre}`, "error");
+        return;
+      }
+    }
+
     setSavingClient(true);
     const selectedZona = zonas.find((z) => z.id === form.zona_entrega);
     const payload = {

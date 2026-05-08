@@ -30,12 +30,14 @@ class ClienteService extends BaseService<Cliente> {
   }
 
   async getConSaldo(): Promise<Cliente[]> {
+    // .range() explícito — sin esto Supabase trunca a 1000 silenciosamente.
     const { data } = await supabase
       .from(this.table)
       .select("*")
       .eq("activo", true)
       .gt("saldo", 0)
-      .order("saldo", { ascending: false });
+      .order("saldo", { ascending: false })
+      .range(0, 49999);
     return (data as Cliente[]) || [];
   }
 }
