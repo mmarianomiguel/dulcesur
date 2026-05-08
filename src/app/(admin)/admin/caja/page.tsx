@@ -3138,7 +3138,7 @@ export default function CajaPage() {
 
       {/* Dialog detalle de cards del resumen del día */}
       <Dialog open={resumenDetail !== null} onOpenChange={(o) => !o && setResumenDetail(null)}>
-        <DialogContent className="max-w-lg overflow-x-hidden">
+        <DialogContent className="max-w-xl overflow-x-hidden">
           {resumenDetail && (() => {
             const r = calcResumenDia(ventas, movements, cobroItemsTurno);
             const isCobroCC = (m: CajaMovimiento) =>
@@ -3165,8 +3165,13 @@ export default function CajaPage() {
                     <div className="rounded-lg border divide-y">
                       {cobros.map((m) => {
                         const desc = m.descripcion || "Cobro";
-                        const nombreMatch = desc.match(/—\s*(.+?)(\s*→|\s*$)/);
-                        const nombre = nombreMatch?.[1]?.trim() || desc;
+                        // Aceptar tanto em-dash (—) como guion normal (-) y limpiar prefijos/sufijos.
+                        const nombreMatch = desc.match(/[—-]\s*(.+?)(\s*→|\s*\(|\s*$)/);
+                        let nombre = (nombreMatch?.[1]?.trim() || desc)
+                          .replace(/^Cobro\s+(saldo\s+pendiente|CC)\s*[—-]?\s*/i, "")
+                          .replace(/\s*\(Venta\s+#[\d-]+\.*\)?$/i, "")
+                          .trim();
+                        if (!nombre) nombre = desc;
                         const saldado = !desc.toLowerCase().includes("parcial");
                         return (
                           <div key={m.id} className="flex items-start justify-between gap-3 px-3 py-2">
@@ -3333,15 +3338,26 @@ export default function CajaPage() {
                     <p className="text-sm text-muted-foreground py-4 text-center">Sin deudas nuevas hoy.</p>
                   ) : (
                     <div className="rounded-lg border divide-y">
-                      {r.deudores.map((d, i) => (
-                        <div key={i} className="flex items-start justify-between gap-3 px-3 py-2">
-                          <div className="min-w-0 flex-1">
-                            <p className="text-sm font-medium truncate">{d.cliente}</p>
-                            <p className="text-[11px] text-muted-foreground font-mono">{d.numero}</p>
-                          </div>
-                          <span className="text-sm font-semibold text-orange-600 tabular-nums shrink-0">{formatCurrency(d.monto)}</span>
-                        </div>
-                      ))}
+                      {(() => {
+                        const grouped = new Map<string, { cliente: string; total: number; ventas: number }>();
+                        for (const d of r.deudores) {
+                          const key = d.cliente;
+                          const prev = grouped.get(key);
+                          if (prev) { prev.total += d.monto; prev.ventas += 1; }
+                          else grouped.set(key, { cliente: d.cliente, total: d.monto, ventas: 1 });
+                        }
+                        return Array.from(grouped.values())
+                          .sort((a, b) => b.total - a.total)
+                          .map((g, i) => (
+                            <div key={i} className="flex items-start justify-between gap-3 px-3 py-2">
+                              <div className="min-w-0 flex-1">
+                                <p className="text-sm font-medium truncate">{g.cliente}</p>
+                                <p className="text-[11px] text-muted-foreground">{g.ventas === 1 ? "1 venta" : `${g.ventas} ventas`}</p>
+                              </div>
+                              <span className="text-sm font-semibold text-orange-600 tabular-nums shrink-0">{formatCurrency(g.total)}</span>
+                            </div>
+                          ));
+                      })()}
                     </div>
                   )}
                 </>

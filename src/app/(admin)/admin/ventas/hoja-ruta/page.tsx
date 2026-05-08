@@ -3026,13 +3026,16 @@ export default function HojaDeRutaPage() {
                       const totalAllocated = result.saldoAllocations.reduce((s, a) => s + a.aplicar, 0);
                       if (totalAllocated > 0 && payVenta.cliente_id) {
                         // Register in caja — the collector received this money
+                        // Si fue por transferencia, persistir cuenta destino para el desglose por cuenta.
+                        const metodoCobroSaldo = result.metodo === "Mixto" ? "Efectivo" : result.metodo;
                         await supabase.from("caja_movimientos").insert({
                           fecha: hoy, hora, tipo: "ingreso",
                           descripcion: `Cobro saldo adeudado — ${clienteNombre} (${result.saldoAllocations.filter(a => a.aplicar > 0).map(a => `#${a.numero}`).join(", ")})`,
-                          metodo_pago: result.metodo === "Mixto" ? "Efectivo" : result.metodo,
+                          metodo_pago: metodoCobroSaldo,
                           monto: totalAllocated,
                           referencia_id: payVenta.id,
                           referencia_tipo: "cobro_saldo",
+                          ...(metodoCobroSaldo === "Transferencia" && cuentaNombre ? { cuenta_bancaria: cuentaNombre } : {}),
                         });
 
                         // Saldo already updated in the combined RPC above (+CC -cobro)

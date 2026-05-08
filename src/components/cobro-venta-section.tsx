@@ -124,6 +124,19 @@ export function CobroVentaSection({
   const [pendingInvoices, setPendingInvoices] = useState<PendingInvoice[]>([]);
   const [saldoAllocations, setSaldoAllocations] = useState<FIFOAllocation[]>([]);
 
+  // Cobro parcial — el cliente paga un monto distinto al total del pedido.
+  // Distribuye FIFO: primero la venta del día, luego deuda anterior. Lo que falte para
+  // cubrir la venta queda como CC nueva. Solo Efectivo/Transferencia.
+  const [cobroParcialEnabled, setCobroParcialEnabled] = useState(false);
+  const [montoRecibido, setMontoRecibido] = useState<number>(0);
+
+  // Default monto recibido al activar: venta + saldo (cubre todo).
+  useEffect(() => {
+    if (cobroParcialEnabled) {
+      setMontoRecibido(montoVenta + Math.max(0, clienteSaldo));
+    }
+  }, [cobroParcialEnabled, montoVenta, clienteSaldo]);
+
   // ─── Pre-fill from defaults ───
   useEffect(() => {
     if (defaultMetodo) {
@@ -165,9 +178,12 @@ export function CobroVentaSection({
   const mixtoSum = mixtoEfectivo + mixtoTransferencia + mixtoCuentaCorriente;
   const mixtoRemaining = Math.round((montoVenta - mixtoSum) * 100) / 100;
 
+  const cobroParcialActivo = cobroParcialEnabled && (metodo === "Efectivo" || metodo === "Transferencia");
+
   // ─── Fetch pending invoices when cobrar saldo enabled ───
   useEffect(() => {
-    if (!cobrarSaldo || !clienteId || clienteSaldo <= 0) {
+    const necesitaFetch = cobrarSaldo || (cobroParcialActivo && clienteSaldo > 0);
+    if (!necesitaFetch || !clienteId || clienteSaldo <= 0) {
       setPendingInvoices([]);
       setSaldoAllocations([]);
       return;
@@ -227,7 +243,7 @@ export function CobroVentaSection({
     };
     fetchPending();
     return () => { cancelled = true; };
-  }, [cobrarSaldo, clienteId, clienteSaldo, ventaId]);
+  }, [cobrarSaldo, cobroParcialActivo, clienteId, clienteSaldo, ventaId]);
 
   // FIFO auto-allocation
   useEffect(() => {
@@ -267,10 +283,43 @@ export function CobroVentaSection({
     [saldoAllocations]
   );
 
+  // Split del cobro parcial — distribuye monto recibido FIFO: venta del día → saldo anterior.
+  // Lo que no cubre la venta del día queda como CC nueva.
+  const cobroParcialSplit = useMemo(() => {
+    if (!cobroParcialActivo) return null;
+    const recibido = Math.max(0, montoRecibido);
+    const aVenta = Math.min(recibido, montoVenta);
+    const aSaldo = Math.min(Math.max(0, recibido - montoVenta), Math.max(0, clienteSaldo));
+    const aCcNuevo = Math.max(0, montoVenta - aVenta);
+    return { recibido, aVenta, aSaldo, aCcNuevo };
+  }, [cobroParcialActivo, montoRecibido, montoVenta, clienteSaldo]);
+
+  // Auto-allocate FIFO desde el split parcial cuando hay aSaldo
+  useEffect(() => {
+    if (!cobroParcialActivo || !cobroParcialSplit) return;
+    if (cobroParcialSplit.aSaldo <= 0) return;
+    let remaining = cobroParcialSplit.aSaldo;
+    setSaldoAllocations(pendingInvoices.map((inv) => {
+      const aplicar = Math.min(remaining, inv.pendiente);
+      remaining = Math.max(0, Math.round((remaining - aplicar) * 100) / 100);
+      return { venta_id: inv.id, numero: inv.numero, fecha: inv.fecha, pendiente: inv.pendiente, aplicar };
+    }));
+  }, [cobroParcialActivo, cobroParcialSplit, pendingInvoices]);
+
   // For non-Mixto: effective CC amount
-  const effectiveCC = metodo === "Cuenta Corriente" ? montoVenta : metodo === "Mixto" ? mixtoCuentaCorriente : 0;
-  const effectiveEf = metodo === "Efectivo" ? montoVenta : metodo === "Mixto" ? mixtoEfectivo : 0;
-  const effectiveTr = metodo === "Transferencia" ? montoVenta : metodo === "Mixto" ? mixtoTransferencia : 0;
+  // Cobro parcial override: aVenta cubre la venta, aCcNuevo queda como deuda nueva.
+  const effectiveCC = (() => {
+    if (cobroParcialActivo && cobroParcialSplit) return cobroParcialSplit.aCcNuevo;
+    return metodo === "Cuenta Corriente" ? montoVenta : metodo === "Mixto" ? mixtoCuentaCorriente : 0;
+  })();
+  const effectiveEf = (() => {
+    if (cobroParcialActivo && cobroParcialSplit && metodo === "Efectivo") return cobroParcialSplit.aVenta;
+    return metodo === "Efectivo" ? montoVenta : metodo === "Mixto" ? mixtoEfectivo : 0;
+  })();
+  const effectiveTr = (() => {
+    if (cobroParcialActivo && cobroParcialSplit && metodo === "Transferencia") return cobroParcialSplit.aVenta;
+    return metodo === "Transferencia" ? montoVenta : metodo === "Mixto" ? mixtoTransferencia : 0;
+  })();
 
   const totalACobrar = (montoVenta + surcharge) + (cobrarSaldo ? saldoTotalAsignado : 0);
 
@@ -316,6 +365,12 @@ export function CobroVentaSection({
     submittingRef.current = true;
     setSaving(true);
     try {
+      const submitCobrarSaldo = cobroParcialActivo
+        ? !!(cobroParcialSplit && cobroParcialSplit.aSaldo > 0)
+        : cobrarSaldo;
+      const submitSaldoAllocations = submitCobrarSaldo
+        ? saldoAllocations.filter((a) => a.aplicar > 0)
+        : [];
       await onConfirmar({
         metodo,
         monto: montoVenta,
@@ -325,8 +380,8 @@ export function CobroVentaSection({
         surcharge,
         cuentaBancaria: cuentaSelected ? `${cuentaSelected.nombre}${cuentaSelected.alias ? ` — ${cuentaSelected.alias}` : ""}` : "",
         cuentaBancariaId,
-        cobrarSaldo,
-        saldoAllocations: cobrarSaldo ? saldoAllocations.filter((a) => a.aplicar > 0) : [],
+        cobrarSaldo: submitCobrarSaldo,
+        saldoAllocations: submitSaldoAllocations,
         cobrarEnEntrega,
       });
       setDone(true);
@@ -610,8 +665,73 @@ export function CobroVentaSection({
         </div>
       )}
 
+      {/* ─── Cobro parcial (FIFO automático) ─── */}
+      {(metodo === "Efectivo" || metodo === "Transferencia") && (
+        <>
+          <div className="border-t border-dashed border-gray-200" />
+          <div>
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  checked={cobroParcialEnabled}
+                  onChange={(e) => setCobroParcialEnabled(e.target.checked)}
+                  className="rounded border-gray-300 text-amber-600 focus:ring-amber-500 w-4 h-4"
+                />
+                <div>
+                  <label className="text-sm font-medium text-gray-900 cursor-pointer">Cobro parcial</label>
+                  <p className="text-[10px] text-gray-500">El cliente paga un monto distinto al total ({formatCurrency(montoVenta + Math.max(0, clienteSaldo))})</p>
+                </div>
+              </div>
+            </div>
+
+            {cobroParcialActivo && cobroParcialSplit && (
+              <div className="mt-3 space-y-3">
+                <div className="flex items-center gap-2">
+                  <label className="text-xs font-semibold text-gray-600 w-28">Total recibido</label>
+                  <Input
+                    type="text"
+                    inputMode="numeric"
+                    value={montoRecibido || ""}
+                    onChange={(e) => {
+                      const parsed = e.target.value.replace(/[^0-9.,]/g, "").replace(/\./g, "").replace(",", ".");
+                      setMontoRecibido(Math.max(0, parseFloat(parsed) || 0));
+                    }}
+                    className="h-9 text-sm font-semibold"
+                  />
+                </div>
+
+                <div className="rounded-lg border bg-amber-50/40 divide-y">
+                  <div className="flex justify-between items-center px-3 py-2 text-xs">
+                    <span className="text-gray-600">Pedido del día</span>
+                    <span className="font-semibold tabular-nums text-gray-800">{formatCurrency(cobroParcialSplit.aVenta)}{cobroParcialSplit.aVenta < montoVenta && <span className="text-[10px] text-gray-500"> / {formatCurrency(montoVenta)}</span>}</span>
+                  </div>
+                  {clienteSaldo > 0 && (
+                    <div className="flex justify-between items-center px-3 py-2 text-xs">
+                      <span className="text-gray-600">Deuda anterior</span>
+                      <span className="font-semibold tabular-nums text-emerald-700">{formatCurrency(cobroParcialSplit.aSaldo)}{cobroParcialSplit.aSaldo < clienteSaldo && <span className="text-[10px] text-gray-500"> / {formatCurrency(clienteSaldo)}</span>}</span>
+                    </div>
+                  )}
+                  {cobroParcialSplit.aCcNuevo > 0 && (
+                    <div className="flex justify-between items-center px-3 py-2 text-xs">
+                      <span className="text-orange-600">Queda en cuenta corriente</span>
+                      <span className="font-semibold tabular-nums text-orange-600">+{formatCurrency(cobroParcialSplit.aCcNuevo)}</span>
+                    </div>
+                  )}
+                </div>
+                {cobroParcialSplit.recibido > montoVenta + Math.max(0, clienteSaldo) && (
+                  <p className="text-[10px] text-amber-700 bg-amber-100/60 border border-amber-200 rounded px-2 py-1.5">
+                    Recibiste más que el total adeudado. Ajustá el monto o el excedente quedará sin asignar.
+                  </p>
+                )}
+              </div>
+            )}
+          </div>
+        </>
+      )}
+
       {/* ─── Cobrar saldo adeudado ─── */}
-      {clienteSaldo > 0 && metodo !== "Cuenta Corriente" && (
+      {!cobroParcialActivo && clienteSaldo > 0 && metodo !== "Cuenta Corriente" && (
         <>
           <div className="border-t border-dashed border-gray-200" />
           <div>

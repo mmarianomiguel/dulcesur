@@ -2317,6 +2317,11 @@ export default function VentasPage() {
         // Collect ONLY the pre-existing debt (not what was just added by this sale's CC)
         if (formaPago !== "Pendiente" && formaPago !== "Mixto" && !cobrarEnEntrega && cobrarSaldo && clientId && selectedClient && saldoRealAntesDeTodo > 0) {
           const saldoPendiente = saldoRealAntesDeTodo;
+          // Si el cobro de saldo va por transferencia, persistir la cuenta destino para
+          // que el desglose por cuenta lo asocie al banco correcto (antes caía en "Sin asignar").
+          const selectedCuentaSaldo = formaPago === "Transferencia" && cuentaBancariaId
+            ? cuentasBancarias.find((c) => c.id === cuentaBancariaId)
+            : null;
 
           // 1. Registrar cobro en caja
           await supabase.from("caja_movimientos").insert({
@@ -2328,6 +2333,7 @@ export default function VentasPage() {
             monto: saldoPendiente,
             referencia_id: venta.id,
             referencia_tipo: "cobro_saldo",
+            ...(selectedCuentaSaldo ? { cuenta_bancaria: selectedCuentaSaldo.nombre } : {}),
           });
 
           // 2. Reducir saldo del cliente atómicamente

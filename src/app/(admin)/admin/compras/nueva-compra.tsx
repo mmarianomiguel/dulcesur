@@ -690,15 +690,21 @@ export default function NuevaCompra({
               );
             }
 
-            preciosActualizados.push({
-              producto_id: item.producto_id,
-              nombre: item.nombre,
-              codigo: item.codigo,
-              precioAnterior: item.precio_original,
-              precioNuevo: aplicarPrecio ? newPrecio : item.precio_original,
-              costoAnterior: item.costo_original,
-              costoNuevo: aplicarCosto ? item.costo_unitario : item.costo_original,
-            });
+            // Solo mostrar en el dialog cuando hubo un cambio real de costo o precio.
+            // Si el usuario tildó los chips pero el cálculo dio igual al actual, no hay nada que mostrar.
+            const costoRealmenteCambio = aplicarCosto && Math.abs(item.costo_unitario - item.costo_original) > 0.01;
+            const precioRealmenteCambioPush = aplicarPrecio && Math.abs(newPrecio - item.precio_original) > 0.01;
+            if (costoRealmenteCambio || precioRealmenteCambioPush) {
+              preciosActualizados.push({
+                producto_id: item.producto_id,
+                nombre: item.nombre,
+                codigo: item.codigo,
+                precioAnterior: item.precio_original,
+                precioNuevo: aplicarPrecio ? newPrecio : item.precio_original,
+                costoAnterior: item.costo_original,
+                costoNuevo: aplicarCosto ? item.costo_unitario : item.costo_original,
+              });
+            }
           }
         })
       );
@@ -1832,7 +1838,7 @@ export default function NuevaCompra({
 
       {/* ═══════════════════ CONFIRMATION DIALOG ═══════════════════ */}
       <Dialog open={showConfirmDialog} onOpenChange={setShowConfirmDialog}>
-        <DialogContent className="sm:max-w-lg max-h-[85vh] overflow-y-auto">
+        <DialogContent className="sm:max-w-xl max-h-[85vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="text-lg">Confirmar Compra</DialogTitle>
           </DialogHeader>
@@ -1979,7 +1985,7 @@ export default function NuevaCompra({
             </div>
 
             {/* Actions */}
-            <div className="flex justify-end gap-2 pt-2 border-t">
+            <div className="flex flex-wrap justify-end gap-2 pt-2 border-t">
               <Button variant="outline" onClick={() => setShowConfirmDialog(false)}>
                 Cancelar
               </Button>
