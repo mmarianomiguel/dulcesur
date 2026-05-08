@@ -298,6 +298,8 @@ export default function ListadoVentasPage() {
   const [cobroPreview, setCobroPreview] = useState<CobroPreview | null>(null);
   const [showCuentaSelector, setShowCuentaSelector] = useState(false);
   const [ncPorVenta, setNcPorVenta] = useState<Record<string, number>>({});
+  // Map venta_id -> Set de cuentas bancarias destino (para filtro por banco)
+  const [ventaCuentasBancarias, setVentaCuentasBancarias] = useState<Record<string, string[]>>({});
   const [detailPagos, setDetailPagos] = useState<{ metodo: string; monto: number; cuenta_bancaria?: string | null }[]>([]);
   const [detailCobroSaldo, setDetailCobroSaldo] = useState<{ metodo: string; monto: number; fecha?: string }[]>([]);
   const [detailNCs, setDetailNCs] = useState<{ numero: number; total: number; items: { descripcion: string; cantidad: number; precio_unitario: number; subtotal: number }[] }[]>([]);
@@ -426,6 +428,33 @@ export default function ListadoVentasPage() {
       setNcPorVenta(map);
     } else {
       setNcPorVenta({});
+    }
+
+    // Batch fetch caja_movimientos para conocer las cuentas bancarias destino
+    // por venta (necesario para filtro por banco — en ventas Mixtas o viejas el
+    // campo cuenta_transferencia_alias puede estar vacío pero el movimiento sí
+    // tiene cuenta_bancaria).
+    const allVentaIds = results.map(v => v.id);
+    if (allVentaIds.length > 0) {
+      const { data: movs } = await supabase
+        .from("caja_movimientos")
+        .select("referencia_id, cuenta_bancaria")
+        .in("referencia_id", allVentaIds)
+        .eq("referencia_tipo", "venta")
+        .eq("tipo", "ingreso")
+        .eq("metodo_pago", "Transferencia")
+        .not("cuenta_bancaria", "is", null);
+      const cuentasMap: Record<string, string[]> = {};
+      (movs || []).forEach((m: any) => {
+        if (!m.referencia_id || !m.cuenta_bancaria) return;
+        if (!cuentasMap[m.referencia_id]) cuentasMap[m.referencia_id] = [];
+        if (!cuentasMap[m.referencia_id].includes(m.cuenta_bancaria)) {
+          cuentasMap[m.referencia_id].push(m.cuenta_bancaria);
+        }
+      });
+      setVentaCuentasBancarias(cuentasMap);
+    } else {
+      setVentaCuentasBancarias({});
     }
 
     setLoading(false);
@@ -2793,13 +2822,17 @@ export default function ListadoVentasPage() {
       const montoTr = (o as any).monto_transferencia || 0;
       const montoPagado = (o as any).monto_pagado ?? (o as any)._monto_pagado ?? 0;
       const totalOrden = o.total || 0;
-      // Si hay filtro de banco, ignoramos la constrainta de forma de pago:
-      // basta con que la venta haya transferido a esa cuenta (Transferencia pura o Mixto con monto_transferencia > 0).
+      // Si hay filtro de banco: incluir cualquier venta que tenga esa cuenta
+      // asociada, ya sea por su cuenta_transferencia_alias o por un movimiento
+      // de caja. No exigir `monto_transferencia > 0` porque hay ventas Mixto
+      // donde el campo está en 0 pero el alias quedó persistido correctamente.
       if (filterBanco !== "all") {
         const alias = String((o as any).cuenta_transferencia_alias || "");
-        if (!alias.includes(filterBanco)) return false;
-        const tuvoTransferencia = pago === "transferencia" || (isMixto && montoTr > 0);
-        if (!tuvoTransferencia) return false;
+        const ventaId = (o as any)._ventaId || (o as any).id || "";
+        const movCuentas = ventaCuentasBancarias[ventaId] || [];
+        const matchAlias = alias.includes(filterBanco);
+        const matchMov = movCuentas.some((c) => c.includes(filterBanco) || filterBanco.includes(c));
+        if (!matchAlias && !matchMov) return false;
       } else if (filterPayment !== "all") {
         // Payment filter — includes Mixto orders that have the selected method
         const target = filterPayment.toLowerCase();
@@ -2824,7 +2857,7 @@ export default function ListadoVentasPage() {
       }
       return true;
     });
-  }, [allOrders, filterSource, poFilterEstado, filterPayment, filterBanco, searchClient, quickPeriod, filterPickupReady, filterType]);
+  }, [allOrders, filterSource, poFilterEstado, filterPayment, filterBanco, searchClient, quickPeriod, filterPickupReady, filterType, ventaCuentasBancarias]);
 
   // Count online orders hidden because delivery is in the future (only relevant in "today" view)
   const hiddenFutureOrders = useMemo(() => {
