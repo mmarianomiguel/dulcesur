@@ -256,6 +256,7 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
             )
           : [...prev, item];
         localStorage.setItem("carrito", JSON.stringify(next));
+        window.dispatchEvent(new Event("cart-updated"));
         return next;
       });
       setIsOpen(true);
@@ -271,6 +272,7 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
         if (removed) removedName = removed.nombre;
         const next = prev.filter((i) => i.id !== id);
         localStorage.setItem("carrito", JSON.stringify(next));
+        window.dispatchEvent(new Event("cart-updated"));
         return next;
       });
       if (removedName) {
@@ -309,6 +311,7 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
           return { ...i, cantidad };
         });
         localStorage.setItem("carrito", JSON.stringify(next));
+        window.dispatchEvent(new Event("cart-updated"));
         return next;
       });
     },
