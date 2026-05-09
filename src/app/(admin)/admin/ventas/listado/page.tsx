@@ -2732,6 +2732,54 @@ export default function ListadoVentasPage() {
         const waMsg = `Hola ${primerNombre}! Tu pedido #${pedido.numero} ya está listo para retirar.\n\nEl total es: ${totalFmt}\n\nTe esperamos! 🍬`;
         setWaPrompt({ open: true, telefono: pedido.telefono, mensaje: waMsg, nombreCliente: primerNombre });
       }
+
+      // Notif para envío (la de retiro ya se envió arriba con su propio mensaje)
+      if (!esRetiro && pedido.numero) {
+        const { data: ptArmadoEnv } = await supabase
+          .from("pedidos_tienda")
+          .select("cliente_auth_id")
+          .eq("numero", pedido.numero)
+          .maybeSingle();
+        const clienteAuthId = ptArmadoEnv?.cliente_auth_id;
+        if (clienteAuthId) {
+          const primerNombre = (pedido.nombre_cliente || "").trim().split(" ")[0] || "Hola";
+          fetch("/api/notificaciones/enviar", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              titulo: `${primerNombre}, tu pedido está armado 📦`,
+              mensaje: "Ya lo preparamos. Te avisamos cuando salga para entrega.",
+              tipo: "pedido",
+              url: "/cuenta/pedidos",
+              segmentacion: { tipo: "cliente", valor: Number(clienteAuthId) },
+            }),
+          }).catch(() => {});
+        }
+      }
+    }
+
+    // Notif al cliente cuando se marca el pedido como entregado.
+    if (nuevoEstado === "entregado" && pedido.numero) {
+      const { data: ptEntregado } = await supabase
+        .from("pedidos_tienda")
+        .select("cliente_auth_id")
+        .eq("numero", pedido.numero)
+        .maybeSingle();
+      const clienteAuthId = ptEntregado?.cliente_auth_id;
+      if (clienteAuthId) {
+        const primerNombre = (pedido.nombre_cliente || "").trim().split(" ")[0] || "Hola";
+        fetch("/api/notificaciones/enviar", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            titulo: `${primerNombre}, tu pedido fue entregado ✅`,
+            mensaje: "¡Gracias por tu compra! Esperamos que disfrutes los productos.",
+            tipo: "pedido",
+            url: "/cuenta/pedidos",
+            segmentacion: { tipo: "cliente", valor: Number(clienteAuthId) },
+          }),
+        }).catch(() => {});
+      }
     }
 
     // Update local state instead of full refetch for speed

@@ -3062,6 +3062,30 @@ export default function HojaDeRutaPage() {
                     for (const v of allVentas) {
                       await supabase.from("ventas").update({ entregado: true, estado: "entregado" }).eq("id", v.id);
                       await supabase.from("pedidos_tienda").update({ estado: "entregado" }).eq("numero", v.numero);
+
+                      // Notif al cliente: pedido entregado.
+                      if (v.numero) {
+                        const { data: ptEnt } = await supabase
+                          .from("pedidos_tienda")
+                          .select("cliente_auth_id")
+                          .eq("numero", v.numero)
+                          .maybeSingle();
+                        const clienteAuthId = ptEnt?.cliente_auth_id;
+                        if (clienteAuthId) {
+                          const primerNombre = ((v as any).clientes?.nombre || clienteNombre || "").trim().split(" ")[0] || "Hola";
+                          fetch("/api/notificaciones/enviar", {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({
+                              titulo: `${primerNombre}, tu pedido fue entregado ✅`,
+                              mensaje: "¡Gracias por tu compra! Esperamos que disfrutes los productos.",
+                              tipo: "pedido",
+                              url: "/cuenta/pedidos",
+                              segmentacion: { tipo: "cliente", valor: Number(clienteAuthId) },
+                            }),
+                          }).catch(() => {});
+                        }
+                      }
                     }
 
                     setPayDialogOpen(false);
