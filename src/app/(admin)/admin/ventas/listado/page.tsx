@@ -686,6 +686,47 @@ export default function ListadoVentasPage() {
 
   const marcarEntregado = async (v: VentaRow) => {
     setActionLoading(v.id);
+    // Guard: si la venta no tiene cobro registrado, abrir el dialog de cobro antes de marcar
+    // entregado (caso típico: pedido para retiro que se paga al momento de entregar).
+    const fp = (v.forma_pago || "").toLowerCase();
+    const yaPagada = v.monto_pagado >= v.total - 0.01 && fp && fp !== "pendiente";
+    if (!yaPagada) {
+      const { count } = await supabase
+        .from("caja_movimientos")
+        .select("id", { count: "exact", head: true })
+        .eq("referencia_id", v.id)
+        .eq("referencia_tipo", "venta");
+      if (!count || count === 0) {
+        // Sin cobro: abrir entregarDialog con shape de Pedido construido desde la venta.
+        const pseudoPedido: Pedido = {
+          id: 0,
+          numero: v.numero,
+          created_at: v.created_at,
+          estado: v.estado || "pendiente",
+          nombre_cliente: v.clientes?.nombre || "",
+          email: "",
+          telefono: v.clientes?.telefono || "",
+          metodo_entrega: v.metodo_entrega || "",
+          direccion_texto: v.clientes?.domicilio || null,
+          fecha_entrega: null,
+          metodo_pago: v.forma_pago || "Efectivo",
+          subtotal: v.subtotal,
+          costo_envio: 0,
+          total: v.total,
+          observacion: v.observacion,
+          cliente_auth_id: null,
+          items: [],
+          _source: "historial",
+          _ventaId: v.id,
+          _clienteId: v.cliente_id,
+          _recargo_porcentaje: v.recargo_porcentaje,
+          forma_pago: v.forma_pago,
+        };
+        setEntregarDialog({ open: true, order: pseudoPedido });
+        setActionLoading(null);
+        return;
+      }
+    }
     await supabase.from("ventas").update({ entregado: true, estado: "entregado" }).eq("id", v.id);
     // Sync to pedidos_tienda so client sees "entregado"
     await supabase.from("pedidos_tienda").update({ estado: "entregado" }).eq("numero", v.numero);
@@ -3480,7 +3521,10 @@ export default function ListadoVentasPage() {
                             } else {
                               // Check if order needs payment dialog
                               const fp = (order.forma_pago || order.metodo_pago || "").toLowerCase();
-                              const hasPendingPayment = fp === "pendiente" || !fp || order._source === "pedidos" || (order as any).isOnline || (order.metodo_entrega || "").toLowerCase().includes("envio") || (order.metodo_entrega || "").toLowerCase().includes("envío");
+                              // POS con "cobrar al entregar" guarda forma_pago=Efectivo/etc pero monto_pagado=0.
+                              // Si pasamos por acá (alreadyPaid=false) y la venta no está saldada, igual hay que cobrar.
+                              const ventaUnpaid = (order._monto_pagado ?? 0) < (order.total ?? 0) - 0.01;
+                              const hasPendingPayment = ventaUnpaid || fp === "pendiente" || !fp || order._source === "pedidos" || (order as any).isOnline || (order.metodo_entrega || "").toLowerCase().includes("envio") || (order.metodo_entrega || "").toLowerCase().includes("envío");
                               if (hasPendingPayment) {
                                 setEntregarDialog({ open: true, order });
                               } else {
