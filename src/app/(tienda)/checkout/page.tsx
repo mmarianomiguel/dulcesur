@@ -391,6 +391,23 @@ export default function CheckoutPage() {
     return null;
   }, []);
 
+  // Sincroniza items del checkout con cambios del carrito (cart drawer u otra pestaña).
+  // Antes el checkout solo leía el carrito al mount → quedaba desincronizado si modificabas
+  // desde el drawer mientras estabas acá.
+  useEffect(() => {
+    const sync = () => {
+      const raw = localStorage.getItem("carrito");
+      if (!raw) { setItems([]); return; }
+      try { const p = JSON.parse(raw); setItems(Array.isArray(p) ? p : []); } catch { /* invalid */ }
+    };
+    window.addEventListener("cart-updated", sync);
+    window.addEventListener("storage", (e) => { if (e.key === "carrito") sync(); });
+    return () => {
+      window.removeEventListener("cart-updated", sync);
+      window.removeEventListener("storage", sync as any);
+    };
+  }, []);
+
   useEffect(() => {
     // ── Synchronous localStorage reads ──
     const raw = localStorage.getItem("carrito");
