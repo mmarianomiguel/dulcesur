@@ -1,17 +1,29 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { createServerClient } from "@supabase/ssr";
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 );
 
-// GET — Vercel cron diario al mediodía ART (15:00 UTC).
+// Disparado manualmente desde admin/notificaciones/configuracion (botón "Enviar ahora").
 // Recorre clientes con saldo > 0 y manda notif de recordatorio si no se les envió
 // una en los últimos N días (configurable en tienda_config.dias_recordatorio_pago).
-export async function GET(req: NextRequest) {
-  const authHeader = req.headers.get("authorization");
-  if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
+async function isAdminCaller(req: NextRequest): Promise<boolean> {
+  const ssr = createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    { cookies: { getAll() { return req.cookies.getAll(); }, setAll() {} } }
+  );
+  const { data: { user } } = await ssr.auth.getUser();
+  if (!user) return false;
+  const { data: u } = await supabase.from("usuarios").select("activo").eq("auth_id", user.id).maybeSingle();
+  return !!u?.activo;
+}
+
+export async function POST(req: NextRequest) {
+  if (!(await isAdminCaller(req))) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 

@@ -5,8 +5,8 @@
       "schedule": "0 1 * * *"
     },
     {
-      "path": "/api/cron/recordatorio-pago",
-      "schedule": "0 15 * * *"
+      "path": "/api/cron/cleanup-notifs",
+      "schedule": "0 3 */3 * *"
     }
   ]
 }
