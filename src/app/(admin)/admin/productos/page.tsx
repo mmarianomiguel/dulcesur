@@ -923,6 +923,21 @@ export default function ProductosPage() {
           throw new Error(error?.message || "Error al crear producto");
         }
         productId = data.id;
+
+        // Notif a clientes activos: producto nuevo (solo si es visible en tienda).
+        if (payload.visibilidad === "visible") {
+          fetch("/api/notificaciones/enviar", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              titulo: `Nuevo producto: ${payload.nombre}`,
+              mensaje: "Acabamos de sumarlo al catálogo. Revisalo en la tienda.",
+              tipo: "producto_nuevo",
+              url: `/productos/${productId}`,
+              segmentacion: { tipo: "todos" },
+            }),
+          }).catch(() => {});
+        }
       }
 
       if (isCombo) {

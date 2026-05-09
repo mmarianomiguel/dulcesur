@@ -606,6 +606,7 @@ export default function NuevaCompra({
       }
 
       // Update stock and costs for each product using Promise.all
+      const restockEvents: Array<{ producto_id: string; nombre: string }> = [];
       await Promise.all(
         items.map(async (item) => {
           // Atomic stock update via RPC (positive = add stock from purchase)
@@ -614,12 +615,19 @@ export default function NuevaCompra({
             p_change: item.cantidad,
           });
 
+          // Detectar re-stock: stock pasó de <=0 a >0 → notificar clientes recurrentes.
+          const stockAntes = stockResult?.stock_antes ?? 0;
+          const stockDespues = stockResult?.stock_despues ?? 0;
+          if (stockAntes <= 0 && stockDespues > 0) {
+            restockEvents.push({ producto_id: item.producto_id, nombre: item.nombre });
+          }
+
           // Log stock movement
           await supabase.from("stock_movimientos").insert({
             producto_id: item.producto_id,
             tipo: "compra",
-            cantidad_antes: stockResult?.stock_antes ?? 0,
-            cantidad_despues: stockResult?.stock_despues ?? 0,
+            cantidad_antes: stockAntes,
+            cantidad_despues: stockDespues,
             cantidad: item.cantidad,
             referencia: `Compra #${numero}`,
             descripcion: `Compra - ${item.nombre}`,
@@ -708,6 +716,40 @@ export default function NuevaCompra({
           }
         })
       );
+
+      // Re-stock: notificar a clientes que compraron este producto 2+ veces.
+      // Fire-and-forget para no bloquear el flujo de la compra.
+      if (restockEvents.length > 0) {
+        (async () => {
+          for (const ev of restockEvents) {
+            try {
+              const { data: vitems } = await supabase
+                .from("venta_items")
+                .select("ventas!inner(cliente_id)")
+                .eq("producto_id", ev.producto_id)
+                .not("ventas.cliente_id", "is", null);
+              const counts: Record<string, number> = {};
+              for (const vi of vitems || []) {
+                const cid = (vi as any).ventas?.cliente_id;
+                if (cid) counts[cid] = (counts[cid] || 0) + 1;
+              }
+              const recurrentes = Object.entries(counts).filter(([, c]) => c >= 2).map(([cid]) => cid);
+              if (recurrentes.length === 0) continue;
+              fetch("/api/notificaciones/enviar", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  titulo: `Volvió el stock: ${ev.nombre}`,
+                  mensaje: "Tenemos disponible de nuevo lo que solés comprar.",
+                  tipo: "restock",
+                  url: `/productos/${ev.producto_id}`,
+                  segmentacion: { tipo: "clientes_ids", valor: recurrentes },
+                }),
+              }).catch(() => {});
+            } catch { /* ignore notif errors */ }
+          }
+        })();
+      }
 
       // Register caja movement if paid and requested
       if (totalCompra > 0 && formaPago !== "Cuenta Corriente" && registrarEnCaja) {
