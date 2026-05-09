@@ -220,6 +220,25 @@ export default function DescuentosPage() {
         const { error } = await supabase.from("descuentos").insert({ ...payload, activo });
         if (error) throw error;
         showAdminToast("Descuento creado correctamente", "success");
+
+        // Notif a todos los clientes activos cuando se publica una oferta nueva.
+        // Solo si el descuento se crea activo (no si es draft/inactivo).
+        if (activo) {
+          const tipoDesc = tipoDescuento === "precio_fijo" && precioFijo
+            ? `$${precioFijo.toLocaleString("es-AR")}`
+            : `${porcentaje}% off`;
+          fetch("/api/notificaciones/enviar", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              titulo: `Nueva oferta: ${nombre}`,
+              mensaje: `${tipoDesc}. Aprovechala en la tienda.`,
+              tipo: "oferta",
+              url: "/ofertas",
+              segmentacion: { tipo: "todos" },
+            }),
+          }).catch(() => {});
+        }
       }
       // Invalidar el cache de la tienda — la página /ofertas usa unstable_cache
       // con tag "productos" y no se enteraba sola de cambios en descuentos.
