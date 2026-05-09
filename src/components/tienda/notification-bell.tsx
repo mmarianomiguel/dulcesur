@@ -111,24 +111,17 @@ export default function NotificationBell({ clienteId }: { clienteId: number }) {
 
       {open && (
         <>
-          {/* Mobile: full-width overlay backdrop */}
-          <div className="fixed inset-0 z-40 sm:hidden" onClick={() => setOpen(false)} />
-
-          {/* Dropdown - mobile: fixed bottom sheet, desktop: absolute dropdown */}
-          <div className="fixed bottom-0 left-0 right-0 z-50 sm:absolute sm:bottom-auto sm:left-auto sm:right-0 sm:top-full sm:mt-2 sm:w-80 bg-white rounded-t-2xl sm:rounded-xl border shadow-xl overflow-hidden max-h-[70vh] sm:max-h-[28rem] flex flex-col">
+          {/* Dropdown anclado a la campana en todos los tamaños.
+              w-[min(20rem,...)] evita overflow horizontal en mobile chico. */}
+          <div className="absolute right-0 top-full mt-2 z-50 w-[min(20rem,calc(100vw-1rem))] bg-white rounded-xl border shadow-xl overflow-hidden max-h-[28rem] flex flex-col">
             {/* Header */}
             <div className="flex items-center justify-between px-4 py-3 border-b shrink-0">
               <span className="font-semibold text-sm">Notificaciones</span>
-              <div className="flex items-center gap-3">
-                {noLeidas > 0 && (
-                  <button onClick={marcarTodas} className="text-xs text-primary hover:underline">
-                    Marcar leídas
-                  </button>
-                )}
-                <button onClick={() => setOpen(false)} className="text-gray-400 hover:text-gray-600 sm:hidden text-xs font-medium">
-                  Cerrar
+              {noLeidas > 0 && (
+                <button onClick={marcarTodas} className="text-xs text-primary hover:underline">
+                  Marcar leídas
                 </button>
-              </div>
+              )}
             </div>
 
             {/* List */}
