@@ -111,9 +111,10 @@ export default function NotificationBell({ clienteId }: { clienteId: number }) {
 
       {open && (
         <>
-          {/* Dropdown anclado a la campana en todos los tamaños.
-              w-[min(20rem,...)] evita overflow horizontal en mobile chico. */}
-          <div className="absolute right-0 top-full mt-2 z-50 w-[min(20rem,calc(100vw-1rem))] bg-white rounded-xl border shadow-xl overflow-hidden max-h-[28rem] flex flex-col">
+          {/* Mobile: fixed al borde derecho de la viewport (la campana queda en el medio
+              del navbar y un absolute right-0 al botón se desbordaba a la izquierda).
+              Desktop: dropdown clásico anclado a la campana. */}
+          <div className="fixed top-14 right-2 sm:absolute sm:top-full sm:right-0 sm:mt-2 z-50 w-[min(20rem,calc(100vw-1rem))] bg-white rounded-xl border shadow-xl overflow-hidden max-h-[28rem] flex flex-col">
             {/* Header */}
             <div className="flex items-center justify-between px-4 py-3 border-b shrink-0">
               <span className="font-semibold text-sm">Notificaciones</span>
