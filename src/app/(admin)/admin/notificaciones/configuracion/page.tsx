@@ -18,6 +18,7 @@ import {
 import { Switch } from "@/components/ui/switch";
 import { showAdminToast } from "@/components/admin-toast";
 import { useCurrentUser } from "@/hooks/use-current-user";
+import { supabase } from "@/lib/supabase";
 import type { NotificacionPlantilla } from "@/types/database";
 
 const TIPOS = [
@@ -66,6 +67,39 @@ export default function NotificacionesConfigPage() {
   const [toggling, setToggling] = useState<string | null>(null);
   const [savingConfig, setSavingConfig] = useState(false);
 
+  // Recordatorios automáticos (cron) — días entre avisos de pago pendiente.
+  const [diasRecordatorio, setDiasRecordatorio] = useState<number>(7);
+  const [tiendaConfigId, setTiendaConfigId] = useState<string | null>(null);
+  const [savingRecordatorio, setSavingRecordatorio] = useState(false);
+
+  const fetchTiendaConfig = useCallback(async () => {
+    const { data } = await supabase
+      .from("tienda_config")
+      .select("id, dias_recordatorio_pago")
+      .limit(1)
+      .single();
+    if (data) {
+      setTiendaConfigId((data as any).id);
+      setDiasRecordatorio((data as any).dias_recordatorio_pago ?? 7);
+    }
+  }, []);
+
+  const saveDiasRecordatorio = async (nuevo: number) => {
+    if (!tiendaConfigId) return;
+    setDiasRecordatorio(nuevo);
+    setSavingRecordatorio(true);
+    const { error } = await supabase
+      .from("tienda_config")
+      .update({ dias_recordatorio_pago: nuevo })
+      .eq("id", tiendaConfigId);
+    setSavingRecordatorio(false);
+    if (error) {
+      showAdminToast("Error al guardar", "error");
+    } else {
+      showAdminToast("Recordatorio actualizado", "success");
+    }
+  };
+
   const fetchPlantillas = useCallback(async () => {
     try {
       const res = await fetch("/api/notificaciones/plantillas");
@@ -97,8 +131,8 @@ export default function NotificacionesConfigPage() {
   }, [currentUser?.id]);
 
   useEffect(() => {
-    Promise.all([fetchPlantillas(), fetchAdminConfig()]).finally(() => setLoading(false));
-  }, [fetchPlantillas, fetchAdminConfig]);
+    Promise.all([fetchPlantillas(), fetchAdminConfig(), fetchTiendaConfig()]).finally(() => setLoading(false));
+  }, [fetchPlantillas, fetchAdminConfig, fetchTiendaConfig]);
 
   const saveAdminConfig = async (updates: Partial<AdminConfig>) => {
     if (!currentUser?.id) return;
@@ -301,6 +335,36 @@ export default function NotificacionesConfigPage() {
               </div>
             </div>
           )}
+        </div>
+      </div>
+
+      {/* ── Section: Recordatorios automáticos (cron diario) ── */}
+      <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
+        <div className="px-4 sm:px-5 py-3.5 border-b border-gray-100 flex items-center gap-2.5">
+          <Clock className="h-4 w-4 text-[#FF2D6B]" />
+          <div>
+            <h2 className="font-semibold text-sm text-[#12131A]">Recordatorios automáticos</h2>
+            <p className="text-xs text-[#6B7080]">Avisos diarios al cliente con saldo en cuenta corriente</p>
+          </div>
+        </div>
+        <div className="px-4 sm:px-5 py-3.5 flex items-center justify-between gap-3">
+          <div className="min-w-0">
+            <p className="text-sm font-medium text-[#12131A]">Recordar pago pendiente cada</p>
+            <p className="text-xs text-[#6B7080]">El cron corre todos los días al mediodía. Si el cliente recibió un aviso hace menos de N días, no se le manda otro.</p>
+          </div>
+          <div className="flex items-center gap-2 shrink-0">
+            <input
+              type="number"
+              min={1}
+              max={60}
+              value={diasRecordatorio}
+              onChange={(e) => setDiasRecordatorio(Math.max(1, Math.min(60, Number(e.target.value) || 1)))}
+              onBlur={(e) => saveDiasRecordatorio(Math.max(1, Math.min(60, Number(e.target.value) || 1)))}
+              disabled={savingRecordatorio}
+              className="w-16 border border-gray-200 rounded-lg px-2.5 py-1.5 text-sm text-center text-[#12131A] focus:outline-none focus:ring-2 focus:ring-[#FF2D6B] focus:border-transparent"
+            />
+            <span className="text-sm text-[#6B7080]">días</span>
+          </div>
         </div>
       </div>
 
