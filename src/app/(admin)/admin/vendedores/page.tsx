@@ -209,6 +209,7 @@ export default function VendedoresPage() {
             .from("venta_items")
             .select("venta_id, producto_id, subtotal")
             .in("venta_id", batch)
+            .order("id", { ascending: true })
             .range(from, from + PAGE - 1);
           const rows = items || [];
           allItems.push(...rows);
@@ -348,6 +349,7 @@ export default function VendedoresPage() {
             .from("venta_items")
             .select("venta_id, producto_id, subtotal")
             .in("venta_id", batch)
+            .order("id", { ascending: true })
             .range(from, from + PAGE - 1);
           const rows = items || [];
           allItems.push(...rows);

@@ -101,6 +101,7 @@ const fetchProductosData = unstable_cache(async (): Promise<InitialProductosData
         .gt("cantidad_despues", 0)
         .lte("cantidad_antes", 0)
         .gt("created_at", cutoffReingreso)
+        .order("id", { ascending: true })
         .range(from, from + PAGE_SM - 1);
       const rows = (chunk || []) as { producto_id: string }[];
       movs.push(...rows);

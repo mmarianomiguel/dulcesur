@@ -557,7 +557,7 @@ export default function DashboardPage() {
         const all: any[] = [];
         let from = 0;
         while (true) {
-          const { data } = await supabase.from("venta_items").select("subtotal, productos(categoria_id, categorias(nombre)), ventas!inner(fecha, estado)").gte("ventas.fecha", start).lt("ventas.fecha", end).neq("ventas.estado", "anulada").range(from, from + PAGE - 1);
+          const { data } = await supabase.from("venta_items").select("subtotal, productos(categoria_id, categorias(nombre)), ventas!inner(fecha, estado)").gte("ventas.fecha", start).lt("ventas.fecha", end).neq("ventas.estado", "anulada").order("id", { ascending: true }).range(from, from + PAGE - 1);
           const rows = (data || []) as any[];
           all.push(...rows);
           if (rows.length < PAGE) break;
@@ -690,7 +690,7 @@ export default function DashboardPage() {
         const chunk = ids.slice(i, i + VENTAS_CHUNK);
         let from = 0;
         while (true) {
-          const { data } = await supabase.from("venta_items").select(cols).in("venta_id", chunk).range(from, from + PAGE - 1);
+          const { data } = await supabase.from("venta_items").select(cols).in("venta_id", chunk).order("id", { ascending: true }).range(from, from + PAGE - 1);
           const rows = (data || []) as any[];
           out.push(...rows);
           if (rows.length < PAGE) break;

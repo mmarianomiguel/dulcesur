@@ -396,6 +396,7 @@ const fetchHomeData = unstable_cache(async () => {
         .in("tipo", ["compra", "ajuste_ingreso"])
         .gt("cantidad_despues", 0)
         .gt("created_at", haceNuevosDias.toISOString())
+        .order("id", { ascending: true })
         .range(from, from + PAGE - 1);
       const rows = chunk || [];
       movsAll.push(...rows as any[]);

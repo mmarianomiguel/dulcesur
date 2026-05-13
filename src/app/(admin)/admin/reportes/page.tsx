@@ -140,6 +140,7 @@ export default function ReportesPage() {
             .in("remito_origen_id", chunk)
             .ilike("tipo_comprobante", "Nota de Crédito%")
             .neq("estado", "anulada")
+            .order("id", { ascending: true })
             .range(from, from + 999);
           const rows = ncsData || [];
           rows.forEach((nc: any) => {
@@ -208,6 +209,7 @@ export default function ReportesPage() {
             .eq("tipo", "ingreso")
             .eq("referencia_tipo", "venta")
             .in("referencia_id", chunk)
+            .order("id", { ascending: true })
             .range(from, from + 999);
           const rows = movs || [];
           allMovs.push(...rows);

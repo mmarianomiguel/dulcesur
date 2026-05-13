@@ -99,6 +99,7 @@ export default function ResumenMensualPage() {
           const { data: chunkItems } = await supabase.from("venta_items")
             .select("producto_id, descripcion, cantidad, unidades_por_presentacion, subtotal, precio_unitario, descuento, costo_unitario, productos(nombre)")
             .in("venta_id", chunk)
+            .order("id", { ascending: true })
             .range(from, from + PAGE - 1);
           const rows = chunkItems || [];
           items.push(...rows);
