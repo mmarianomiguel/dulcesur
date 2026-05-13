@@ -394,7 +394,11 @@ export default function CheckoutPage() {
   // Sincroniza items del checkout con cambios del carrito (cart drawer u otra pestaña).
   // Antes el checkout solo leía el carrito al mount → quedaba desincronizado si modificabas
   // desde el drawer mientras estabas acá.
+  // IMPORTANTE: una vez que el pedido se confirmó (orderNumber !== null), NO sincronizar.
+  // El flujo de confirmación limpia el carrito y dispara "cart-updated"; si seguimos
+  // sincronizando, vacía los items y la pantalla de éxito muestra $0.
   useEffect(() => {
+    if (orderNumber) return;
     const sync = () => {
       const raw = localStorage.getItem("carrito");
       if (!raw) { setItems([]); return; }
@@ -406,7 +410,7 @@ export default function CheckoutPage() {
       window.removeEventListener("cart-updated", sync);
       window.removeEventListener("storage", sync as any);
     };
-  }, []);
+  }, [orderNumber]);
 
   useEffect(() => {
     // ── Synchronous localStorage reads ──
