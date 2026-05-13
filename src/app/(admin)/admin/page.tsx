@@ -434,18 +434,22 @@ export default function DashboardPage() {
       d.setMonth(d.getMonth() - 5);
       const rangeStart = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-01`;
 
-      // 2 queries en lugar de 12 — traer todos los meses juntos
+      // 2 queries en lugar de 12 — traer todos los meses juntos.
+      // .range() obligatorio: Supabase trunca a 1000 filas en silencio.
+      // En 6 meses con ~800 ventas/mes se perdían ~4000 filas y el chart subreportaba ventas.
       const [{ data: ventasData }, { data: egresosData }] = await Promise.all([
         supabase
           .from("ventas")
           .select("fecha, total, tipo_comprobante")
           .gte("fecha", rangeStart)
-          .neq("estado", "anulada"),
+          .neq("estado", "anulada")
+          .range(0, 49999),
         supabase
           .from("caja_movimientos")
           .select("fecha, monto")
           .eq("tipo", "egreso")
-          .gte("fecha", rangeStart),
+          .gte("fecha", rangeStart)
+          .range(0, 49999),
       ]);
 
       // Agrupar por mes en el cliente
