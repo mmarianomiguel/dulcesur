@@ -186,6 +186,7 @@ export default function ReportesPage() {
             .from("venta_items")
             .select("venta_id, producto_id, descripcion, cantidad, precio_unitario, descuento, subtotal, unidades_por_presentacion, presentacion, costo_unitario, productos(costo, nombre, categoria_id, subcategoria_id)")
             .in("venta_id", chunk)
+            .order("id", { ascending: true })
             .range(from, from + PAGE - 1);
           const rows = chunkItems || [];
           allItems.push(...rows);
