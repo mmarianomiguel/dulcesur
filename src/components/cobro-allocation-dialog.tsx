@@ -94,7 +94,7 @@ export function CobroAllocationDialog({ open, onOpenChange, cliente, onSuccess }
       // (can't filter forma_pago because partial payments like Pedido Web have forma_pago=Efectivo)
       const { data: ventas } = await supabase
         .from("ventas")
-        .select("id, numero, fecha, tipo_comprobante, total, monto_pagado, forma_pago, origen")
+        .select("id, numero, fecha, tipo_comprobante, total, monto_pagado, forma_pago, origen, estado")
         .eq("cliente_id", cliente.id)
         .in("tipo_comprobante", [
           "Factura A", "Factura B", "Factura C", "Factura X",
@@ -106,6 +106,11 @@ export function CobroAllocationDialog({ open, onOpenChange, cliente, onSuccess }
         .order("created_at", { ascending: true });
 
       let pending: PendingInvoice[] = (ventas || [])
+        // Excluir Pedidos Web aún no entregados: su deuda no está en saldo todavía y el
+        // cobro se hace al momento de entregar (hoja-ruta), no desde cobranzas. Si los
+        // incluímos, el reconcile de abajo asume que son deuda vieja y descuenta del
+        // más viejo, lo que rompe la asignación FIFO real.
+        .filter((v: any) => v.tipo_comprobante !== "Pedido Web" || ["entregado", "cerrada"].includes(v.estado))
         .map((v: any) => ({
           id: v.id,
           numero: v.numero,
