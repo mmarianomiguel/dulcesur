@@ -332,6 +332,8 @@ export default function ListaPreciosPage() {
   const [logoAspectRatio, setLogoAspectRatio] = useState(1); // width / height
   const [generating, setGenerating] = useState(false);
   const [generatingProgress, setGeneratingProgress] = useState<{ done: number; total: number } | null>(null);
+  // Previews de las historias generadas — se muestran en dialog antes de descargar.
+  const [storyPreviews, setStoryPreviews] = useState<{ name: string; dataUrl: string; filename: string }[] | null>(null);
   const itemsPerPage = 50;
 
   // Bootstrap del slot1 si está vacío: usar white-label (empresa) o el logo legacy
@@ -505,7 +507,9 @@ export default function ListaPreciosPage() {
         precioOfertaCaja,
         precioPorCaja: precioCaja > 0,
         unidadesCaja,
-        nombrePresentacion: boxPres?.nombre || "Caja",
+        // Si no hay presentación de caja (cantidad > 1), dejar vacío. El fallback "Caja"
+        // se imprimía como subtítulo aunque el producto no tuviera caja real.
+        nombrePresentacion: boxPres?.nombre || "",
         nombreUnidad: unitPres?.nombre || "",
         hayStock: p.stock > 0,
         id: p.id,
@@ -2098,7 +2102,9 @@ export default function ListaPreciosPage() {
     setShowStoryConfig(false);
     setGenerating(true);
     setGeneratingProgress({ done: 0, total: selected.size });
+    setStoryPreviews(null);
     await new Promise<void>((r) => setTimeout(r, 50));
+    const previews: { name: string; dataUrl: string; filename: string }[] = [];
     try {
       const selectedProducts = products.filter((_, i) => selected.has(i));
       if (selectedProducts.length === 0) { setGenerating(false); return; }
@@ -2566,29 +2572,19 @@ export default function ListaPreciosPage() {
           ctx.restore();
         } catch {}
 
-        // Export to PNG blob
-        await new Promise<void>((resolve) => {
-          canvas.toBlob((blob) => {
-            if (blob) {
-              const url = URL.createObjectURL(blob);
-              const a = document.createElement("a");
-              a.href = url;
-              a.download = `historia-${productSlug(product.nombre, product.id)}.png`;
-              document.body.appendChild(a);
-              a.click();
-              document.body.removeChild(a);
-              setTimeout(() => URL.revokeObjectURL(url), 1500);
-            }
-            resolve();
-          }, "image/png");
+        // Generar PNG (data URL) y guardar para preview en lugar de descargar directo.
+        const dataUrl = canvas.toDataURL("image/png");
+        previews.push({
+          name: product.nombre,
+          dataUrl,
+          filename: `historia-${productSlug(product.nombre, product.id)}.png`,
         });
 
         doneCount++;
         setGeneratingProgress({ done: doneCount, total: selectedProducts.length });
-        // Pequeña pausa entre descargas para que el browser no las agrupe
-        if (doneCount < selectedProducts.length) {
-          await new Promise((r) => setTimeout(r, 400));
-        }
+      }
+      if (previews.length > 0) {
+        setStoryPreviews(previews);
       }
     } finally {
       setGenerating(false);
@@ -3872,6 +3868,68 @@ export default function ListaPreciosPage() {
             </div>
             <div className="flex-1 bg-accent/30">
               <iframe src={pdfUrl} className="w-full h-full" title="Vista previa PDF" />
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Preview de historias generadas — el usuario decide qué descargar */}
+      {storyPreviews && storyPreviews.length > 0 && (
+        <div className="fixed inset-0 z-50 bg-black/70 flex items-center justify-center p-4" onClick={() => setStoryPreviews(null)}>
+          <div className="bg-background rounded-xl max-w-4xl w-full max-h-[90vh] flex flex-col overflow-hidden" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between px-5 py-3 border-b">
+              <h2 className="text-base font-semibold">
+                Vista previa ({storyPreviews.length} {storyPreviews.length === 1 ? "historia" : "historias"})
+              </h2>
+              <div className="flex items-center gap-2">
+                {storyPreviews.length > 1 && (
+                  <button
+                    onClick={() => {
+                      storyPreviews.forEach((p, idx) => {
+                        setTimeout(() => {
+                          const a = document.createElement("a");
+                          a.href = p.dataUrl;
+                          a.download = p.filename;
+                          document.body.appendChild(a);
+                          a.click();
+                          document.body.removeChild(a);
+                        }, idx * 400);
+                      });
+                    }}
+                    className="bg-primary text-primary-foreground px-3 py-1.5 rounded-lg text-sm font-medium hover:bg-primary/90 flex items-center gap-1.5"
+                  >
+                    <Download className="w-4 h-4" />
+                    Descargar todas
+                  </button>
+                )}
+                <button onClick={() => setStoryPreviews(null)} className="text-muted-foreground hover:text-foreground p-1">
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+            </div>
+            <div className="flex-1 overflow-y-auto p-4">
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+                {storyPreviews.map((p, idx) => (
+                  <div key={idx} className="flex flex-col gap-2 bg-muted/30 rounded-lg p-2">
+                    <img src={p.dataUrl} alt={p.name} className="w-full rounded-md border" />
+                    <p className="text-xs font-medium truncate" title={p.name}>{p.name}</p>
+                    <button
+                      onClick={() => {
+                        const a = document.createElement("a");
+                        a.href = p.dataUrl;
+                        a.download = p.filename;
+                        document.body.appendChild(a);
+                        a.click();
+                        document.body.removeChild(a);
+                      }}
+                      className="bg-primary text-primary-foreground px-3 py-1.5 rounded-lg text-xs font-medium hover:bg-primary/90 flex items-center justify-center gap-1.5"
+                    >
+                      <Download className="w-3.5 h-3.5" />
+                      Descargar
+                    </button>
+                  </div>
+                ))}
+              </div>
             </div>
           </div>
         </div>
