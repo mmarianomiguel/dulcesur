@@ -256,9 +256,16 @@ export default function ListaPreciosPage() {
   const [configTab, setConfigTab] = useState<ConfigTab>("general");
   const [showStylePicker, setShowStylePicker] = useState(false);
   const [showStoryConfig, setShowStoryConfig] = useState(false);
+  // 4 layouts del precio:
+  // - unidad: precio grande de la unidad, sin pill abajo
+  // - caja: precio grande de la caja, sin pill abajo
+  // - cajaConPillUnidad: precio caja grande + pill abajo con precio unidad
+  // - unidadConPillCaja: precio unidad grande + pill abajo con precio caja
+  // (los layouts con caja se auto-degradan a "unidad" si el producto no tiene caja)
   const [storyOpts, setStoryOpts] = useState<{
-    tipoOferta: "simple" | "packUnidad";
+    tipoOferta: "unidad" | "caja" | "cajaConPillUnidad" | "unidadConPillCaja";
     etiquetaBadge: string;
+    mostrarBadge: boolean;
     mostrarRangoFechas: boolean;
     rangoFechas: string;
     mostrarImagen: boolean;
@@ -266,7 +273,7 @@ export default function ListaPreciosPage() {
     porcentajeDescuento: number;
     zoomImagen?: number;
     usarDescuentoReal: boolean;
-  }>({ tipoOferta: "packUnidad", etiquetaBadge: "SÚPER OFERTA", mostrarRangoFechas: true, rangoFechas: "", mostrarImagen: true, aplicarDescuento: false, porcentajeDescuento: 5, zoomImagen: 1, usarDescuentoReal: true });
+  }>({ tipoOferta: "cajaConPillUnidad", etiquetaBadge: "SÚPER OFERTA", mostrarBadge: true, mostrarRangoFechas: false, rangoFechas: "", mostrarImagen: true, aplicarDescuento: false, porcentajeDescuento: 5, zoomImagen: 1, usarDescuentoReal: true });
   const [showPremiumConfig, setShowPremiumConfig] = useState(false);
   const [premiumOpts, setPremiumOpts] = useState<{
     tipoOferta: "simple" | "packUnidad";
@@ -2284,7 +2291,7 @@ export default function ListaPreciosPage() {
         dottedLine(ctx, 70, 250, W - 70, 250, "#b8a47a");
 
         // ── Slanted badge ──
-        if (opts.etiquetaBadge.trim()) {
+        if (opts.mostrarBadge && opts.etiquetaBadge.trim()) {
           ctx.save();
           ctx.translate(150, 345);
           ctx.rotate(-3 * Math.PI / 180);
@@ -2354,13 +2361,28 @@ export default function ListaPreciosPage() {
         const comboTotalProductos = comboItems.length;
         const comboTotalUnidades = comboItems.reduce((s, i) => s + i.cantidad, 0);
         const hasUnits = unidadesCaja > 0 && boxPrice > 0;
-        const showPackUnidad = opts.tipoOferta === "packUnidad" && (hasUnits || (product.esCombo && comboTotalUnidades > 0));
+        // Auto-degradar a "unidad" si el layout pide caja pero el producto no tiene caja.
+        const tipo = opts.tipoOferta;
+        const tipoEfectivo: typeof tipo = (() => {
+          if (!hasUnits && !product.esCombo) return "unidad";
+          if (product.esCombo) {
+            return tipo === "cajaConPillUnidad" || tipo === "unidadConPillCaja"
+              ? (comboTotalUnidades > 0 ? "cajaConPillUnidad" : "unidad")
+              : tipo;
+          }
+          return tipo;
+        })();
+        const mainEsCaja = tipoEfectivo === "caja" || tipoEfectivo === "cajaConPillUnidad";
+        const showPackUnidad = tipoEfectivo === "cajaConPillUnidad";
+        const showPillCaja = tipoEfectivo === "unidadConPillCaja" && hasUnits && !product.esCombo;
         const mainPriceOriginal = product.esCombo
           ? displayPrice
-          : (showPackUnidad ? boxPrice : displayPrice);
+          : (mainEsCaja ? boxPrice : displayPrice);
         const unitPriceOriginal = product.esCombo
           ? (comboTotalUnidades > 0 ? mainPriceOriginal / comboTotalUnidades : 0)
           : (hasUnits ? boxPrice / unidadesCaja : displayPrice);
+        // Precio caja real (para el pill cuando layout es unidadConPillCaja)
+        const boxPriceForPill = hasUnits ? boxPrice : 0;
         // Descuento configurable — dos fuentes posibles:
         // 1) usarDescuentoReal: tomar el descuento cargado del producto (tabla descuentos).
         // 2) aplicarDescuento: porcentaje ad-hoc definido en el modal.
@@ -2444,12 +2466,12 @@ export default function ListaPreciosPage() {
         ctx.fillText(price.integer, txtX + symW + 8, 40 + priceYOffset);
         ctx.font = `900 ${smallSize}px Arial`;
         ctx.fillText(price.decimals, txtX + symW + 8 + intW + 2, 50 + priceYOffset);
-        // "LA CAJA × 36" / "COMBO × 24" / "POR UNIDAD"
+        // Etiqueta del precio: indica si es por caja/combo/unidad según el layout efectivo.
         ctx.fillStyle = "#cc2c2c"; ctx.font = "900 24px Arial"; ctx.textAlign = "center"; ctx.textBaseline = "top";
         let tagLabel: string;
         if (product.esCombo) {
           tagLabel = comboTotalUnidades > 0 ? `COMBO × ${comboTotalUnidades}` : "COMBO";
-        } else if (hasUnits && showPackUnidad) {
+        } else if (mainEsCaja && hasUnits) {
           tagLabel = `${presBase.toUpperCase()} × ${unidadesCaja}`;
         } else {
           tagLabel = "POR UNIDAD";
@@ -2528,11 +2550,15 @@ export default function ListaPreciosPage() {
           ctx.fillText(subtitle, W / 2, nameEndY + 18);
         }
 
-        // ── Unit price pill (si packUnidad con caja, o combo con componentes) ──
+        // ── Pill secundaria (debajo del nombre): muestra precio unidad o caja según layout ──
         const showUnitPill = (showPackUnidad && !product.esCombo && hasUnits) ||
-                             (product.esCombo && opts.tipoOferta === "packUnidad" && comboTotalUnidades > 0);
-        if (showUnitPill) {
-          const pillTxt = `× UNIDAD  $ ${Math.round(unitPrice).toLocaleString("es-AR")}`;
+                             (product.esCombo && tipoEfectivo === "cajaConPillUnidad" && comboTotalUnidades > 0);
+        const showBoxPill = showPillCaja && boxPriceForPill > 0;
+        const anyPill = showUnitPill || showBoxPill;
+        if (anyPill) {
+          const pillLabel = showBoxPill ? "× CAJA" : "× UNIDAD";
+          const pillValue = showBoxPill ? boxPriceForPill : unitPrice;
+          const pillTxt = `${pillLabel}  $ ${Math.round(pillValue).toLocaleString("es-AR")}`;
           ctx.font = `900 ${config.story_tamañoPillUnidad}px Arial`;
           const pw = ctx.measureText(pillTxt).width + 50;
           const ph = 72;
@@ -3015,292 +3041,410 @@ export default function ListaPreciosPage() {
         </div>
       )}
 
-      {/* Story Config Modal (IG / WhatsApp) */}
-      {showStoryConfig && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
-          <div className="bg-card rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] flex flex-col border border-border">
-            <div className="flex items-center justify-between px-6 py-4 border-b border-border shrink-0">
-              <div>
-                <h2 className="text-lg font-semibold">Historia IG / Estado WhatsApp</h2>
-                <p className="text-xs text-muted-foreground">Genera un PNG 1080×1920 por producto seleccionado</p>
+      {/* Story Config Modal (IG / WhatsApp) — rediseñado */}
+      {showStoryConfig && (() => {
+        const seleccionados = products.filter((_, i) => selected.has(i));
+        const primero = seleccionados[0];
+        const hasCaja = primero ? primero.unidadesCaja > 0 && primero.precioCaja > 0 : false;
+        // Resolver layout efectivo: si pide caja pero el producto no la tiene, degradar a unidad.
+        const layoutEfectivo: typeof storyOpts.tipoOferta =
+          !hasCaja && (storyOpts.tipoOferta === "caja" || storyOpts.tipoOferta === "cajaConPillUnidad" || storyOpts.tipoOferta === "unidadConPillCaja")
+            ? "unidad"
+            : storyOpts.tipoOferta;
+
+        // Mini-preview SVG (esquema) — refleja layout, badge, fechas e imagen.
+        const PreviewSchema = () => {
+          const showPill = layoutEfectivo === "cajaConPillUnidad" || layoutEfectivo === "unidadConPillCaja";
+          const bigEsCaja = layoutEfectivo === "caja" || layoutEfectivo === "cajaConPillUnidad";
+          const pillEsCaja = layoutEfectivo === "unidadConPillCaja";
+          return (
+            <svg viewBox="0 0 270 480" className="w-full h-full">
+              <rect width={270} height={480} fill="#f9fafb" rx={12} />
+              {/* logo (mancha rosa) */}
+              <rect x={28} y={26} width={75} height={28} rx={4} fill="#fce7f3" />
+              {/* rango fechas */}
+              {storyOpts.mostrarRangoFechas && (
+                <rect x={195} y={28} width={50} height={20} rx={4} fill="#e5e7eb" />
+              )}
+              {/* badge */}
+              {storyOpts.mostrarBadge && storyOpts.etiquetaBadge.trim() && (
+                <g>
+                  <rect x={28} y={70} width={100} height={26} rx={4} fill="hsl(330 60% 55%)" />
+                  <text x={78} y={87} textAnchor="middle" fontSize={11} fontWeight={900} fill="#fff">★</text>
+                </g>
+              )}
+              {/* product frame */}
+              <rect x={35} y={115} width={200} height={180} fill="#fff" stroke="#1f2937" strokeWidth={1.5} rx={2} />
+              {storyOpts.mostrarImagen && (
+                <rect x={75} y={140} width={120} height={130} fill="#e5e7eb" rx={4} />
+              )}
+              {/* price tag */}
+              <g transform="translate(85 248) rotate(-2)">
+                <rect width={130} height={42} fill="#fff" stroke="#222" strokeWidth={1} rx={3} />
+                <text x={65} y={13} textAnchor="middle" fontSize={6} fontWeight={600} fill="#666">PRECIO</text>
+                <text x={65} y={28} textAnchor="middle" fontSize={15} fontWeight={900} fill="#111">$ {bigEsCaja ? "X.XXX" : "X.XX"}</text>
+                <text x={65} y={37} textAnchor="middle" fontSize={6} fontWeight={900} fill="#cc2c2c">{bigEsCaja ? "POR CAJA × N" : "POR UNIDAD"}</text>
+              </g>
+              {/* nombre */}
+              <text x={135} y={335} textAnchor="middle" fontSize={14} fontWeight={900} fill="#111">PRODUCTO</text>
+              {/* pill secundaria */}
+              {showPill && (
+                <g>
+                  <rect x={70} y={355} width={130} height={26} rx={13} fill="#111" />
+                  <text x={135} y={372} textAnchor="middle" fontSize={9} fontWeight={900} fill="#fff">
+                    × {pillEsCaja ? "CAJA  $X.XXX" : "UNIDAD  $XXX"}
+                  </text>
+                </g>
+              )}
+              {/* QR + footer */}
+              <text x={32} y={428} fontSize={9} fontWeight={600} fill="#ec4899">¡mirá todo en la web!</text>
+              <text x={32} y={446} fontSize={10} fontWeight={900} fill="#111">www.dulcesur.com</text>
+              <rect x={210} y={418} width={36} height={36} rx={2} fill="#000" />
+            </svg>
+          );
+        };
+
+        const layouts: { val: typeof storyOpts.tipoOferta; emoji: string; label: string; desc: string; needsCaja: boolean }[] = [
+          { val: "unidad", emoji: "💰", label: "Solo Unidad", desc: "Precio de la unidad en grande", needsCaja: false },
+          { val: "caja", emoji: "📦", label: "Solo Caja", desc: "Precio de la caja en grande", needsCaja: true },
+          { val: "cajaConPillUnidad", emoji: "📦+💰", label: "Caja + Unidad", desc: "Caja grande, unidad como pill abajo", needsCaja: true },
+          { val: "unidadConPillCaja", emoji: "💰+📦", label: "Unidad + Caja", desc: "Unidad grande, caja como pill abajo", needsCaja: true },
+        ];
+
+        return (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+          <div className="bg-card rounded-2xl shadow-2xl w-full max-w-4xl max-h-[92vh] flex flex-col border border-border overflow-hidden">
+            {/* Header */}
+            <div className="flex items-center justify-between px-6 py-4 border-b border-border shrink-0 bg-gradient-to-r from-primary/5 to-transparent">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center">
+                  <span className="text-xl">📱</span>
+                </div>
+                <div>
+                  <h2 className="text-base font-semibold">Historia para IG / WhatsApp</h2>
+                  <p className="text-xs text-muted-foreground">PNG 1080×1920 — {selected.size} {selected.size === 1 ? "producto" : "productos"}</p>
+                </div>
               </div>
-              <button onClick={() => setShowStoryConfig(false)} className="text-muted-foreground hover:text-foreground transition-colors p-1">
-                <X className="w-6 h-6" />
+              <button onClick={() => setShowStoryConfig(false)} className="text-muted-foreground hover:text-foreground transition-colors p-1.5 rounded-lg hover:bg-accent">
+                <X className="w-5 h-5" />
               </button>
             </div>
-            <div className="p-6 space-y-5 overflow-y-auto">
-              {/* Fondo personalizado */}
-              <div className="border border-border rounded-lg p-3 bg-accent/30 space-y-3">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm font-medium">Fondo personalizado</p>
-                    <p className="text-[11px] text-muted-foreground">Subí una imagen (PNG/JPG) que se usa como base de la story.</p>
+
+            {/* Cuerpo: 2 columnas en desktop, 1 en mobile */}
+            <div className="flex flex-col lg:flex-row flex-1 overflow-hidden">
+              {/* Preview */}
+              <div className="lg:w-[300px] shrink-0 border-b lg:border-b-0 lg:border-r border-border bg-accent/30 p-5 flex flex-col items-center justify-start">
+                <p className="text-[11px] uppercase tracking-wider text-muted-foreground font-semibold mb-3">Vista previa esquemática</p>
+                <div className="w-full max-w-[220px] aspect-[9/16] rounded-xl shadow-md overflow-hidden">
+                  <PreviewSchema />
+                </div>
+                {!hasCaja && (storyOpts.tipoOferta === "caja" || storyOpts.tipoOferta === "cajaConPillUnidad" || storyOpts.tipoOferta === "unidadConPillCaja") && (
+                  <p className="text-[10px] text-amber-700 bg-amber-50 border border-amber-200 rounded-md px-2 py-1.5 mt-3 text-center leading-tight">
+                    {primero?.nombre || "Este producto"} no tiene presentación caja. Se muestra solo la Unidad.
+                  </p>
+                )}
+              </div>
+
+              {/* Configuración */}
+              <div className="flex-1 overflow-y-auto p-5 space-y-5">
+                {/* Diseño del precio */}
+                <div>
+                  <p className="text-sm font-semibold mb-1">Diseño del precio</p>
+                  <p className="text-[11px] text-muted-foreground mb-3">Elegí qué precio se muestra en grande y cuál como pill</p>
+                  <div className="grid grid-cols-2 gap-2">
+                    {layouts.map((l) => {
+                      const disabled = l.needsCaja && !hasCaja;
+                      const isActive = storyOpts.tipoOferta === l.val;
+                      return (
+                        <button
+                          key={l.val}
+                          disabled={disabled}
+                          onClick={() => setStoryOpts((p) => ({ ...p, tipoOferta: l.val }))}
+                          className={`p-3 rounded-xl border-2 text-left transition-all ${
+                            disabled
+                              ? "opacity-50 cursor-not-allowed bg-muted/30 border-muted"
+                              : isActive
+                                ? "border-primary bg-primary/5 shadow-sm"
+                                : "border-border hover:border-primary/50 bg-card"
+                          }`}
+                        >
+                          <div className="flex items-center gap-2 mb-1">
+                            <span className="text-lg">{l.emoji}</span>
+                            <span className="text-sm font-semibold">{l.label}</span>
+                          </div>
+                          <p className="text-[11px] text-muted-foreground leading-tight">{l.desc}</p>
+                          {disabled && <p className="text-[10px] text-amber-700 mt-1">Requiere caja</p>}
+                        </button>
+                      );
+                    })}
                   </div>
-                  {fondoStoryBase64 && (
-                    <button
-                      onClick={() => setFondoStoryBase64(null)}
-                      className="text-xs text-muted-foreground hover:text-destructive transition-colors"
-                    >
-                      Quitar
-                    </button>
+                </div>
+
+                {/* Badge */}
+                <div className="border border-border rounded-xl p-3 bg-card">
+                  <label className="flex items-center gap-3 cursor-pointer mb-2">
+                    <input
+                      type="checkbox"
+                      checked={storyOpts.mostrarBadge}
+                      onChange={(e) => setStoryOpts((p) => ({ ...p, mostrarBadge: e.target.checked }))}
+                      className="accent-primary w-4 h-4"
+                    />
+                    <div className="flex-1">
+                      <p className="text-sm font-medium">Mostrar etiqueta (badge)</p>
+                      <p className="text-[11px] text-muted-foreground">El cartelito rojo arriba del producto (ej: "SÚPER OFERTA")</p>
+                    </div>
+                  </label>
+                  {storyOpts.mostrarBadge && (
+                    <div className="space-y-2 mt-3 pl-7">
+                      <div className="grid grid-cols-3 gap-1.5">
+                        {["SÚPER OFERTA", "OFERTA", "2×1", "NUEVO", "COMBO", "IMPERDIBLE"].map((preset) => (
+                          <button
+                            key={preset}
+                            onClick={() => setStoryOpts((p) => ({ ...p, etiquetaBadge: preset }))}
+                            className={`px-2 py-1.5 rounded-md border text-[11px] font-semibold transition ${
+                              storyOpts.etiquetaBadge === preset ? "border-primary bg-primary/5" : "border-border hover:border-primary/50"
+                            }`}
+                          >
+                            {preset}
+                          </button>
+                        ))}
+                      </div>
+                      <input
+                        type="text"
+                        value={storyOpts.etiquetaBadge}
+                        onChange={(e) => setStoryOpts((p) => ({ ...p, etiquetaBadge: e.target.value }))}
+                        placeholder="O escribí tu propio texto"
+                        className="w-full border border-border rounded-md px-3 py-1.5 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary"
+                      />
+                    </div>
                   )}
                 </div>
-                <div className="flex items-center gap-3">
-                  <div className="w-20 h-20 rounded-lg border border-dashed border-border bg-background flex items-center justify-center overflow-hidden shrink-0">
-                    {fondoStoryBase64 ? (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img src={fondoStoryBase64} alt="" className="w-full h-full object-cover" />
-                    ) : (
-                      <span className="text-[10px] text-muted-foreground">Default</span>
-                    )}
-                  </div>
-                  <div className="flex-1 space-y-2">
-                    <label className="cursor-pointer text-xs text-center inline-block border border-border rounded-md px-3 py-1.5 hover:bg-accent transition-colors">
-                      {fondoStoryBase64 ? "Cambiar imagen" : "Subir imagen"}
-                      <input
-                        type="file"
-                        accept="image/*"
-                        className="hidden"
-                        onChange={(e) => {
-                          const f = e.target.files?.[0];
-                          if (!f) return;
-                          const r = new FileReader();
-                          r.onload = () => setFondoStoryBase64(r.result as string);
-                          r.readAsDataURL(f);
-                          e.target.value = "";
-                        }}
-                      />
-                    </label>
-                    {fondoStoryBase64 && (
-                      <div>
-                        <label className="block text-[11px] text-muted-foreground mb-1">Opacidad ({Math.round(fondoStoryOpacity * 100)}%)</label>
-                        <input
-                          type="range"
-                          min={20}
-                          max={100}
-                          step={5}
-                          value={Math.round(fondoStoryOpacity * 100)}
-                          onChange={(e) => setFondoStoryOpacity(Number(e.target.value) / 100)}
-                          className="w-full accent-primary"
-                        />
+
+                {/* Imagen */}
+                <div className="border border-border rounded-xl p-3 bg-card">
+                  <label className="flex items-center gap-3 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={storyOpts.mostrarImagen}
+                      onChange={(e) => setStoryOpts((p) => ({ ...p, mostrarImagen: e.target.checked }))}
+                      className="accent-primary w-4 h-4"
+                    />
+                    <div className="flex-1">
+                      <p className="text-sm font-medium">Mostrar imagen del producto</p>
+                      <p className="text-[11px] text-muted-foreground">Si no tiene imagen, queda el frame vacío</p>
+                    </div>
+                  </label>
+                  {storyOpts.mostrarImagen && (
+                    <div className="mt-3 pl-7 space-y-1">
+                      <div className="flex justify-between items-center">
+                        <span className="text-[11px] text-muted-foreground">Tamaño</span>
+                        <span className="text-[11px] font-medium">{Math.round(((storyOpts.zoomImagen ?? 1)) * 100)}%</span>
                       </div>
-                    )}
-                  </div>
+                      <input
+                        type="range"
+                        min={0.6}
+                        max={1.13}
+                        step={0.01}
+                        value={storyOpts.zoomImagen ?? 1}
+                        onChange={(e) => setStoryOpts((p) => ({ ...p, zoomImagen: Number(e.target.value) }))}
+                        className="w-full accent-primary"
+                      />
+                    </div>
+                  )}
                 </div>
-              </div>
 
-              <div>
-                <label className="block text-sm font-medium mb-2">Tipo de oferta</label>
-                <div className="grid grid-cols-2 gap-2">
-                  {([
-                    ["simple", "Precio simple", "Solo precio unitario"],
-                    ["packUnidad", "Pack + unidad", "Precio de caja grande + chip × unidad abajo"],
-                  ] as const).map(([val, label, desc]) => (
-                    <button
-                      key={val}
-                      onClick={() => setStoryOpts((p) => ({ ...p, tipoOferta: val }))}
-                      className={`p-3 rounded-lg border text-left transition ${storyOpts.tipoOferta === val ? "border-primary bg-primary/5" : "border-border hover:border-primary/50"}`}
-                    >
-                      <p className="text-sm font-semibold">{label}</p>
-                      <p className="text-[11px] text-muted-foreground leading-tight mt-0.5">{desc}</p>
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium mb-2">Etiqueta del badge</label>
-                <div className="grid grid-cols-2 gap-2 mb-2">
-                  {["SÚPER OFERTA", "OFERTA", "2×1", "NUEVO", "COMBO", "IMPERDIBLE"].map((preset) => (
-                    <button
-                      key={preset}
-                      onClick={() => setStoryOpts((p) => ({ ...p, etiquetaBadge: preset }))}
-                      className={`px-3 py-2 rounded-lg border text-xs font-semibold transition ${storyOpts.etiquetaBadge === preset ? "border-primary bg-primary/5" : "border-border hover:border-primary/50"}`}
-                    >
-                      {preset}
-                    </button>
-                  ))}
-                </div>
-                <input
-                  type="text"
-                  value={storyOpts.etiquetaBadge}
-                  onChange={(e) => setStoryOpts((p) => ({ ...p, etiquetaBadge: e.target.value }))}
-                  placeholder="O escribí la tuya (vacío = sin badge)"
-                  className="w-full border border-border rounded-lg px-3 py-2 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary"
-                />
-              </div>
-
-              <div>
-                <div className="flex items-center justify-between mb-2">
-                  <label className="text-sm font-medium">Rango de fechas (arriba derecha)</label>
-                  <label className="flex items-center gap-2 text-xs">
+                {/* Fechas — apagado por default */}
+                <div className="border border-border rounded-xl p-3 bg-card">
+                  <label className="flex items-center gap-3 cursor-pointer">
                     <input
                       type="checkbox"
                       checked={storyOpts.mostrarRangoFechas}
                       onChange={(e) => setStoryOpts((p) => ({ ...p, mostrarRangoFechas: e.target.checked }))}
-                      className="accent-primary"
+                      className="accent-primary w-4 h-4"
                     />
-                    Mostrar
-                  </label>
-                </div>
-                <input
-                  type="text"
-                  disabled={!storyOpts.mostrarRangoFechas}
-                  value={storyOpts.rangoFechas}
-                  onChange={(e) => setStoryOpts((p) => ({ ...p, rangoFechas: e.target.value }))}
-                  placeholder="Auto (semana actual) — o escribí: 21—27 ABR"
-                  className="w-full border border-border rounded-lg px-3 py-2 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary disabled:opacity-50"
-                />
-              </div>
-
-              <div className="border border-border rounded-lg p-3 bg-accent/30 space-y-3">
-                <label className="flex items-center gap-3 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={storyOpts.mostrarImagen}
-                    onChange={(e) => setStoryOpts((p) => ({ ...p, mostrarImagen: e.target.checked }))}
-                    className="accent-primary w-4 h-4"
-                  />
-                  <div className="flex-1">
-                    <p className="text-sm font-medium">Mostrar imagen del producto</p>
-                    <p className="text-[11px] text-muted-foreground">Se toma de Cloudinary. Si el producto no tiene imagen, queda el frame vacío.</p>
-                  </div>
-                </label>
-                {storyOpts.mostrarImagen && (
-                  <div className="pl-7 space-y-1">
-                    <div className="flex justify-between items-center">
-                      <label className="text-xs text-muted-foreground">Tamaño de imagen</label>
-                      <span className="text-xs font-medium text-foreground">{Math.round(((storyOpts.zoomImagen ?? 1)) * 100)}%</span>
+                    <div className="flex-1">
+                      <p className="text-sm font-medium">Mostrar rango de fechas</p>
+                      <p className="text-[11px] text-muted-foreground">Para ofertas con fecha límite (arriba derecha)</p>
                     </div>
+                  </label>
+                  {storyOpts.mostrarRangoFechas && (
                     <input
-                      type="range"
-                      min={0.6}
-                      max={1.13}
-                      step={0.01}
-                      value={storyOpts.zoomImagen ?? 1}
-                      onChange={(e) => setStoryOpts((p) => ({ ...p, zoomImagen: Number(e.target.value) }))}
-                      className="w-full accent-primary"
+                      type="text"
+                      value={storyOpts.rangoFechas}
+                      onChange={(e) => setStoryOpts((p) => ({ ...p, rangoFechas: e.target.value }))}
+                      placeholder="Auto (semana actual) — o: 21—27 ABR"
+                      className="w-full mt-3 ml-7 border border-border rounded-md px-3 py-1.5 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary"
+                      style={{ width: "calc(100% - 1.75rem)" }}
                     />
-                    <p className="text-[10px] text-muted-foreground">Límite 113% para no romper el recuadro blanco.</p>
-                  </div>
-                )}
-              </div>
-
-              <div className="border border-border rounded-lg p-3 bg-accent/30 space-y-3">
-                <label className="flex items-center gap-3 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={storyOpts.usarDescuentoReal}
-                    onChange={(e) => setStoryOpts((p) => ({ ...p, usarDescuentoReal: e.target.checked }))}
-                    className="accent-primary w-4 h-4"
-                  />
-                  <div className="flex-1">
-                    <p className="text-sm font-medium">Usar descuento ya cargado del producto</p>
-                    <p className="text-[11px] text-muted-foreground">Si el producto tiene un descuento activo (tabla de descuentos), se aplica automáticamente al precio. Tiene prioridad sobre el descuento manual.</p>
-                    {(() => {
-                      const seleccionados = products.filter((_, i) => selected.has(i));
-                      const conDesc = seleccionados.filter((p) => p.descuentoPct > 0);
-                      if (seleccionados.length === 0) return null;
-                      if (conDesc.length === 0) return <p className="text-[11px] text-amber-700 mt-1">Ninguno de los {seleccionados.length} productos seleccionados tiene descuento activo.</p>;
-                      return (
-                        <div className="mt-2 space-y-0.5">
-                          {conDesc.slice(0, 3).map((p) => (
-                            <p key={p.id} className="text-[11px] text-emerald-700">
-                              ✓ {p.nombre} — {p.descuentoPrecioFijo != null ? `precio fijo $${p.descuentoPrecioFijo}` : `${Math.round(p.descuentoPct)}%`} ({p.descuentoNombre})
-                            </p>
-                          ))}
-                          {conDesc.length > 3 && <p className="text-[11px] text-muted-foreground">+ {conDesc.length - 3} más con descuento</p>}
-                        </div>
-                      );
-                    })()}
-                  </div>
-                </label>
-              </div>
-
-              <div className="border border-border rounded-lg p-3 bg-accent/30 space-y-3">
-                <label className="flex items-center gap-3 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={storyOpts.aplicarDescuento}
-                    onChange={(e) => setStoryOpts((p) => ({ ...p, aplicarDescuento: e.target.checked }))}
-                    className="accent-primary w-4 h-4"
-                  />
-                  <div className="flex-1">
-                    <p className="text-sm font-medium">Aplicar descuento manual solo para este cartel</p>
-                    <p className="text-[11px] text-muted-foreground">Porcentaje ad-hoc para productos sin descuento cargado (o cuando no se usa el descuento real). No modifica el precio en la base de datos.</p>
-                  </div>
-                </label>
-                {storyOpts.aplicarDescuento && (
-                  <div className="flex items-center gap-3 pl-7">
-                    <label className="text-xs text-muted-foreground">Porcentaje:</label>
-                    <input
-                      type="number"
-                      min={1}
-                      max={80}
-                      step={1}
-                      value={storyOpts.porcentajeDescuento}
-                      onChange={(e) => setStoryOpts((p) => ({ ...p, porcentajeDescuento: Math.max(0, Math.min(80, Number(e.target.value))) }))}
-                      className="w-20 border border-border rounded-md px-2 py-1 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary"
-                    />
-                    <span className="text-sm">%</span>
-                    <span className="text-xs text-muted-foreground ml-auto">
-                      Ej: {storyOpts.porcentajeDescuento}% sobre $10.000 = ${(10000 * (1 - storyOpts.porcentajeDescuento/100)).toLocaleString("es-AR", { maximumFractionDigits: 0 })}
-                    </span>
-                  </div>
-                )}
-              </div>
-
-              <details className="border-t border-border pt-4">
-                <summary className="text-sm font-medium cursor-pointer select-none">Tamaños (ajuste fino)</summary>
-                <div className="grid grid-cols-2 gap-3 mt-3">
-                  <div className="col-span-2">
-                    <label className="block text-xs text-muted-foreground mb-1">Logo ({config.story_logoH}px)</label>
-                    <input type="range" min={60} max={260} step={5} value={config.story_logoH} onChange={(e) => updateConfig("story_logoH", Number(e.target.value))} className="w-full accent-primary" />
-                  </div>
-                  <div>
-                    <label className="block text-xs text-muted-foreground mb-1">Badge ({config.story_tamañoBadge}px)</label>
-                    <input type="range" min={24} max={72} step={1} value={config.story_tamañoBadge} onChange={(e) => updateConfig("story_tamañoBadge", Number(e.target.value))} className="w-full accent-primary" />
-                  </div>
-                  <div>
-                    <label className="block text-xs text-muted-foreground mb-1">Subtítulo ({config.story_tamañoSubtitulo}px)</label>
-                    <input type="range" min={20} max={50} step={1} value={config.story_tamañoSubtitulo} onChange={(e) => updateConfig("story_tamañoSubtitulo", Number(e.target.value))} className="w-full accent-primary" />
-                  </div>
-                  <div className="col-span-2">
-                    <label className="block text-xs text-muted-foreground mb-1">Nombre del producto ({config.story_tamañoNombre}px)</label>
-                    <input type="range" min={48} max={130} step={2} value={config.story_tamañoNombre} onChange={(e) => updateConfig("story_tamañoNombre", Number(e.target.value))} className="w-full accent-primary" />
-                  </div>
-                  <div>
-                    <label className="block text-xs text-muted-foreground mb-1">Precio ({config.story_tamañoPrecio}px)</label>
-                    <input type="range" min={56} max={140} step={2} value={config.story_tamañoPrecio} onChange={(e) => updateConfig("story_tamañoPrecio", Number(e.target.value))} className="w-full accent-primary" />
-                  </div>
-                  <div>
-                    <label className="block text-xs text-muted-foreground mb-1">Pill unidad ({config.story_tamañoPillUnidad}px)</label>
-                    <input type="range" min={20} max={52} step={1} value={config.story_tamañoPillUnidad} onChange={(e) => updateConfig("story_tamañoPillUnidad", Number(e.target.value))} className="w-full accent-primary" />
-                  </div>
+                  )}
                 </div>
-              </details>
 
-              <div className="text-xs text-muted-foreground border-t border-border pt-3">
-                💡 Si seleccionás varios productos, se descarga un PNG por cada uno. El navegador te puede pedir confirmar descargas múltiples.
+                {/* Descuento */}
+                <div className="border border-border rounded-xl p-3 bg-card space-y-3">
+                  <label className="flex items-center gap-3 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={storyOpts.usarDescuentoReal}
+                      onChange={(e) => setStoryOpts((p) => ({ ...p, usarDescuentoReal: e.target.checked }))}
+                      className="accent-primary w-4 h-4"
+                    />
+                    <div className="flex-1">
+                      <p className="text-sm font-medium">Usar descuento del producto si tiene</p>
+                      <p className="text-[11px] text-muted-foreground">Toma el descuento activo del catálogo automáticamente</p>
+                      {(() => {
+                        const conDesc = seleccionados.filter((p) => p.descuentoPct > 0);
+                        if (seleccionados.length === 0) return null;
+                        if (conDesc.length === 0) return <p className="text-[11px] text-amber-700 mt-1.5">Ningún producto tiene descuento activo</p>;
+                        return <p className="text-[11px] text-emerald-700 mt-1.5">{conDesc.length} de {seleccionados.length} con descuento</p>;
+                      })()}
+                    </div>
+                  </label>
+                  <label className="flex items-center gap-3 cursor-pointer pt-2 border-t border-border">
+                    <input
+                      type="checkbox"
+                      checked={storyOpts.aplicarDescuento}
+                      onChange={(e) => setStoryOpts((p) => ({ ...p, aplicarDescuento: e.target.checked }))}
+                      className="accent-primary w-4 h-4"
+                    />
+                    <div className="flex-1">
+                      <p className="text-sm font-medium">Aplicar descuento manual</p>
+                      <p className="text-[11px] text-muted-foreground">Solo para este cartel, no toca la DB</p>
+                    </div>
+                  </label>
+                  {storyOpts.aplicarDescuento && (
+                    <div className="flex items-center gap-2 pl-7">
+                      <input
+                        type="number"
+                        min={1}
+                        max={80}
+                        step={1}
+                        value={storyOpts.porcentajeDescuento}
+                        onChange={(e) => setStoryOpts((p) => ({ ...p, porcentajeDescuento: Math.max(0, Math.min(80, Number(e.target.value))) }))}
+                        className="w-16 border border-border rounded-md px-2 py-1 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary"
+                      />
+                      <span className="text-sm">% de descuento</span>
+                    </div>
+                  )}
+                </div>
+
+                {/* Avanzado — colapsado */}
+                <details className="border border-border rounded-xl bg-card">
+                  <summary className="px-3 py-2.5 text-sm font-medium cursor-pointer select-none flex items-center justify-between hover:bg-accent/50 rounded-xl transition-colors">
+                    <span>Ajustes avanzados</span>
+                    <span className="text-[10px] text-muted-foreground">Tipografías, fondo</span>
+                  </summary>
+                  <div className="px-3 pb-3 space-y-4 border-t border-border pt-3">
+                    {/* Fondo */}
+                    <div>
+                      <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground mb-2">Fondo personalizado</p>
+                      <div className="flex items-center gap-3">
+                        <div className="w-16 h-16 rounded-lg border border-dashed border-border bg-background flex items-center justify-center overflow-hidden shrink-0">
+                          {fondoStoryBase64 ? (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img src={fondoStoryBase64} alt="" className="w-full h-full object-cover" />
+                          ) : (
+                            <span className="text-[10px] text-muted-foreground">Default</span>
+                          )}
+                        </div>
+                        <div className="flex-1 space-y-1.5">
+                          <div className="flex gap-2">
+                            <label className="cursor-pointer text-[11px] inline-block border border-border rounded-md px-2 py-1 hover:bg-accent transition-colors">
+                              {fondoStoryBase64 ? "Cambiar" : "Subir imagen"}
+                              <input
+                                type="file"
+                                accept="image/*"
+                                className="hidden"
+                                onChange={(e) => {
+                                  const f = e.target.files?.[0];
+                                  if (!f) return;
+                                  const r = new FileReader();
+                                  r.onload = () => setFondoStoryBase64(r.result as string);
+                                  r.readAsDataURL(f);
+                                  e.target.value = "";
+                                }}
+                              />
+                            </label>
+                            {fondoStoryBase64 && (
+                              <button
+                                onClick={() => setFondoStoryBase64(null)}
+                                className="text-[11px] text-muted-foreground hover:text-destructive transition-colors"
+                              >
+                                Quitar
+                              </button>
+                            )}
+                          </div>
+                          {fondoStoryBase64 && (
+                            <div>
+                              <label className="block text-[10px] text-muted-foreground">Opacidad ({Math.round(fondoStoryOpacity * 100)}%)</label>
+                              <input
+                                type="range"
+                                min={20}
+                                max={100}
+                                step={5}
+                                value={Math.round(fondoStoryOpacity * 100)}
+                                onChange={(e) => setFondoStoryOpacity(Number(e.target.value) / 100)}
+                                className="w-full accent-primary"
+                              />
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                    {/* Tipografías */}
+                    <div>
+                      <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground mb-2">Tamaños tipográficos</p>
+                      <div className="grid grid-cols-2 gap-3">
+                        <div className="col-span-2">
+                          <label className="block text-[10px] text-muted-foreground mb-0.5">Logo ({config.story_logoH}px)</label>
+                          <input type="range" min={60} max={260} step={5} value={config.story_logoH} onChange={(e) => updateConfig("story_logoH", Number(e.target.value))} className="w-full accent-primary" />
+                        </div>
+                        <div>
+                          <label className="block text-[10px] text-muted-foreground mb-0.5">Badge ({config.story_tamañoBadge}px)</label>
+                          <input type="range" min={24} max={72} step={1} value={config.story_tamañoBadge} onChange={(e) => updateConfig("story_tamañoBadge", Number(e.target.value))} className="w-full accent-primary" />
+                        </div>
+                        <div>
+                          <label className="block text-[10px] text-muted-foreground mb-0.5">Subtítulo ({config.story_tamañoSubtitulo}px)</label>
+                          <input type="range" min={20} max={50} step={1} value={config.story_tamañoSubtitulo} onChange={(e) => updateConfig("story_tamañoSubtitulo", Number(e.target.value))} className="w-full accent-primary" />
+                        </div>
+                        <div className="col-span-2">
+                          <label className="block text-[10px] text-muted-foreground mb-0.5">Nombre del producto ({config.story_tamañoNombre}px)</label>
+                          <input type="range" min={48} max={130} step={2} value={config.story_tamañoNombre} onChange={(e) => updateConfig("story_tamañoNombre", Number(e.target.value))} className="w-full accent-primary" />
+                        </div>
+                        <div>
+                          <label className="block text-[10px] text-muted-foreground mb-0.5">Precio ({config.story_tamañoPrecio}px)</label>
+                          <input type="range" min={56} max={140} step={2} value={config.story_tamañoPrecio} onChange={(e) => updateConfig("story_tamañoPrecio", Number(e.target.value))} className="w-full accent-primary" />
+                        </div>
+                        <div>
+                          <label className="block text-[10px] text-muted-foreground mb-0.5">Pill ({config.story_tamañoPillUnidad}px)</label>
+                          <input type="range" min={20} max={52} step={1} value={config.story_tamañoPillUnidad} onChange={(e) => updateConfig("story_tamañoPillUnidad", Number(e.target.value))} className="w-full accent-primary" />
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </details>
               </div>
             </div>
-            <div className="flex gap-2 px-6 py-4 border-t border-border shrink-0">
+
+            {/* Footer fijo */}
+            <div className="flex gap-2 px-6 py-3 border-t border-border shrink-0 bg-card">
               <button
                 onClick={() => setShowStoryConfig(false)}
-                className="flex-1 px-4 py-2.5 rounded-lg border border-border text-sm font-medium hover:bg-accent transition"
+                className="flex-1 sm:flex-none px-5 py-2.5 rounded-lg border border-border text-sm font-medium hover:bg-accent transition"
               >
                 Cancelar
               </button>
               <button
                 onClick={() => generateStory(storyOpts)}
-                className="flex-1 px-4 py-2.5 rounded-lg bg-primary text-primary-foreground text-sm font-semibold hover:bg-primary/90 transition"
+                className="flex-1 px-5 py-2.5 rounded-lg bg-primary text-primary-foreground text-sm font-semibold hover:bg-primary/90 transition flex items-center justify-center gap-2"
               >
-                Generar PNG ({selected.size})
+                <Download className="w-4 h-4" />
+                Generar {selected.size > 1 ? `(${selected.size} historias)` : "historia"}
               </button>
             </div>
           </div>
         </div>
-      )}
+        );
+      })()}
 
       {/* Premium Config Modal (pre-generación) */}
       {showPremiumConfig && (
