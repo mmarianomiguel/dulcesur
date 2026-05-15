@@ -941,7 +941,15 @@ function ProductosDestacadosBlock({
     const qty = getQty(prod.id);
     const sinStock = prod.stock <= 0;
     const pres = presMap[prod.id];
-    const presIdx = selectedPres[prod.id] ?? 0;
+    // Cigarros: defaultear a la presentación "Unidad" (cantidad===1). Sin esto, como en cigarros
+    // "Medio Carton" tiene cantidad 0.5 y se ordena primero por ascendente, queda activo Medio Carton.
+    const catName = (prod.categorias?.nombre || "").toLowerCase();
+    let defaultPresIdx = 0;
+    if (catName === "cigarros" && pres && pres.length > 1) {
+      const unitIdx = pres.findIndex((p: any) => Number(p.cantidad) === 1);
+      if (unitIdx >= 0) defaultPresIdx = unitIdx;
+    }
+    const presIdx = selectedPres[prod.id] ?? defaultPresIdx;
     const activePres = pres && pres.length > 1 ? pres[presIdx] : null;
     const presLabel = activePres?.nombre || "Unidad";
     const presPrice = activePres && activePres.precio > 0 ? activePres.precio : prod.precio;
