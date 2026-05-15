@@ -4017,67 +4017,141 @@ export default function ListaPreciosPage() {
         </div>
       )}
 
-      {/* Preview de historias generadas — el usuario decide qué descargar */}
-      {storyPreviews && storyPreviews.length > 0 && (
-        <div className="fixed inset-0 z-50 bg-black/70 flex items-center justify-center p-4" onClick={() => setStoryPreviews(null)}>
-          <div className="bg-background rounded-xl max-w-4xl w-full max-h-[90vh] flex flex-col overflow-hidden" onClick={(e) => e.stopPropagation()}>
-            <div className="flex items-center justify-between px-5 py-3 border-b">
-              <h2 className="text-base font-semibold">
-                Vista previa ({storyPreviews.length} {storyPreviews.length === 1 ? "historia" : "historias"})
-              </h2>
-              <div className="flex items-center gap-2">
-                {storyPreviews.length > 1 && (
-                  <button
-                    onClick={() => {
-                      storyPreviews.forEach((p, idx) => {
-                        setTimeout(() => {
-                          const a = document.createElement("a");
-                          a.href = p.dataUrl;
-                          a.download = p.filename;
-                          document.body.appendChild(a);
-                          a.click();
-                          document.body.removeChild(a);
-                        }, idx * 400);
-                      });
-                    }}
-                    className="bg-primary text-primary-foreground px-3 py-1.5 rounded-lg text-sm font-medium hover:bg-primary/90 flex items-center gap-1.5"
-                  >
-                    <Download className="w-4 h-4" />
-                    Descargar todas
-                  </button>
-                )}
-                <button onClick={() => setStoryPreviews(null)} className="text-muted-foreground hover:text-foreground p-1">
+      {/* Preview de historias generadas — diferente layout según cantidad */}
+      {storyPreviews && storyPreviews.length > 0 && (() => {
+        const downloadOne = (p: typeof storyPreviews[number]) => {
+          const a = document.createElement("a");
+          a.href = p.dataUrl;
+          a.download = p.filename;
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
+        };
+        const downloadAll = () => {
+          storyPreviews.forEach((p, idx) => setTimeout(() => downloadOne(p), idx * 400));
+        };
+        const isSingle = storyPreviews.length === 1;
+
+        return (
+          <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4" onClick={() => setStoryPreviews(null)}>
+            <div
+              className={`bg-card rounded-2xl shadow-2xl w-full ${isSingle ? "max-w-md" : "max-w-5xl"} max-h-[95vh] flex flex-col overflow-hidden border border-border`}
+              onClick={(e) => e.stopPropagation()}
+            >
+              {/* Header */}
+              <div className="flex items-center justify-between px-5 py-3.5 border-b border-border shrink-0 bg-gradient-to-r from-primary/5 to-transparent">
+                <div className="flex items-center gap-3">
+                  <div className="w-9 h-9 rounded-xl bg-primary/10 flex items-center justify-center">
+                    <Check className="w-4 h-4 text-primary" />
+                  </div>
+                  <div>
+                    <h2 className="text-base font-semibold">{isSingle ? "Tu historia está lista" : `${storyPreviews.length} historias generadas`}</h2>
+                    <p className="text-[11px] text-muted-foreground">
+                      {isSingle ? "Previsualizá y descargá" : "Descargá las que quieras o todas juntas"}
+                    </p>
+                  </div>
+                </div>
+                <button onClick={() => setStoryPreviews(null)} className="text-muted-foreground hover:text-foreground p-1.5 rounded-lg hover:bg-accent transition-colors">
                   <X className="w-5 h-5" />
                 </button>
               </div>
-            </div>
-            <div className="flex-1 overflow-y-auto p-4">
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
-                {storyPreviews.map((p, idx) => (
-                  <div key={idx} className="flex flex-col gap-2 bg-muted/30 rounded-lg p-2">
-                    <img src={p.dataUrl} alt={p.name} className="w-full rounded-md border" />
-                    <p className="text-xs font-medium truncate" title={p.name}>{p.name}</p>
-                    <button
-                      onClick={() => {
-                        const a = document.createElement("a");
-                        a.href = p.dataUrl;
-                        a.download = p.filename;
-                        document.body.appendChild(a);
-                        a.click();
-                        document.body.removeChild(a);
-                      }}
-                      className="bg-primary text-primary-foreground px-3 py-1.5 rounded-lg text-xs font-medium hover:bg-primary/90 flex items-center justify-center gap-1.5"
-                    >
-                      <Download className="w-3.5 h-3.5" />
-                      Descargar
-                    </button>
+
+              {/* Body */}
+              <div className="flex-1 overflow-y-auto p-5">
+                {isSingle ? (
+                  /* Vista grande para 1 sola historia */
+                  <div className="flex flex-col items-center gap-4">
+                    <div className="relative group">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={storyPreviews[0].dataUrl}
+                        alt={storyPreviews[0].name}
+                        className="max-h-[60vh] w-auto rounded-xl border border-border shadow-lg"
+                      />
+                      <a
+                        href={storyPreviews[0].dataUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="absolute inset-0 flex items-center justify-center bg-black/0 hover:bg-black/40 rounded-xl transition-colors opacity-0 hover:opacity-100"
+                        title="Abrir en tamaño real"
+                      >
+                        <span className="bg-white text-foreground px-3 py-1.5 rounded-full text-xs font-medium shadow-md">
+                          Ver tamaño real
+                        </span>
+                      </a>
+                    </div>
+                    <div className="text-center">
+                      <p className="text-sm font-medium">{storyPreviews[0].name}</p>
+                      <p className="text-[11px] text-muted-foreground mt-0.5">PNG 1080 × 1920 px</p>
+                    </div>
                   </div>
-                ))}
+                ) : (
+                  /* Grid para múltiples historias */
+                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
+                    {storyPreviews.map((p, idx) => (
+                      <div key={idx} className="group bg-card border border-border rounded-xl overflow-hidden hover:shadow-md transition-shadow">
+                        <a
+                          href={p.dataUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="block relative aspect-[9/16] bg-muted/30 overflow-hidden"
+                          title="Ver tamaño real"
+                        >
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img src={p.dataUrl} alt={p.name} className="w-full h-full object-contain group-hover:scale-105 transition-transform duration-200" />
+                          <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors flex items-center justify-center opacity-0 group-hover:opacity-100">
+                            <span className="bg-white text-foreground px-2 py-1 rounded-md text-[10px] font-medium shadow-sm">
+                              Ver tamaño real
+                            </span>
+                          </div>
+                        </a>
+                        <div className="p-2.5 space-y-1.5">
+                          <p className="text-[11px] font-medium leading-tight line-clamp-2" title={p.name}>{p.name}</p>
+                          <button
+                            onClick={() => downloadOne(p)}
+                            className="w-full bg-primary text-primary-foreground px-2 py-1.5 rounded-md text-[11px] font-medium hover:bg-primary/90 flex items-center justify-center gap-1 transition-colors"
+                          >
+                            <Download className="w-3 h-3" />
+                            Descargar
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Footer */}
+              <div className="flex flex-col sm:flex-row gap-2 px-5 py-3.5 border-t border-border shrink-0 bg-card">
+                <button
+                  onClick={() => { setStoryPreviews(null); setShowStoryConfig(true); }}
+                  className="px-4 py-2.5 rounded-lg border border-border text-sm font-medium hover:bg-accent transition-colors"
+                >
+                  Volver a configurar
+                </button>
+                <div className="flex-1" />
+                {isSingle ? (
+                  <button
+                    onClick={() => downloadOne(storyPreviews[0])}
+                    className="flex-1 sm:flex-none px-6 py-2.5 rounded-lg bg-primary text-primary-foreground text-sm font-semibold hover:bg-primary/90 transition-colors flex items-center justify-center gap-2"
+                  >
+                    <Download className="w-4 h-4" />
+                    Descargar PNG
+                  </button>
+                ) : (
+                  <button
+                    onClick={downloadAll}
+                    className="flex-1 sm:flex-none px-6 py-2.5 rounded-lg bg-primary text-primary-foreground text-sm font-semibold hover:bg-primary/90 transition-colors flex items-center justify-center gap-2"
+                  >
+                    <Download className="w-4 h-4" />
+                    Descargar todas ({storyPreviews.length})
+                  </button>
+                )}
               </div>
             </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
     </div>
   );
 }
