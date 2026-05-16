@@ -27,6 +27,12 @@ interface ClienteMap {
   saldo: number;
   lat: number | null;
   lng: number | null;
+  zona_entrega: string | null;
+}
+
+interface Zona {
+  id: string;
+  nombre: string;
 }
 
 // ─── Marcadores agrupados (clustering) ───
@@ -104,6 +110,8 @@ function ClusteredMarkers({
 
 export default function ClientesMapaPage() {
   const [clientes, setClientes] = useState<ClienteMap[]>([]);
+  const [zonas, setZonas] = useState<Zona[]>([]);
+  const [zonaFilter, setZonaFilter] = useState<string>("todas");
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [updating, setUpdating] = useState(false);
@@ -124,7 +132,7 @@ export default function ClientesMapaPage() {
   const fetchClientes = useCallback(async () => {
     const { data } = await supabase
       .from("clientes")
-      .select("id, nombre, domicilio, localidad, provincia, telefono, email, maps_url, saldo, lat, lng")
+      .select("id, nombre, domicilio, localidad, provincia, telefono, email, maps_url, saldo, lat, lng, zona_entrega")
       .eq("activo", true)
       .not("domicilio", "is", null)
       .order("nombre")
@@ -134,6 +142,11 @@ export default function ClientesMapaPage() {
   }, []);
 
   useEffect(() => { fetchClientes(); }, [fetchClientes]);
+
+  useEffect(() => {
+    supabase.from("zonas_entrega").select("id, nombre").order("nombre")
+      .then(({ data }) => setZonas((data || []) as Zona[]));
+  }, []);
 
   // Guarda coordenadas de un cliente (arrastre de marcador o toque en el mapa).
   const guardarCoords = useCallback(async (id: string, lat: number, lng: number) => {
@@ -215,12 +228,15 @@ export default function ClientesMapaPage() {
   };
 
   const q = search.trim().toLowerCase();
-  const filtered = clientes.filter((c) =>
-    !q ||
-    c.nombre.toLowerCase().includes(q) ||
-    (c.domicilio || "").toLowerCase().includes(q) ||
-    (c.localidad || "").toLowerCase().includes(q)
-  );
+  const filtered = clientes.filter((c) => {
+    if (zonaFilter !== "todas" && c.zona_entrega !== zonaFilter) return false;
+    if (!q) return true;
+    return (
+      c.nombre.toLowerCase().includes(q) ||
+      (c.domicilio || "").toLowerCase().includes(q) ||
+      (c.localidad || "").toLowerCase().includes(q)
+    );
+  });
 
   const withCoords = filtered.filter((c) => c.lat != null && c.lng != null);
   const sinUbicar = filtered.filter((c) => c.lat == null || c.lng == null);
@@ -270,6 +286,32 @@ export default function ClientesMapaPage() {
         </span>
         <span className="text-muted-foreground/80">· Tocá un grupo para acercar · Arrastrá un marcador para corregirlo</span>
       </div>
+
+      {/* Filtro por zona de entrega */}
+      {zonas.length > 0 && (
+        <div className="flex flex-wrap items-center gap-1.5">
+          <span className="text-xs font-medium text-muted-foreground mr-1">Zona:</span>
+          <Button
+            size="sm"
+            variant={zonaFilter === "todas" ? "default" : "outline"}
+            className="h-7 text-xs px-3"
+            onClick={() => setZonaFilter("todas")}
+          >
+            Todas ({clientes.length})
+          </Button>
+          {zonas.map((z) => (
+            <Button
+              key={z.id}
+              size="sm"
+              variant={zonaFilter === z.id ? "default" : "outline"}
+              className="h-7 text-xs px-3"
+              onClick={() => setZonaFilter(z.id)}
+            >
+              {z.nombre} ({clientes.filter((c) => c.zona_entrega === z.id).length})
+            </Button>
+          ))}
+        </div>
+      )}
 
       {/* Banner modo "ubicar en mapa" */}
       {placingCliente && (
