@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { createServerClient } from "@supabase/ssr";
+import { geocodeGoogle } from "@/lib/geocode";
 
 export const maxDuration = 60;
 
@@ -46,6 +47,9 @@ async function resolveMapsUrl(shortUrl: string): Promise<[number, number] | null
 }
 
 async function geocodeText(addr: string): Promise<[number, number] | null> {
+  // Google primero (más preciso para direcciones argentinas); Nominatim de fallback.
+  const g = await geocodeGoogle(addr);
+  if (g) return [g.lat, g.lng];
   try {
     const res = await fetch(
       `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(addr)}&limit=1`,
@@ -101,7 +105,7 @@ export async function POST(req: NextRequest) {
       const addr = [c.domicilio, c.localidad, c.provincia, "Argentina"]
         .filter(Boolean).map((s) => String(s).trim()).join(", ");
       coords = await geocodeText(addr);
-      await new Promise((r) => setTimeout(r, 1100)); // rate limit Nominatim
+      await new Promise((r) => setTimeout(r, 200)); // pausa breve (Google no requiere rate limit)
     }
     if (coords) {
       await supabase.from("clientes")

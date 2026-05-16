@@ -1,8 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
+import { geocodeGoogle } from "@/lib/geocode";
 
 const ORS_KEY = process.env.OPENROUTESERVICE_API_KEY;
+const GOOGLE_KEY = process.env.GOOGLE_MAPS_API_KEY;
 const GEOCODE_URL = "https://api.openrouteservice.org/geocode/search";
 const OPTIMIZE_URL = "https://api.openrouteservice.org/optimization";
+const GOOGLE_ROUTES_URL = "https://routes.googleapis.com/directions/v2:computeRoutes";
+// Routes API admite hasta 25 waypoints intermedios con optimización de orden.
+const GOOGLE_MAX_STOPS = 25;
 
 type Stop = { id: string; address?: string; mapsUrl?: string | null };
 
@@ -85,9 +90,55 @@ async function geocode(
   address: string,
   focus?: [number, number] | null,
 ): Promise<[number, number] | null> {
+  // Google primero (más preciso para direcciones argentinas); ORS y Nominatim de fallback.
+  const g = await geocodeGoogle(address);
+  if (g) return [g.lng, g.lat]; // ORS/optimización esperan [lng, lat]
   const ors = await geocodeORS(address, focus);
   if (ors) return ors;
   return geocodeNominatim(address);
+}
+
+// Optimización de orden de paradas con Google Routes API (considera tránsito real).
+// Devuelve null si falla o si hay demasiadas paradas → el llamador usa ORS de fallback.
+async function optimizeGoogle(
+  start: [number, number],
+  stops: { id: string; coords: [number, number] }[],
+): Promise<{ orderedIds: string[]; duration: number | null; distance: number | null } | null> {
+  if (!GOOGLE_KEY || stops.length > GOOGLE_MAX_STOPS) return null;
+  const wp = (c: [number, number]) => ({
+    location: { latLng: { latitude: c[1], longitude: c[0] } },
+  });
+  try {
+    const res = await fetch(GOOGLE_ROUTES_URL, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Goog-Api-Key": GOOGLE_KEY,
+        "X-Goog-FieldMask":
+          "routes.optimizedIntermediateWaypointIndex,routes.duration,routes.distanceMeters",
+      },
+      body: JSON.stringify({
+        origin: wp(start),
+        destination: wp(start),
+        intermediates: stops.map((s) => wp(s.coords)),
+        travelMode: "DRIVE",
+        optimizeWaypointOrder: true,
+      }),
+    });
+    if (!res.ok) return null;
+    const data = await res.json();
+    const route = data?.routes?.[0];
+    const order: number[] | undefined = route?.optimizedIntermediateWaypointIndex;
+    if (!route || !Array.isArray(order)) return null;
+    const orderedIds = order.map((i) => stops[i]?.id).filter(Boolean) as string[];
+    const duration = route.duration
+      ? parseInt(String(route.duration).replace(/s$/, ""), 10) || null
+      : null;
+    const distance = typeof route.distanceMeters === "number" ? route.distanceMeters : null;
+    return { orderedIds, duration, distance };
+  } catch {
+    return null;
+  }
 }
 
 // Extrae [lng, lat] de una URL de Google Maps. Soporta short URLs (maps.app.goo.gl), formatos
@@ -150,8 +201,8 @@ async function resolveStop(
 }
 
 export async function POST(req: NextRequest) {
-  if (!ORS_KEY) {
-    return NextResponse.json({ error: "ORS key no configurada" }, { status: 500 });
+  if (!ORS_KEY && !GOOGLE_KEY) {
+    return NextResponse.json({ error: "No hay API key de rutas configurada" }, { status: 500 });
   }
 
   const { stops, origen, origenCoords } = (await req.json()) as {
@@ -210,38 +261,55 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const body = {
-    jobs: valid.map((s, i) => ({ id: i + 1, location: s.coords })),
-    vehicles: [{ id: 1, profile: "driving-car", start: startCoords, end: startCoords }],
-  };
+  // Optimización del orden de paradas: Google Routes primero, ORS de fallback.
+  let orderedIds: string[] = [];
+  let duration: number | null = null; // segundos
+  let distance: number | null = null; // metros
 
-  const res = await fetch(OPTIMIZE_URL, {
-    method: "POST",
-    headers: {
-      Authorization: ORS_KEY,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify(body),
-  });
+  const g = await optimizeGoogle(startCoords, valid);
+  if (g) {
+    orderedIds = g.orderedIds;
+    duration = g.duration;
+    distance = g.distance;
+  } else {
+    if (!ORS_KEY) {
+      return NextResponse.json({ error: "No se pudo optimizar la ruta" }, { status: 502 });
+    }
+    const body = {
+      jobs: valid.map((s, i) => ({ id: i + 1, location: s.coords })),
+      vehicles: [{ id: 1, profile: "driving-car", start: startCoords, end: startCoords }],
+    };
 
-  if (!res.ok) {
-    const err = await res.text();
-    return NextResponse.json({ error: "ORS error", details: err }, { status: 502 });
+    const res = await fetch(OPTIMIZE_URL, {
+      method: "POST",
+      headers: {
+        Authorization: ORS_KEY,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(body),
+    });
+
+    if (!res.ok) {
+      const err = await res.text();
+      return NextResponse.json({ error: "ORS error", details: err }, { status: 502 });
+    }
+
+    const data = await res.json();
+    const route = data?.routes?.[0];
+    const steps: any[] = route?.steps ?? [];
+    orderedIds = steps
+      .filter((step) => step.type === "job")
+      .map((step) => valid[(step.job as number) - 1]?.id)
+      .filter(Boolean) as string[];
+    duration = route?.duration ?? null;
+    distance = route?.distance ?? null;
   }
-
-  const data = await res.json();
-  const route = data?.routes?.[0];
-  const steps: any[] = route?.steps ?? [];
-  const orderedIds = steps
-    .filter((step) => step.type === "job")
-    .map((step) => valid[(step.job as number) - 1]?.id)
-    .filter(Boolean) as string[];
 
   return NextResponse.json({
     orderedIds,
     failed,
-    duration: route?.duration ?? null, // segundos
-    distance: route?.distance ?? null, // metros
+    duration,
+    distance,
     debug,
     origenCoords: startCoords ? { lat: startCoords[1], lng: startCoords[0] } : null,
   });
