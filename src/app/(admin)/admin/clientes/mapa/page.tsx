@@ -1,11 +1,11 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { supabase } from "@/lib/supabase";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
-import { ArrowLeft, Search, MapPin, Phone, Mail, Loader2, RefreshCw } from "lucide-react";
+import { ArrowLeft, Search, MapPin, Phone, Mail, Loader2, RefreshCw, Crosshair, Link2, X } from "lucide-react";
 import Link from "next/link";
 import dynamic from "next/dynamic";
 import { showAdminToast } from "@/components/admin-toast";
@@ -38,6 +38,19 @@ export default function ClientesMapaPage() {
   const [leafletLoaded, setLeafletLoaded] = useState(false);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [L, setL] = useState<any>(null);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const [mapRef, setMapRef] = useState<any>(null);
+
+  // Cliente al que se le está asignando ubicación tocando el mapa.
+  const [placingClientId, setPlacingClientId] = useState<string | null>(null);
+  // Cliente cuyo input de "pegar link" está abierto.
+  const [linkClientId, setLinkClientId] = useState<string | null>(null);
+  const [linkValue, setLinkValue] = useState("");
+  const [linkSaving, setLinkSaving] = useState(false);
+
+  const mapCardRef = useRef<HTMLDivElement>(null);
+  const placingRef = useRef<string | null>(null);
+  placingRef.current = placingClientId;
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -63,6 +76,30 @@ export default function ClientesMapaPage() {
 
   useEffect(() => { fetchClientes(); }, [fetchClientes]);
 
+  // Guarda coordenadas de un cliente (usado por arrastre de marcador y toque en mapa).
+  const guardarCoords = useCallback(async (id: string, lat: number, lng: number) => {
+    const nombre = clientes.find((c) => c.id === id)?.nombre?.trim() || "Cliente";
+    await supabase.from("clientes")
+      .update({ lat, lng, geocoded_at: new Date().toISOString() })
+      .eq("id", id);
+    setClientes((prev) => prev.map((c) => (c.id === id ? { ...c, lat, lng } : c)));
+    showAdminToast(`Ubicación de ${nombre} actualizada`, "success");
+  }, [clientes]);
+
+  // Listener de click en el mapa para el modo "ubicar".
+  useEffect(() => {
+    if (!mapRef) return;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const handler = (e: any) => {
+      const id = placingRef.current;
+      if (!id) return;
+      guardarCoords(id, e.latlng.lat, e.latlng.lng);
+      setPlacingClientId(null);
+    };
+    mapRef.on("click", handler);
+    return () => { mapRef.off("click", handler); };
+  }, [mapRef, guardarCoords]);
+
   // Marcador con forma de pin, color según deuda.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const pinIcon = useCallback((color: string): any => {
@@ -85,7 +122,6 @@ export default function ClientesMapaPage() {
       let restantes = 1;
       let totalGeo = 0;
       let totalFail = 0;
-      // Geocodifica en tandas hasta procesar todos los pendientes.
       while (restantes > 0) {
         const res = await fetch("/api/clientes/geocode", { method: "POST" });
         if (!res.ok) {
@@ -113,6 +149,41 @@ export default function ClientesMapaPage() {
     }
   };
 
+  // Inicia el modo "tocar en el mapa" para un cliente.
+  const iniciarUbicarEnMapa = (id: string) => {
+    setLinkClientId(null);
+    setPlacingClientId(id);
+    mapCardRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  };
+
+  // Resuelve un link de Google Maps y guarda las coords del cliente.
+  const guardarLink = async (id: string) => {
+    const url = linkValue.trim();
+    if (!url) return;
+    setLinkSaving(true);
+    try {
+      const res = await fetch("/api/clientes/geocode", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id, maps_url: url }),
+      });
+      const r = await res.json();
+      if (!res.ok || !r.ok) {
+        showAdminToast(r.error || "No se pudo procesar el link", "error");
+        return;
+      }
+      const nombre = clientes.find((c) => c.id === id)?.nombre?.trim() || "Cliente";
+      setClientes((prev) => prev.map((c) => (c.id === id ? { ...c, lat: r.lat, lng: r.lng, maps_url: url } : c)));
+      setLinkClientId(null);
+      setLinkValue("");
+      showAdminToast(`Ubicación de ${nombre} actualizada`, "success");
+    } catch {
+      showAdminToast("Error al procesar el link", "error");
+    } finally {
+      setLinkSaving(false);
+    }
+  };
+
   const q = search.trim().toLowerCase();
   const filtered = clientes.filter((c) =>
     !q ||
@@ -126,6 +197,8 @@ export default function ClientesMapaPage() {
   const defaultCenter: [number, number] = withCoords.length > 0
     ? [withCoords[0].lat!, withCoords[0].lng!]
     : [-34.9, -58.27]; // Guernica / Glew aprox.
+
+  const placingCliente = placingClientId ? clientes.find((c) => c.id === placingClientId) : null;
 
   return (
     <div className="p-3 sm:p-6 lg:p-8 space-y-4">
@@ -147,15 +220,29 @@ export default function ClientesMapaPage() {
         </Button>
       </div>
 
-      {/* Leyenda */}
-      <div className="flex flex-wrap items-center gap-4 text-xs text-muted-foreground">
+      {/* Leyenda + tip de arrastre */}
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
         <span className="flex items-center gap-1.5">
           <span className="w-3 h-3 rounded-full" style={{ background: "#16a34a" }} /> Al día
         </span>
         <span className="flex items-center gap-1.5">
           <span className="w-3 h-3 rounded-full" style={{ background: "#dc2626" }} /> Con deuda
         </span>
+        <span className="text-muted-foreground/80">· Arrastrá un marcador para corregir su ubicación</span>
       </div>
+
+      {/* Banner modo "ubicar en mapa" */}
+      {placingCliente && (
+        <div className="flex items-center justify-between gap-3 rounded-lg bg-sky-50 border border-sky-200 px-4 py-2.5">
+          <p className="text-sm text-sky-800 flex items-center gap-2">
+            <Crosshair className="w-4 h-4 shrink-0" />
+            Tocá en el mapa la ubicación de <span className="font-semibold">{placingCliente.nombre.trim()}</span>
+          </p>
+          <Button size="sm" variant="ghost" className="h-7 text-sky-700" onClick={() => setPlacingClientId(null)}>
+            <X className="w-4 h-4 mr-1" />Cancelar
+          </Button>
+        </div>
+      )}
 
       {loading ? (
         <div className="flex items-center justify-center py-20">
@@ -165,15 +252,30 @@ export default function ClientesMapaPage() {
           </div>
         </div>
       ) : leafletLoaded && L ? (
-        <Card>
-          <CardContent className="p-0 overflow-hidden rounded-lg" style={{ height: "70vh" }}>
-            <MapContainer center={defaultCenter} zoom={13} style={{ height: "100%", width: "100%" }}>
+        <Card ref={mapCardRef}>
+          <CardContent
+            className={`p-0 overflow-hidden rounded-lg ${placingClientId ? "[&_.leaflet-container]:cursor-crosshair" : ""}`}
+            style={{ height: "70vh" }}
+          >
+            <MapContainer ref={setMapRef} center={defaultCenter} zoom={13} style={{ height: "100%", width: "100%" }}>
               <TileLayer
                 attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
                 url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
               />
               {withCoords.map((c) => (
-                <Marker key={c.id} position={[c.lat!, c.lng!]} icon={pinIcon(c.saldo > 0 ? "#dc2626" : "#16a34a")}>
+                <Marker
+                  key={c.id}
+                  position={[c.lat!, c.lng!]}
+                  icon={pinIcon(c.saldo > 0 ? "#dc2626" : "#16a34a")}
+                  draggable
+                  eventHandlers={{
+                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                    dragend: (e: any) => {
+                      const { lat, lng } = e.target.getLatLng();
+                      guardarCoords(c.id, lat, lng);
+                    },
+                  }}
+                >
                   <Popup>
                     <div className="space-y-1 min-w-[180px]">
                       <p className="font-bold text-sm">{c.nombre}</p>
@@ -202,17 +304,62 @@ export default function ClientesMapaPage() {
       {!loading && sinUbicar.length > 0 && (
         <Card>
           <CardContent className="pt-4">
-            <p className="text-sm font-medium text-muted-foreground mb-2">
-              Clientes sin ubicar ({sinUbicar.length}) — corregí la dirección o pegá un link de Google Maps en su perfil y tocá &quot;Actualizar ubicaciones&quot;
+            <p className="text-sm font-medium text-muted-foreground mb-3">
+              Clientes sin ubicar ({sinUbicar.length}) — ubicalos tocando el mapa o pegando un link de Google Maps
             </p>
             <div className="space-y-1">
               {sinUbicar.map((c) => (
-                <div
-                  key={c.id}
-                  className="flex items-center justify-between py-1.5 text-sm border-b last:border-0 px-1"
-                >
-                  <span className="font-medium">{c.nombre}</span>
-                  <span className="text-xs text-muted-foreground">{[c.domicilio, c.localidad].filter(Boolean).join(", ")}</span>
+                <div key={c.id} className="border-b last:border-0 py-2">
+                  <div className="flex items-center justify-between gap-2 flex-wrap">
+                    <div className="min-w-0">
+                      <p className="font-medium text-sm truncate">{c.nombre.trim()}</p>
+                      <p className="text-xs text-muted-foreground truncate">{[c.domicilio, c.localidad].filter(Boolean).join(", ")}</p>
+                    </div>
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      <Button
+                        size="sm"
+                        variant={placingClientId === c.id ? "default" : "outline"}
+                        className="h-8 gap-1.5 text-xs"
+                        onClick={() => iniciarUbicarEnMapa(c.id)}
+                      >
+                        <Crosshair className="w-3.5 h-3.5" />
+                        Ubicar en mapa
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant={linkClientId === c.id ? "default" : "outline"}
+                        className="h-8 gap-1.5 text-xs"
+                        onClick={() => {
+                          setPlacingClientId(null);
+                          setLinkClientId(linkClientId === c.id ? null : c.id);
+                          setLinkValue("");
+                        }}
+                      >
+                        <Link2 className="w-3.5 h-3.5" />
+                        Pegar link
+                      </Button>
+                    </div>
+                  </div>
+                  {linkClientId === c.id && (
+                    <div className="flex items-center gap-2 mt-2">
+                      <Input
+                        autoFocus
+                        placeholder="Pegá el link de Google Maps..."
+                        value={linkValue}
+                        onChange={(e) => setLinkValue(e.target.value)}
+                        onKeyDown={(e) => { if (e.key === "Enter") guardarLink(c.id); }}
+                        className="h-8 text-xs"
+                      />
+                      <Button
+                        size="sm"
+                        className="h-8 text-xs"
+                        disabled={linkSaving || !linkValue.trim()}
+                        onClick={() => guardarLink(c.id)}
+                      >
+                        {linkSaving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : "Guardar"}
+                      </Button>
+                    </div>
+                  )}
                 </div>
               ))}
             </div>

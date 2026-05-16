@@ -64,6 +64,21 @@ export async function POST(req: NextRequest) {
 
   const body = await req.json().catch(() => ({} as any));
 
+  // Modo puntual: resolver un link de Google Maps para un cliente y guardar coords + link.
+  if (body?.id && body?.maps_url) {
+    const coords = await resolveMapsUrl(String(body.maps_url));
+    if (!coords) {
+      return NextResponse.json(
+        { ok: false, error: "No se pudieron extraer coordenadas de ese link" },
+        { status: 422 }
+      );
+    }
+    await supabase.from("clientes")
+      .update({ lat: coords[0], lng: coords[1], geocoded_at: new Date().toISOString(), maps_url: String(body.maps_url) })
+      .eq("id", body.id);
+    return NextResponse.json({ ok: true, lat: coords[0], lng: coords[1] });
+  }
+
   let query = supabase
     .from("clientes")
     .select("id, nombre, domicilio, localidad, provincia, maps_url")
