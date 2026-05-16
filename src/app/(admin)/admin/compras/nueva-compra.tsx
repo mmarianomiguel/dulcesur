@@ -188,7 +188,8 @@ export default function NuevaCompra({
         setSelectedItemIdx((prev) => {
           const next = prev === null ? 0 : Math.min(prev + 1, len - 1);
           setTimeout(() => {
-            const rows = document.querySelectorAll("[data-compra-item]");
+            const rows = Array.from(document.querySelectorAll("[data-compra-item]"))
+              .filter((el) => (el as HTMLElement).offsetParent !== null);
             rows[next]?.scrollIntoView({ block: "center", behavior: "smooth" });
           }, 0);
           return next;
@@ -198,7 +199,8 @@ export default function NuevaCompra({
         setSelectedItemIdx((prev) => {
           const next = prev === null ? 0 : Math.max(prev - 1, 0);
           setTimeout(() => {
-            const rows = document.querySelectorAll("[data-compra-item]");
+            const rows = Array.from(document.querySelectorAll("[data-compra-item]"))
+              .filter((el) => (el as HTMLElement).offsetParent !== null);
             rows[next]?.scrollIntoView({ block: "center", behavior: "smooth" });
           }, 0);
           return next;
@@ -418,8 +420,10 @@ export default function NuevaCompra({
     ]);
     // Scroll to the newly added item after render
     setTimeout(() => {
-      const rows = document.querySelectorAll("[data-compra-item]");
-      if (rows.length > 0) rows[rows.length - 1].scrollIntoView({ behavior: "smooth", block: "nearest" });
+      // Filtrar solo los visibles: hay 2 sets de [data-compra-item] (cards mobile + filas desktop).
+      const rows = Array.from(document.querySelectorAll("[data-compra-item]"))
+        .filter((el) => (el as HTMLElement).offsetParent !== null);
+      if (rows.length > 0) rows[rows.length - 1].scrollIntoView({ behavior: "smooth", block: "center" });
     }, 50);
     setProductSearch("");
     setProductResults([]);
