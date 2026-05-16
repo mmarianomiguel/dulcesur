@@ -1,20 +1,18 @@
 "use client";
 
 import { useEffect, useState, useCallback, useRef } from "react";
+import { APIProvider, Map, Marker, InfoWindow } from "@vis.gl/react-google-maps";
 import { supabase } from "@/lib/supabase";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
 import { ArrowLeft, Search, MapPin, Phone, Mail, Loader2, RefreshCw, Crosshair, Link2, X } from "lucide-react";
 import Link from "next/link";
-import dynamic from "next/dynamic";
 import { showAdminToast } from "@/components/admin-toast";
 
-// Dynamic import for Leaflet (SSR incompatible)
-const MapContainer = dynamic(() => import("react-leaflet").then((m) => m.MapContainer), { ssr: false });
-const TileLayer = dynamic(() => import("react-leaflet").then((m) => m.TileLayer), { ssr: false });
-const Marker = dynamic(() => import("react-leaflet").then((m) => m.Marker), { ssr: false });
-const Popup = dynamic(() => import("react-leaflet").then((m) => m.Popup), { ssr: false });
+const GMAPS_KEY = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || "";
+const ICON_VERDE = "https://maps.google.com/mapfiles/ms/icons/green-dot.png";
+const ICON_ROJO = "https://maps.google.com/mapfiles/ms/icons/red-dot.png";
 
 interface ClienteMap {
   id: string;
@@ -35,12 +33,9 @@ export default function ClientesMapaPage() {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [updating, setUpdating] = useState(false);
-  const [leafletLoaded, setLeafletLoaded] = useState(false);
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const [L, setL] = useState<any>(null);
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const [mapRef, setMapRef] = useState<any>(null);
 
+  // Cliente seleccionado (InfoWindow abierta).
+  const [selectedId, setSelectedId] = useState<string | null>(null);
   // Cliente al que se le está asignando ubicación tocando el mapa.
   const [placingClientId, setPlacingClientId] = useState<string | null>(null);
   // Cliente cuyo input de "pegar link" está abierto.
@@ -51,16 +46,6 @@ export default function ClientesMapaPage() {
   const mapCardRef = useRef<HTMLDivElement>(null);
   const placingRef = useRef<string | null>(null);
   placingRef.current = placingClientId;
-
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    const link = document.createElement("link");
-    link.rel = "stylesheet";
-    link.href = "https://unpkg.com/leaflet@1.9.4/dist/leaflet.css";
-    document.head.appendChild(link);
-    setLeafletLoaded(true);
-    import("leaflet").then((m) => setL(m.default || m));
-  }, []);
 
   const fetchClientes = useCallback(async () => {
     const { data } = await supabase
@@ -76,7 +61,7 @@ export default function ClientesMapaPage() {
 
   useEffect(() => { fetchClientes(); }, [fetchClientes]);
 
-  // Guarda coordenadas de un cliente (usado por arrastre de marcador y toque en mapa).
+  // Guarda coordenadas de un cliente (arrastre de marcador o toque en el mapa).
   const guardarCoords = useCallback(async (id: string, lat: number, lng: number) => {
     const nombre = clientes.find((c) => c.id === id)?.nombre?.trim() || "Cliente";
     await supabase.from("clientes")
@@ -85,36 +70,6 @@ export default function ClientesMapaPage() {
     setClientes((prev) => prev.map((c) => (c.id === id ? { ...c, lat, lng } : c)));
     showAdminToast(`Ubicación de ${nombre} actualizada`, "success");
   }, [clientes]);
-
-  // Listener de click en el mapa para el modo "ubicar".
-  useEffect(() => {
-    if (!mapRef) return;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const handler = (e: any) => {
-      const id = placingRef.current;
-      if (!id) return;
-      guardarCoords(id, e.latlng.lat, e.latlng.lng);
-      setPlacingClientId(null);
-    };
-    mapRef.on("click", handler);
-    return () => { mapRef.off("click", handler); };
-  }, [mapRef, guardarCoords]);
-
-  // Marcador con forma de pin, color según deuda.
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const pinIcon = useCallback((color: string): any => {
-    if (!L) return undefined;
-    return L.divIcon({
-      className: "",
-      html: `<svg width="28" height="40" viewBox="0 0 28 40" xmlns="http://www.w3.org/2000/svg">
-        <path d="M14 0C6.27 0 0 6.27 0 14c0 9.5 14 26 14 26s14-16.5 14-26C28 6.27 21.73 0 14 0z" fill="${color}"/>
-        <circle cx="14" cy="14" r="5.5" fill="#fff"/>
-      </svg>`,
-      iconSize: [28, 40],
-      iconAnchor: [14, 40],
-      popupAnchor: [0, -34],
-    });
-  }, [L]);
 
   const actualizarUbicaciones = async () => {
     setUpdating(true);
@@ -152,6 +107,7 @@ export default function ClientesMapaPage() {
   // Inicia el modo "tocar en el mapa" para un cliente.
   const iniciarUbicarEnMapa = (id: string) => {
     setLinkClientId(null);
+    setSelectedId(null);
     setPlacingClientId(id);
     mapCardRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
   };
@@ -194,11 +150,12 @@ export default function ClientesMapaPage() {
 
   const withCoords = filtered.filter((c) => c.lat != null && c.lng != null);
   const sinUbicar = filtered.filter((c) => c.lat == null || c.lng == null);
-  const defaultCenter: [number, number] = withCoords.length > 0
-    ? [withCoords[0].lat!, withCoords[0].lng!]
-    : [-34.9, -58.27]; // Guernica / Glew aprox.
+  const defaultCenter = withCoords.length > 0
+    ? { lat: withCoords[0].lat!, lng: withCoords[0].lng! }
+    : { lat: -34.9, lng: -58.27 }; // Guernica / Glew aprox.
 
   const placingCliente = placingClientId ? clientes.find((c) => c.id === placingClientId) : null;
+  const selected = selectedId ? clientes.find((c) => c.id === selectedId) : null;
 
   return (
     <div className="p-3 sm:p-6 lg:p-8 space-y-4">
@@ -251,40 +208,71 @@ export default function ClientesMapaPage() {
             <p className="text-sm text-muted-foreground">Cargando clientes...</p>
           </div>
         </div>
-      ) : leafletLoaded && L ? (
+      ) : !GMAPS_KEY ? (
+        <Card>
+          <CardContent className="py-10 text-center text-sm text-muted-foreground">
+            Falta configurar la clave de Google Maps.
+          </CardContent>
+        </Card>
+      ) : (
         <Card ref={mapCardRef}>
           <CardContent
-            className={`p-0 overflow-hidden rounded-lg ${placingClientId ? "[&_.leaflet-container]:cursor-crosshair" : ""}`}
+            className={`p-0 overflow-hidden rounded-lg ${placingClientId ? "[&_.gm-style]:cursor-crosshair" : ""}`}
             style={{ height: "70vh" }}
           >
-            <MapContainer ref={setMapRef} center={defaultCenter} zoom={13} style={{ height: "100%", width: "100%" }}>
-              <TileLayer
-                attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
-                url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-              />
-              {withCoords.map((c) => (
-                <Marker
-                  key={c.id}
-                  position={[c.lat!, c.lng!]}
-                  icon={pinIcon(c.saldo > 0 ? "#dc2626" : "#16a34a")}
-                  draggable
-                  eventHandlers={{
-                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                    dragend: (e: any) => {
-                      const { lat, lng } = e.target.getLatLng();
-                      guardarCoords(c.id, lat, lng);
-                    },
-                  }}
-                >
-                  <Popup>
-                    <div className="space-y-1 min-w-[180px]">
-                      <p className="font-bold text-sm">{c.nombre}</p>
-                      {c.domicilio && <p className="text-xs flex items-center gap-1"><MapPin className="w-3 h-3 shrink-0" />{c.domicilio}{c.localidad ? `, ${c.localidad}` : ""}</p>}
-                      {c.telefono && <p className="text-xs flex items-center gap-1"><Phone className="w-3 h-3" />{c.telefono}</p>}
-                      {c.email && <p className="text-xs flex items-center gap-1"><Mail className="w-3 h-3" />{c.email}</p>}
-                      {c.saldo > 0 && <p className="text-xs font-semibold text-orange-600">Deuda: ${c.saldo.toLocaleString("es-AR")}</p>}
+            <APIProvider apiKey={GMAPS_KEY}>
+              <Map
+                defaultCenter={defaultCenter}
+                defaultZoom={13}
+                gestureHandling="greedy"
+                disableDefaultUI={false}
+                clickableIcons={false}
+                style={{ width: "100%", height: "100%" }}
+                onClick={(e) => {
+                  const id = placingRef.current;
+                  const ll = e.detail.latLng;
+                  if (id && ll) {
+                    guardarCoords(id, ll.lat, ll.lng);
+                    setPlacingClientId(null);
+                  }
+                }}
+              >
+                {withCoords.map((c) => (
+                  <Marker
+                    key={c.id}
+                    position={{ lat: c.lat!, lng: c.lng! }}
+                    icon={c.saldo > 0 ? ICON_ROJO : ICON_VERDE}
+                    draggable
+                    onClick={() => setSelectedId(c.id)}
+                    onDragEnd={(e) => {
+                      if (e.latLng) guardarCoords(c.id, e.latLng.lat(), e.latLng.lng());
+                    }}
+                  />
+                ))}
+                {selected && selected.lat != null && selected.lng != null && (
+                  <InfoWindow
+                    position={{ lat: selected.lat, lng: selected.lng }}
+                    onCloseClick={() => setSelectedId(null)}
+                  >
+                    <div className="space-y-1 min-w-[180px] text-gray-800">
+                      <p className="font-bold text-sm">{selected.nombre.trim()}</p>
+                      {selected.domicilio && (
+                        <p className="text-xs flex items-center gap-1">
+                          <MapPin className="w-3 h-3 shrink-0" />
+                          {selected.domicilio}{selected.localidad ? `, ${selected.localidad}` : ""}
+                        </p>
+                      )}
+                      {selected.telefono && (
+                        <p className="text-xs flex items-center gap-1"><Phone className="w-3 h-3" />{selected.telefono}</p>
+                      )}
+                      {selected.email && (
+                        <p className="text-xs flex items-center gap-1"><Mail className="w-3 h-3" />{selected.email}</p>
+                      )}
+                      {selected.saldo > 0 && (
+                        <p className="text-xs font-semibold text-orange-600">Deuda: ${selected.saldo.toLocaleString("es-AR")}</p>
+                      )}
                       <a
-                        href={c.maps_url || `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent([c.domicilio, c.localidad].filter(Boolean).join(", "))}`}
+                        href={selected.maps_url || `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent([selected.domicilio, selected.localidad].filter(Boolean).join(", "))}`}
                         target="_blank"
                         rel="noopener noreferrer"
                         className="text-xs text-blue-600 hover:underline block mt-1"
@@ -292,13 +280,13 @@ export default function ClientesMapaPage() {
                         Abrir en Google Maps →
                       </a>
                     </div>
-                  </Popup>
-                </Marker>
-              ))}
-            </MapContainer>
+                  </InfoWindow>
+                )}
+              </Map>
+            </APIProvider>
           </CardContent>
         </Card>
-      ) : null}
+      )}
 
       {/* Clientes sin ubicar */}
       {!loading && sinUbicar.length > 0 && (
