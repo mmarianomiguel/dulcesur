@@ -7,7 +7,7 @@ import { supabase } from "@/lib/supabase";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
-import { ArrowLeft, Search, MapPin, Phone, Mail, Loader2, RefreshCw, Crosshair, Link2, X } from "lucide-react";
+import { ArrowLeft, Search, MapPin, Phone, Mail, Loader2, RefreshCw, Crosshair, Link2 } from "lucide-react";
 import Link from "next/link";
 import { showAdminToast } from "@/components/admin-toast";
 
@@ -36,9 +36,6 @@ interface Zona {
 }
 
 // ─── Marcadores agrupados (clustering) ───
-// Renderiza los marcadores de forma imperativa con MarkerClusterer: cuando hay
-// muchos clientes juntos, se agrupan en un círculo numerado. Mucho más liviano
-// y prolijo que pintar 100+ pines sueltos.
 function ClusteredMarkers({
   clientes,
   onSelect,
@@ -64,7 +61,6 @@ function ClusteredMarkers({
     const markers = markersRef.current;
     const wanted = new Set(clientes.map((c) => c.id));
 
-    // Eliminar marcadores de clientes que ya no están.
     for (const id of Object.keys(markers)) {
       if (!wanted.has(id)) {
         google.maps.event.clearInstanceListeners(markers[id]);
@@ -72,7 +68,6 @@ function ClusteredMarkers({
         delete markers[id];
       }
     }
-    // Crear o actualizar el resto.
     for (const c of clientes) {
       if (c.lat == null || c.lng == null) continue;
       const pos = { lat: c.lat, lng: c.lng };
@@ -81,7 +76,6 @@ function ClusteredMarkers({
       if (!m) {
         const nuevo = new google.maps.Marker({ position: pos, icon });
         nuevo.addListener("click", () => onSelectRef.current(c.id));
-        // Click derecho → reubicar rápido pegando un link de Google Maps.
         nuevo.addListener("rightclick", () => onRelinkRef.current(c.id));
         markers[c.id] = nuevo;
       } else {
@@ -93,7 +87,6 @@ function ClusteredMarkers({
     clustererRef.current.addMarkers(Object.values(markers));
   }, [map, clientes]);
 
-  // Limpieza al desmontar.
   useEffect(() => {
     return () => {
       clustererRef.current?.clearMarkers();
@@ -107,6 +100,17 @@ function ClusteredMarkers({
   return null;
 }
 
+// ─── Vuela el mapa hasta un cliente elegido en la lista ───
+function MapController({ target }: { target: { lat: number; lng: number; n: number } | null }) {
+  const map = useMap();
+  useEffect(() => {
+    if (!map || !target) return;
+    map.panTo({ lat: target.lat, lng: target.lng });
+    map.setZoom(16);
+  }, [map, target]);
+  return null;
+}
+
 export default function ClientesMapaPage() {
   const [clientes, setClientes] = useState<ClienteMap[]>([]);
   const [zonas, setZonas] = useState<Zona[]>([]);
@@ -115,8 +119,9 @@ export default function ClientesMapaPage() {
   const [search, setSearch] = useState("");
   const [updating, setUpdating] = useState(false);
 
-  // Cliente seleccionado (InfoWindow abierta).
+  // Cliente seleccionado (InfoWindow abierta) y destino al que volar.
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [flyTo, setFlyTo] = useState<{ lat: number; lng: number; n: number } | null>(null);
   // Cliente al que se le está asignando ubicación tocando el mapa.
   const [placingClientId, setPlacingClientId] = useState<string | null>(null);
   // Cliente cuyo input de "pegar link" está abierto.
@@ -147,7 +152,7 @@ export default function ClientesMapaPage() {
       .then(({ data }) => setZonas((data || []) as Zona[]));
   }, []);
 
-  // Guarda coordenadas de un cliente (arrastre de marcador o toque en el mapa).
+  // Guarda coordenadas de un cliente (toque en el mapa).
   const guardarCoords = useCallback(async (id: string, lat: number, lng: number) => {
     const nombre = clientes.find((c) => c.id === id)?.nombre?.trim() || "Cliente";
     await supabase.from("clientes")
@@ -226,6 +231,14 @@ export default function ClientesMapaPage() {
     }
   };
 
+  // Click en una fila de la lista.
+  const seleccionarCliente = (c: ClienteMap) => {
+    setSelectedId(c.id);
+    if (c.lat != null && c.lng != null) {
+      setFlyTo({ lat: c.lat, lng: c.lng, n: Date.now() });
+    }
+  };
+
   const q = search.trim().toLowerCase();
   const filtered = clientes.filter((c) => {
     if (zonaFilter !== "todas" && c.zona_entrega !== zonaFilter) return false;
@@ -238,10 +251,10 @@ export default function ClientesMapaPage() {
   });
 
   const withCoords = filtered.filter((c) => c.lat != null && c.lng != null);
-  const sinUbicar = filtered.filter((c) => c.lat == null || c.lng == null);
+  const sinUbicarCount = filtered.filter((c) => c.lat == null || c.lng == null).length;
   const defaultCenter = withCoords.length > 0
     ? { lat: withCoords[0].lat!, lng: withCoords[0].lng! }
-    : { lat: -34.9, lng: -58.27 }; // Guernica / Glew aprox.
+    : { lat: -34.9, lng: -58.27 };
 
   const placingCliente = placingClientId ? clientes.find((c) => c.id === placingClientId) : null;
   const selected = selectedId ? clientes.find((c) => c.id === selectedId) : null;
@@ -263,7 +276,9 @@ export default function ClientesMapaPage() {
         </Link>
         <div className="flex-1 min-w-[180px]">
           <h1 className="text-xl font-bold">Mapa de Clientes</h1>
-          <p className="text-sm text-muted-foreground">{withCoords.length} de {clientes.length} clientes ubicados</p>
+          <p className="text-sm text-muted-foreground">
+            {withCoords.length} de {clientes.length} clientes ubicados
+          </p>
         </div>
         <div className="relative w-full sm:w-56">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
@@ -275,7 +290,7 @@ export default function ClientesMapaPage() {
         </Button>
       </div>
 
-      {/* Leyenda + tip de arrastre */}
+      {/* Leyenda */}
       <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
         <span className="flex items-center gap-1.5">
           <span className="w-3 h-3 rounded-full" style={{ background: "#16a34a" }} /> Al día
@@ -283,7 +298,7 @@ export default function ClientesMapaPage() {
         <span className="flex items-center gap-1.5">
           <span className="w-3 h-3 rounded-full" style={{ background: "#dc2626" }} /> Con deuda
         </span>
-        <span className="text-muted-foreground/80">· Tocá un marcador para ver el cliente · Click derecho → reubicar con link</span>
+        <span className="text-muted-foreground/80">· Tocá un cliente de la lista para verlo en el mapa · Click derecho en un marcador → reubicar con link</span>
       </div>
 
       {/* Filtro por zona de entrega */}
@@ -320,7 +335,7 @@ export default function ClientesMapaPage() {
             Tocá en el mapa la ubicación de <span className="font-semibold">{placingCliente.nombre.trim()}</span>
           </p>
           <Button size="sm" variant="ghost" className="h-7 text-sky-700" onClick={() => setPlacingClientId(null)}>
-            <X className="w-4 h-4 mr-1" />Cancelar
+            Cancelar
           </Button>
         </div>
       )}
@@ -339,174 +354,198 @@ export default function ClientesMapaPage() {
           </CardContent>
         </Card>
       ) : (
-        <Card ref={mapCardRef}>
-          <CardContent
-            className={`p-0 overflow-hidden rounded-lg ${placingClientId ? "[&_.gm-style]:cursor-crosshair" : ""}`}
-            style={{ height: "70vh" }}
-          >
-            <APIProvider apiKey={GMAPS_KEY}>
-              <Map
-                defaultCenter={defaultCenter}
-                defaultZoom={12}
-                gestureHandling="greedy"
-                disableDefaultUI={false}
-                clickableIcons={false}
-                style={{ width: "100%", height: "100%" }}
-                onClick={onMapClick}
-              >
-                <ClusteredMarkers
-                  clientes={withCoords}
-                  onSelect={setSelectedId}
-                  onRelink={(id) => { setLinkValue(""); setLinkClientId(id); setSelectedId(id); }}
-                />
-                {selected && selected.lat != null && selected.lng != null && (
-                  <InfoWindow
-                    position={{ lat: selected.lat, lng: selected.lng }}
-                    onCloseClick={() => { setSelectedId(null); setLinkClientId(null); }}
-                  >
-                    <div className="space-y-1 min-w-[180px] text-gray-800">
-                      <p className="font-bold text-sm">{selected.nombre.trim()}</p>
-                      {selected.domicilio && (
-                        <p className="text-xs flex items-center gap-1">
-                          <MapPin className="w-3 h-3 shrink-0" />
-                          {selected.domicilio}{selected.localidad ? `, ${selected.localidad}` : ""}
-                        </p>
-                      )}
-                      {selected.telefono && (
-                        <p className="text-xs flex items-center gap-1"><Phone className="w-3 h-3" />{selected.telefono}</p>
-                      )}
-                      {selected.email && (
-                        <p className="text-xs flex items-center gap-1"><Mail className="w-3 h-3" />{selected.email}</p>
-                      )}
-                      {selected.saldo > 0 && (
-                        <p className="text-xs font-semibold text-orange-600">Deuda: ${selected.saldo.toLocaleString("es-AR")}</p>
-                      )}
-                      <a
-                        href={selected.maps_url || `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent([selected.domicilio, selected.localidad].filter(Boolean).join(", "))}`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-xs text-blue-600 hover:underline block mt-1"
+        <div className="flex flex-col-reverse lg:flex-row gap-4">
+          {/* ─── Lista de clientes ─── */}
+          <Card className="lg:w-80 lg:shrink-0">
+            <CardContent className="p-0">
+              <div className="px-3 py-2 border-b bg-muted/30 flex items-center justify-between">
+                <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                  Clientes ({filtered.length})
+                </span>
+                {sinUbicarCount > 0 && (
+                  <span className="text-[10px] text-amber-600 font-medium">{sinUbicarCount} sin ubicar</span>
+                )}
+              </div>
+              <div className="overflow-y-auto" style={{ maxHeight: "calc(70vh - 37px)" }}>
+                {filtered.length === 0 && (
+                  <p className="px-3 py-6 text-center text-sm text-muted-foreground">Sin resultados</p>
+                )}
+                {filtered.map((c) => {
+                  const ubicado = c.lat != null && c.lng != null;
+                  const isSel = selectedId === c.id;
+                  return (
+                    <div key={c.id} className={`border-b last:border-0 ${isSel ? "bg-primary/5" : ""}`}>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (ubicado) seleccionarCliente(c);
+                          else setLinkClientId(linkClientId === c.id ? null : c.id);
+                        }}
+                        className="w-full text-left px-3 py-2 hover:bg-muted/50 flex items-center gap-2.5 transition-colors"
                       >
-                        Abrir en Google Maps →
-                      </a>
-                      {linkClientId === selected.id ? (
-                        <div className="mt-2 space-y-1.5">
-                          <Input
-                            autoFocus
-                            placeholder="Pegá el link de Google Maps..."
-                            value={linkValue}
-                            onChange={(e) => setLinkValue(e.target.value)}
-                            onKeyDown={(e) => { if (e.key === "Enter") guardarLink(selected.id); }}
-                            className="h-8 text-xs"
-                          />
-                          <div className="flex gap-1.5">
+                        <span
+                          className="w-2.5 h-2.5 rounded-full shrink-0"
+                          style={{ background: ubicado ? (c.saldo > 0 ? "#dc2626" : "#16a34a") : "#d1d5db" }}
+                        />
+                        <div className="min-w-0 flex-1">
+                          <p className="text-sm font-medium truncate">{c.nombre.trim()}</p>
+                          <p className="text-xs text-muted-foreground truncate">
+                            {[c.domicilio, c.localidad].filter(Boolean).join(", ") || "Sin dirección"}
+                          </p>
+                        </div>
+                        {!ubicado && (
+                          <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-100 text-amber-700 font-medium shrink-0">
+                            Sin ubicar
+                          </span>
+                        )}
+                        {ubicado && c.saldo > 0 && (
+                          <span className="text-[10px] text-red-600 font-semibold shrink-0">Debe</span>
+                        )}
+                      </button>
+                      {!ubicado && linkClientId === c.id && (
+                        <div className="px-3 pb-2.5 space-y-2">
+                          <div className="flex items-center gap-1.5">
                             <Button
                               size="sm"
-                              className="h-7 text-xs flex-1"
-                              disabled={linkSaving || !linkValue.trim()}
-                              onClick={() => guardarLink(selected.id)}
+                              variant={placingClientId === c.id ? "default" : "outline"}
+                              className="h-7 gap-1 text-xs flex-1"
+                              onClick={() => iniciarUbicarEnMapa(c.id)}
                             >
-                              {linkSaving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : "Guardar ubicación"}
+                              <Crosshair className="w-3 h-3" />
+                              Ubicar en mapa
                             </Button>
-                            <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => setLinkClientId(null)}>
-                              Cancelar
+                          </div>
+                          <div className="flex items-center gap-1.5">
+                            <Input
+                              autoFocus
+                              placeholder="Pegá el link de Google Maps..."
+                              value={linkValue}
+                              onChange={(e) => setLinkValue(e.target.value)}
+                              onKeyDown={(e) => { if (e.key === "Enter") guardarLink(c.id); }}
+                              className="h-7 text-xs"
+                            />
+                            <Button
+                              size="sm"
+                              className="h-7 text-xs"
+                              disabled={linkSaving || !linkValue.trim()}
+                              onClick={() => guardarLink(c.id)}
+                            >
+                              {linkSaving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : "Guardar"}
                             </Button>
                           </div>
                         </div>
-                      ) : (
-                        <div className="flex items-center gap-3 mt-2">
-                          <button
-                            type="button"
-                            onClick={() => iniciarUbicarEnMapa(selected.id)}
-                            className="flex items-center gap-1 text-xs font-medium text-sky-700 hover:text-sky-900"
-                          >
-                            <Crosshair className="w-3 h-3" />
-                            Corregir en mapa
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => { setLinkValue(""); setLinkClientId(selected.id); }}
-                            className="flex items-center gap-1 text-xs font-medium text-sky-700 hover:text-sky-900"
-                          >
-                            <Link2 className="w-3 h-3" />
-                            Pegar link
-                          </button>
-                        </div>
                       )}
                     </div>
-                  </InfoWindow>
-                )}
-              </Map>
-            </APIProvider>
-          </CardContent>
-        </Card>
-      )}
+                  );
+                })}
+              </div>
+            </CardContent>
+          </Card>
 
-      {/* Clientes sin ubicar */}
-      {!loading && sinUbicar.length > 0 && (
-        <Card>
-          <CardContent className="pt-4">
-            <p className="text-sm font-medium text-muted-foreground mb-3">
-              Clientes sin ubicar ({sinUbicar.length}) — ubicalos tocando el mapa o pegando un link de Google Maps
-            </p>
-            <div className="space-y-1">
-              {sinUbicar.map((c) => (
-                <div key={c.id} className="border-b last:border-0 py-2">
-                  <div className="flex items-center justify-between gap-2 flex-wrap">
-                    <div className="min-w-0">
-                      <p className="font-medium text-sm truncate">{c.nombre.trim()}</p>
-                      <p className="text-xs text-muted-foreground truncate">{[c.domicilio, c.localidad].filter(Boolean).join(", ")}</p>
-                    </div>
-                    <div className="flex items-center gap-1.5 shrink-0">
-                      <Button
-                        size="sm"
-                        variant={placingClientId === c.id ? "default" : "outline"}
-                        className="h-8 gap-1.5 text-xs"
-                        onClick={() => iniciarUbicarEnMapa(c.id)}
-                      >
-                        <Crosshair className="w-3.5 h-3.5" />
-                        Ubicar en mapa
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant={linkClientId === c.id ? "default" : "outline"}
-                        className="h-8 gap-1.5 text-xs"
-                        onClick={() => {
-                          setPlacingClientId(null);
-                          setLinkClientId(linkClientId === c.id ? null : c.id);
-                          setLinkValue("");
-                        }}
-                      >
-                        <Link2 className="w-3.5 h-3.5" />
-                        Pegar link
-                      </Button>
-                    </div>
-                  </div>
-                  {linkClientId === c.id && (
-                    <div className="flex items-center gap-2 mt-2">
-                      <Input
-                        autoFocus
-                        placeholder="Pegá el link de Google Maps..."
-                        value={linkValue}
-                        onChange={(e) => setLinkValue(e.target.value)}
-                        onKeyDown={(e) => { if (e.key === "Enter") guardarLink(c.id); }}
-                        className="h-8 text-xs"
-                      />
-                      <Button
-                        size="sm"
-                        className="h-8 text-xs"
-                        disabled={linkSaving || !linkValue.trim()}
-                        onClick={() => guardarLink(c.id)}
-                      >
-                        {linkSaving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : "Guardar"}
-                      </Button>
-                    </div>
+          {/* ─── Mapa ─── */}
+          <Card ref={mapCardRef} className="flex-1 min-w-0">
+            <CardContent
+              className={`p-0 overflow-hidden rounded-lg ${placingClientId ? "[&_.gm-style]:cursor-crosshair" : ""}`}
+              style={{ height: "70vh" }}
+            >
+              <APIProvider apiKey={GMAPS_KEY}>
+                <Map
+                  defaultCenter={defaultCenter}
+                  defaultZoom={12}
+                  gestureHandling="greedy"
+                  disableDefaultUI={false}
+                  clickableIcons={false}
+                  style={{ width: "100%", height: "100%" }}
+                  onClick={onMapClick}
+                >
+                  <ClusteredMarkers
+                    clientes={withCoords}
+                    onSelect={setSelectedId}
+                    onRelink={(id) => { setLinkValue(""); setLinkClientId(id); setSelectedId(id); }}
+                  />
+                  <MapController target={flyTo} />
+                  {selected && selected.lat != null && selected.lng != null && (
+                    <InfoWindow
+                      position={{ lat: selected.lat, lng: selected.lng }}
+                      onCloseClick={() => { setSelectedId(null); setLinkClientId(null); }}
+                    >
+                      <div className="space-y-1 min-w-[180px] text-gray-800">
+                        <p className="font-bold text-sm">{selected.nombre.trim()}</p>
+                        {selected.domicilio && (
+                          <p className="text-xs flex items-center gap-1">
+                            <MapPin className="w-3 h-3 shrink-0" />
+                            {selected.domicilio}{selected.localidad ? `, ${selected.localidad}` : ""}
+                          </p>
+                        )}
+                        {selected.telefono && (
+                          <p className="text-xs flex items-center gap-1"><Phone className="w-3 h-3" />{selected.telefono}</p>
+                        )}
+                        {selected.email && (
+                          <p className="text-xs flex items-center gap-1"><Mail className="w-3 h-3" />{selected.email}</p>
+                        )}
+                        {selected.saldo > 0 && (
+                          <p className="text-xs font-semibold text-orange-600">Deuda: ${selected.saldo.toLocaleString("es-AR")}</p>
+                        )}
+                        <a
+                          href={selected.maps_url || `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent([selected.domicilio, selected.localidad].filter(Boolean).join(", "))}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-xs text-blue-600 hover:underline block mt-1"
+                        >
+                          Abrir en Google Maps →
+                        </a>
+                        {linkClientId === selected.id ? (
+                          <div className="mt-2 space-y-1.5">
+                            <Input
+                              autoFocus
+                              placeholder="Pegá el link de Google Maps..."
+                              value={linkValue}
+                              onChange={(e) => setLinkValue(e.target.value)}
+                              onKeyDown={(e) => { if (e.key === "Enter") guardarLink(selected.id); }}
+                              className="h-8 text-xs"
+                            />
+                            <div className="flex gap-1.5">
+                              <Button
+                                size="sm"
+                                className="h-7 text-xs flex-1"
+                                disabled={linkSaving || !linkValue.trim()}
+                                onClick={() => guardarLink(selected.id)}
+                              >
+                                {linkSaving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : "Guardar ubicación"}
+                              </Button>
+                              <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => setLinkClientId(null)}>
+                                Cancelar
+                              </Button>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="flex items-center gap-3 mt-2">
+                            <button
+                              type="button"
+                              onClick={() => iniciarUbicarEnMapa(selected.id)}
+                              className="flex items-center gap-1 text-xs font-medium text-sky-700 hover:text-sky-900"
+                            >
+                              <Crosshair className="w-3 h-3" />
+                              Corregir en mapa
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => { setLinkValue(""); setLinkClientId(selected.id); }}
+                              className="flex items-center gap-1 text-xs font-medium text-sky-700 hover:text-sky-900"
+                            >
+                              <Link2 className="w-3 h-3" />
+                              Pegar link
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    </InfoWindow>
                   )}
-                </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
+                </Map>
+              </APIProvider>
+            </CardContent>
+          </Card>
+        </div>
       )}
     </div>
   );
