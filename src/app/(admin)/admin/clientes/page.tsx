@@ -419,7 +419,17 @@ export default function ClientesPage() {
       ignora_categorias_excluidas: form.ignora_categorias_excluidas || false,
     };
     if (editingClient) {
-      await supabase.from("clientes").update(payload).eq("id", editingClient.id);
+      // Si cambió la dirección o el link de Maps, limpiar la geocodificación para
+      // que el cliente se reubique en el mapa al "Actualizar ubicaciones".
+      const dirCambio =
+        (editingClient.domicilio || "") !== (payload.domicilio || "") ||
+        ((editingClient as any).localidad || "") !== (payload.localidad || "") ||
+        ((editingClient as any).provincia || "") !== (payload.provincia || "") ||
+        ((editingClient as any).maps_url || "") !== (payload.maps_url || "");
+      const updatePayload = dirCambio
+        ? { ...payload, lat: null, lng: null, geocoded_at: null }
+        : payload;
+      await supabase.from("clientes").update(updatePayload).eq("id", editingClient.id);
       logAudit({ userName: currentUser?.nombre || "Admin", action: "UPDATE", module: "clientes", entityId: editingClient.id, after: { nombre: payload.nombre } });
 
       // Auto-create tienda access if client now has email + DNI but no auth yet
