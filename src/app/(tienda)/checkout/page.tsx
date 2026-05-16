@@ -189,6 +189,11 @@ export default function CheckoutPage() {
   const [loaded, setLoaded] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [orderNumber, setOrderNumber] = useState<string | null>(null);
+  // Snapshot de los totales al confirmar. La pantalla de éxito los usa en vez de
+  // recalcular desde `items`, que se vacía cuando se limpia el carrito → mostraba $0.
+  const [confirmedTotals, setConfirmedTotals] = useState<{
+    subtotal: number; costoEnvio: number; recargoTransf: number;
+  } | null>(null);
 
   // Vendor (fetched dynamically)
   const [defaultVendedorId, setDefaultVendedorId] = useState<string | null>(null);
@@ -1072,6 +1077,8 @@ export default function CheckoutPage() {
         }),
       }).catch(() => {});
 
+      // Snapshot ANTES de limpiar el carrito — la pantalla de éxito lo usa.
+      setConfirmedTotals({ subtotal, costoEnvio, recargoTransf });
       localStorage.removeItem("carrito");
       window.dispatchEvent(new Event("cart-updated"));
       clearRemote();
@@ -1091,12 +1098,16 @@ export default function CheckoutPage() {
   // Success state
   if (orderNumber) {
     const isTransfer = metodoPago === "transferencia" || metodoPago === "mixto";
-    const totalFinal = subtotal + costoEnvio + recargoTransf;
-    const montoTransf = metodoPago === "transferencia" ? totalFinal : metodoPago === "mixto" ? (mixtoTransferencia + recargoTransf) : 0;
+    // Usar el snapshot tomado al confirmar — `items` ya puede estar vacío.
+    const snapSubtotal = confirmedTotals?.subtotal ?? subtotal;
+    const snapCostoEnvio = confirmedTotals?.costoEnvio ?? costoEnvio;
+    const snapRecargoTransf = confirmedTotals?.recargoTransf ?? recargoTransf;
+    const totalFinal = snapSubtotal + snapCostoEnvio + snapRecargoTransf;
+    const montoTransf = metodoPago === "transferencia" ? totalFinal : metodoPago === "mixto" ? (mixtoTransferencia + snapRecargoTransf) : 0;
 
     // Build WhatsApp message with full breakdown (no emojis - cause encoding issues)
     const pagoDetalle = metodoPago === "mixto"
-      ? `- Efectivo: $${mixtoEfectivo.toLocaleString("es-AR")}\n- Transferencia: $${(mixtoTransferencia + recargoTransf).toLocaleString("es-AR")}${recargoTransf > 0 ? ` (inc. recargo ${config?.recargo_transferencia}%)` : ""}`
+      ? `- Efectivo: $${mixtoEfectivo.toLocaleString("es-AR")}\n- Transferencia: $${(mixtoTransferencia + snapRecargoTransf).toLocaleString("es-AR")}${snapRecargoTransf > 0 ? ` (inc. recargo ${config?.recargo_transferencia}%)` : ""}`
       : metodoPago === "transferencia"
       ? `- Transferencia: $${totalFinal.toLocaleString("es-AR")}`
       : `- Efectivo: $${totalFinal.toLocaleString("es-AR")}`;
@@ -1137,12 +1148,12 @@ export default function CheckoutPage() {
             <div className="bg-gray-50 rounded-xl p-4 space-y-2.5">
               <div className="flex items-center justify-between text-sm">
                 <span className="text-gray-600">Subtotal</span>
-                <span className="font-medium">${subtotal.toLocaleString("es-AR")}</span>
+                <span className="font-medium">${snapSubtotal.toLocaleString("es-AR")}</span>
               </div>
-              {recargoTransf > 0 && (
+              {snapRecargoTransf > 0 && (
                 <div className="flex items-center justify-between text-sm">
                   <span className="text-gray-600">Recargo transferencia</span>
-                  <span className="font-medium">${recargoTransf.toLocaleString("es-AR")}</span>
+                  <span className="font-medium">${snapRecargoTransf.toLocaleString("es-AR")}</span>
                 </div>
               )}
               <div className="border-t border-gray-200 pt-2">
@@ -1179,7 +1190,7 @@ export default function CheckoutPage() {
                   {mixtoTransferencia > 0 && (
                     <div className="flex items-center justify-between text-sm bg-blue-50 rounded-lg px-3 py-2">
                       <span className="text-blue-800">🏦 Transferencia</span>
-                      <span className="font-bold text-blue-900">${(mixtoTransferencia + recargoTransf).toLocaleString("es-AR")}</span>
+                      <span className="font-bold text-blue-900">${(mixtoTransferencia + snapRecargoTransf).toLocaleString("es-AR")}</span>
                     </div>
                   )}
                 </>
