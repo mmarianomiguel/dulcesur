@@ -9,7 +9,12 @@ const GOOGLE_ROUTES_URL = "https://routes.googleapis.com/directions/v2:computeRo
 // Routes API admite hasta 25 waypoints intermedios con optimización de orden.
 const GOOGLE_MAX_STOPS = 25;
 
-type Stop = { id: string; address?: string; mapsUrl?: string | null };
+type Stop = {
+  id: string;
+  address?: string;
+  mapsUrl?: string | null;
+  coords?: { lat: number; lng: number } | null;
+};
 
 const COORD_PATTERNS = [
   // URL patterns
@@ -183,13 +188,21 @@ async function coordsFromMapsUrl(url: string): Promise<[number, number] | null> 
 
 type ResolveResult = {
   coords: [number, number] | null;
-  source: "maps_url" | "geocode" | "none";
+  source: "saved" | "maps_url" | "geocode" | "none";
 };
 
 async function resolveStop(
   stop: Stop,
   focus: [number, number] | null,
 ): Promise<ResolveResult> {
+  // Prioridad máxima: coordenadas guardadas (corregidas a mano en el mapa de clientes).
+  if (
+    stop.coords &&
+    typeof stop.coords.lat === "number" &&
+    typeof stop.coords.lng === "number"
+  ) {
+    return { coords: [stop.coords.lng, stop.coords.lat], source: "saved" };
+  }
   if (stop.mapsUrl) {
     const coords = await coordsFromMapsUrl(stop.mapsUrl);
     if (coords) return { coords, source: "maps_url" };

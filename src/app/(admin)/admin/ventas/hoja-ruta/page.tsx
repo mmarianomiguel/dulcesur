@@ -29,6 +29,7 @@ import Link from "next/link";
 import { VentaDetailDialog } from "@/components/venta-detail-dialog";
 import { CobroVentaSection } from "@/components/cobro-venta-section";
 import type { CobroVentaResult, CobroPreview } from "@/components/cobro-venta-section";
+import { HojaRutaMapa, type PuntoRuta } from "@/components/hoja-ruta-mapa";
 import {
   Truck,
   Package,
@@ -68,6 +69,9 @@ interface ClienteInfo {
   localidad: string | null;
   telefono: string | null;
   saldo: number;
+  maps_url?: string | null;
+  lat?: number | null;
+  lng?: number | null;
 }
 
 interface VentaRow {
@@ -226,7 +230,7 @@ export default function HojaDeRutaPage() {
     let query = supabase
       .from("ventas")
       .select(
-        "id, numero, tipo_comprobante, fecha, forma_pago, total, subtotal, descuento_porcentaje, recargo_porcentaje, monto_pagado, estado, observacion, entregado, cliente_id, origen, metodo_entrega, cuenta_transferencia_alias, clientes(id, nombre, domicilio, localidad, provincia, telefono, saldo, maps_url), venta_items(id, descripcion, cantidad, precio_unitario, subtotal, unidad_medida, unidades_por_presentacion), pedido_armado(orden_entrega, estado)"
+        "id, numero, tipo_comprobante, fecha, forma_pago, total, subtotal, descuento_porcentaje, recargo_porcentaje, monto_pagado, estado, observacion, entregado, cliente_id, origen, metodo_entrega, cuenta_transferencia_alias, clientes(id, nombre, domicilio, localidad, provincia, telefono, saldo, maps_url, lat, lng), venta_items(id, descripcion, cantidad, precio_unitario, subtotal, unidad_medida, unidades_por_presentacion), pedido_armado(orden_entrega, estado)"
       )
       .eq("entregado", false)
       .in("metodo_entrega", ["envio", "envio_a_domicilio", "envio a domicilio"])
@@ -476,7 +480,7 @@ export default function HojaDeRutaPage() {
     const { data, error } = await supabase
       .from("ventas")
       .select(
-        "id, numero, tipo_comprobante, fecha, forma_pago, total, subtotal, descuento_porcentaje, recargo_porcentaje, monto_pagado, estado, observacion, entregado, cliente_id, origen, metodo_entrega, cuenta_transferencia_alias, clientes(id, nombre, domicilio, localidad, provincia, telefono, saldo, maps_url), venta_items(id, descripcion, cantidad, precio_unitario, subtotal, unidad_medida, unidades_por_presentacion)"
+        "id, numero, tipo_comprobante, fecha, forma_pago, total, subtotal, descuento_porcentaje, recargo_porcentaje, monto_pagado, estado, observacion, entregado, cliente_id, origen, metodo_entrega, cuenta_transferencia_alias, clientes(id, nombre, domicilio, localidad, provincia, telefono, saldo, maps_url, lat, lng), venta_items(id, descripcion, cantidad, precio_unitario, subtotal, unidad_medida, unidades_por_presentacion)"
       )
       .eq("entregado", true)
       .in("metodo_entrega", ["envio", "envio_a_domicilio", "envio a domicilio"])
@@ -1316,9 +1320,13 @@ export default function HojaDeRutaPage() {
         ]
           .filter(Boolean)
           .join(", "),
-        mapsUrl: (g.cliente as any)?.maps_url || null,
+        mapsUrl: g.cliente?.maps_url || null,
+        // Coordenadas guardadas (corregidas en el mapa de clientes): tienen prioridad.
+        coords: (g.cliente?.lat != null && g.cliente?.lng != null)
+          ? { lat: g.cliente.lat, lng: g.cliente.lng }
+          : null,
       }))
-      .filter((s) => s.address || s.mapsUrl);
+      .filter((s) => s.address || s.mapsUrl || s.coords);
     if (stops.length < 2) {
       showOrderToast("Se necesitan al menos 2 paradas con dirección");
       return;
@@ -1333,7 +1341,7 @@ export default function HojaDeRutaPage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          stops: stops.map((s) => ({ id: s.key, address: s.address, mapsUrl: s.mapsUrl })),
+          stops: stops.map((s) => ({ id: s.key, address: s.address, mapsUrl: s.mapsUrl, coords: s.coords })),
           origen: empresaOrigen,
           origenCoords: empresaCoords,
         }),
@@ -2214,13 +2222,19 @@ export default function HojaDeRutaPage() {
           </div>
           <a
             href={(() => {
-              const addresses = sortedVentas
-                .map((v) => [v.clientes?.domicilio, v.clientes?.localidad].filter(Boolean).join(", "))
-                .filter(Boolean);
-              if (addresses.length === 0) return "#";
-              // Punto de partida: domicilio del local. Si no hay, usa la primera parada.
-              const origin = encodeURIComponent(empresaOrigen || addresses[0]);
-              const stops = empresaOrigen ? addresses : addresses.slice(1);
+              // Cada parada: prioriza coordenadas guardadas; si no, la dirección de texto.
+              const place = (c: ClienteInfo | null) =>
+                (c?.lat != null && c?.lng != null)
+                  ? `${c.lat},${c.lng}`
+                  : [c?.domicilio, c?.localidad].filter(Boolean).join(", ");
+              const places = clientGroups.map((g) => place(g.cliente)).filter(Boolean);
+              if (places.length === 0) return "#";
+              // Punto de partida: el local (coords o dirección). Si no hay, la primera parada.
+              const originPlace = empresaCoords
+                ? `${empresaCoords.lat},${empresaCoords.lng}`
+                : empresaOrigen || places[0];
+              const origin = encodeURIComponent(originPlace);
+              const stops = (empresaCoords || empresaOrigen) ? places : places.slice(1);
               if (stops.length === 0) return `https://www.google.com/maps/dir/?api=1&origin=${origin}&destination=${origin}`;
               const destination = encodeURIComponent(stops[stops.length - 1]);
               const waypoints = stops.slice(0, -1).map(encodeURIComponent).join("|");
@@ -2239,13 +2253,55 @@ export default function HojaDeRutaPage() {
       {/* Route View */}
       {viewMode === "ruta" && clientGroups.length > 0 && (
         <div className="space-y-4">
+          {/* Mini-mapa con las paradas numeradas en orden de entrega */}
+          {(() => {
+            const stopsConCoords: PuntoRuta[] = clientGroups
+              .filter((g) => g.cliente?.lat != null && g.cliente?.lng != null)
+              .map((g) => ({
+                id: g.key,
+                nombre: g.cliente?.nombre || "Sin cliente",
+                lat: g.cliente!.lat as number,
+                lng: g.cliente!.lng as number,
+              }));
+            if (stopsConCoords.length === 0) return null;
+            const sinUbicar = clientGroups.length - stopsConCoords.length;
+            return (
+              <Card>
+                <CardContent className="p-0">
+                  <div className="h-[340px] overflow-hidden rounded-t-xl">
+                    <HojaRutaMapa
+                      origin={empresaCoords ? { id: "_local", nombre: "Tu local", lat: empresaCoords.lat, lng: empresaCoords.lng } : null}
+                      stops={stopsConCoords}
+                    />
+                  </div>
+                  <div className="flex flex-wrap items-center gap-x-4 gap-y-1 px-4 py-2.5 text-xs text-muted-foreground border-t">
+                    <span className="flex items-center gap-1.5">
+                      <span className="w-2.5 h-2.5 rounded-full bg-blue-500" /> Tu local
+                    </span>
+                    <span>Paradas numeradas en orden de entrega</span>
+                    {sinUbicar > 0 && (
+                      <span className="text-amber-600">· {sinUbicar} parada(s) sin ubicar no se muestran</span>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+            );
+          })()}
           {/* Current stop card */}
           {(() => {
             const group = clientGroups[currentStop];
             if (!group) return null;
             const { neto, nc, debe } = groupTotals(group);
             const direccion = [group.cliente?.domicilio, group.cliente?.localidad].filter(Boolean).join(", ");
-            const mapsUrl = direccion ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(direccion)}` : null;
+            // Link a Maps: prioriza las coordenadas guardadas (corregidas a mano) > link de Maps > texto.
+            const mapsUrl =
+              (group.cliente?.lat != null && group.cliente?.lng != null)
+                ? `https://www.google.com/maps/search/?api=1&query=${group.cliente.lat},${group.cliente.lng}`
+                : group.cliente?.maps_url
+                ? group.cliente.maps_url
+                : direccion
+                ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(direccion)}`
+                : null;
             const tel = group.cliente?.telefono?.replace(/\D/g, "") || "";
             const whatsappUrl = tel ? `https://wa.me/54${tel.startsWith("0") ? tel.slice(1) : tel}` : null;
 
