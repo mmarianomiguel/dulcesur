@@ -1184,6 +1184,8 @@ export default function HojaDeRutaPage() {
   const [applyingPrevious, setApplyingPrevious] = useState(false);
   const [optimizingRoute, setOptimizingRoute] = useState(false);
   const [orderToast, setOrderToast] = useState<string | null>(null);
+  // Resumen persistente de la última optimización (tiempo de manejo y distancia).
+  const [routeSummary, setRouteSummary] = useState<{ durMin: number; distKm: string; paradas: number } | null>(null);
 
   const showOrderToast = (msg: string) => {
     setOrderToast(msg);
@@ -1368,6 +1370,11 @@ export default function HojaDeRutaPage() {
       const failedCount = failedKeys.length;
       const durMin = data.duration ? Math.round(data.duration / 60) : null;
       const distKm = data.distance ? (data.distance / 1000).toFixed(1) : null;
+      setRouteSummary(
+        durMin !== null && distKm !== null
+          ? { durMin, distKm, paradas: okCount }
+          : null
+      );
       const resumen = durMin !== null && distKm !== null ? ` — ~${durMin} min · ${distKm} km` : "";
       const warn = failedCount > 0 ? ` · ${failedCount} sin ubicar (al final)` : "";
       showOrderToast(`Ruta optimizada: ${okCount} paradas${resumen}${warn}`);
@@ -2463,6 +2470,23 @@ export default function HojaDeRutaPage() {
           {orderToast && (
             <div className="mb-3 px-3 py-2 rounded-lg bg-green-50 border border-green-200 text-green-700 text-sm">
               {orderToast}
+            </div>
+          )}
+          {routeSummary && (
+            <div className="mb-4 flex flex-wrap items-center gap-x-4 gap-y-1 px-4 py-3 rounded-lg bg-primary/5 border border-primary/20">
+              <span className="flex items-center gap-1.5 text-sm font-semibold text-primary">
+                <Clock className="w-4 h-4" />
+                {routeSummary.durMin >= 60
+                  ? `${Math.floor(routeSummary.durMin / 60)} h ${routeSummary.durMin % 60} min`
+                  : `${routeSummary.durMin} min`}
+              </span>
+              <span className="flex items-center gap-1.5 text-sm text-foreground">
+                <Route className="w-4 h-4 text-muted-foreground" />
+                {routeSummary.distKm} km · {routeSummary.paradas} paradas
+              </span>
+              <span className="text-[11px] text-muted-foreground w-full sm:w-auto">
+                Tiempo de manejo ida y vuelta desde el local (no incluye el tiempo de cada entrega)
+              </span>
             </div>
           )}
 

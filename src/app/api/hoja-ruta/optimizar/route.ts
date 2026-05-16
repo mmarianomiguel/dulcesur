@@ -122,6 +122,7 @@ async function optimizeGoogle(
         destination: wp(start),
         intermediates: stops.map((s) => wp(s.coords)),
         travelMode: "DRIVE",
+        routingPreference: "TRAFFIC_AWARE", // considera el tránsito actual
         optimizeWaypointOrder: true,
       }),
     });
