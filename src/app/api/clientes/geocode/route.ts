@@ -26,19 +26,46 @@ async function isAdminCaller(req: NextRequest): Promise<boolean> {
   return !!u?.activo;
 }
 
+const COORD_PATTERNS = [
+  /!3d(-?\d+\.\d+)!4d(-?\d+\.\d+)/,
+  /@(-?\d+\.\d+),(-?\d+\.\d+)/,
+  /[?&](?:q|query|ll|destination)=(-?\d+\.\d+)(?:%2C|,)(-?\d+\.\d+)/,
+  /"latitude":(-?\d+\.\d+),"longitude":(-?\d+\.\d+)/,
+  /\[null,null,(-?\d+\.\d+),(-?\d+\.\d+)\]/,
+  /center=(-?\d+\.\d+)%2C(-?\d+\.\d+)/,
+];
+
 function parseCoordsFromUrl(url: string): [number, number] | null {
-  let m = url.match(/!3d(-?\d+\.\d+)!4d(-?\d+\.\d+)/);
-  if (m) return [parseFloat(m[1]), parseFloat(m[2])];
-  m = url.match(/@(-?\d+\.\d+),(-?\d+\.\d+)/);
-  if (m) return [parseFloat(m[1]), parseFloat(m[2])];
-  m = url.match(/[?&](?:q|query|ll|destination)=(-?\d+\.\d+)(?:%2C|,)(-?\d+\.\d+)/);
-  if (m) return [parseFloat(m[1]), parseFloat(m[2])];
+  if (!url) return null;
+  for (const re of COORD_PATTERNS) {
+    const m = url.match(re);
+    if (m) {
+      const lat = parseFloat(m[1]);
+      const lng = parseFloat(m[2]);
+      if (
+        !isNaN(lat) && !isNaN(lng) &&
+        lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180 &&
+        !(lat === 0 && lng === 0)
+      ) {
+        return [lat, lng];
+      }
+    }
+  }
   return null;
 }
 
 async function resolveMapsUrl(shortUrl: string): Promise<[number, number] | null> {
   try {
-    const res = await fetch(shortUrl, { redirect: "follow" });
+    // User-Agent de navegador: sin esto, varios links cortos (maps.app.goo.gl)
+    // redirigen a una página sin coordenadas y la lectura falla.
+    const res = await fetch(shortUrl.trim(), {
+      redirect: "follow",
+      headers: {
+        "User-Agent":
+          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120 Safari/537.36",
+        "Accept-Language": "es-AR,es;q=0.9,en;q=0.8",
+      },
+    });
     let coords = parseCoordsFromUrl(decodeURIComponent(res.url));
     if (coords) return coords;
     const html = await res.text();
