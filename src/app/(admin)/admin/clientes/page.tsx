@@ -374,9 +374,10 @@ export default function ClientesPage() {
     if (savingClient) return;
     if (!form.nombre.trim()) { showAdminToast("El nombre del cliente es obligatorio.", "error"); return; }
 
-    // Validar CUIT / DNI duplicado contra otros clientes activos
+    // Validar CUIT / DNI duplicado contra otros clientes activos.
+    // Solo activos: un cliente eliminado (soft-delete) no debe bloquear la re-creación.
     if (form.cuit?.trim() || form.numero_documento?.trim()) {
-      let dupQuery = supabase.from("clientes").select("id, nombre").limit(1);
+      let dupQuery = supabase.from("clientes").select("id, nombre").eq("activo", true).limit(1);
       const orParts: string[] = [];
       if (form.cuit?.trim()) orParts.push(`cuit.eq.${form.cuit.trim()}`);
       if (form.numero_documento?.trim()) orParts.push(`numero_documento.eq.${form.numero_documento.trim()}`);
