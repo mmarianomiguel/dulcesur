@@ -1140,8 +1140,11 @@ export default function ListadoVentasPage() {
     } else if (result.metodo === "Cuenta Corriente") {
       // CC does NOT go to caja — it's not real money in the register
     } else {
-      if (result.monto > 0) {
-        entries.push({ fecha: hoy, hora, tipo: "ingreso", descripcion: `Cobro #${poSelectedPedido.numero}${result.surcharge > 0 ? ` (Transf +${recargoTransferencia}%)` : ""}`, metodo_pago: result.metodo, monto: result.metodo === "Transferencia" ? result.monto + result.surcharge : result.monto, referencia_id: ventaId, referencia_tipo: "venta", ...(result.metodo === "Transferencia" && result.cuentaBancaria ? { cuenta_bancaria: result.cuentaBancaria } : {}) });
+      // Cobro parcial: usar el monto realmente recibido para la venta (efectivo/transferencia),
+      // NO result.monto (que es el total de la venta). La porción no cubierta va a CC.
+      const cobrado = result.metodo === "Transferencia" ? result.transferencia : result.efectivo;
+      if (cobrado > 0) {
+        entries.push({ fecha: hoy, hora, tipo: "ingreso", descripcion: `Cobro #${poSelectedPedido.numero}${result.surcharge > 0 ? ` (Transf +${recargoTransferencia}%)` : ""}`, metodo_pago: result.metodo, monto: result.metodo === "Transferencia" ? cobrado + result.surcharge : cobrado, referencia_id: ventaId, referencia_tipo: "venta", ...(result.metodo === "Transferencia" && result.cuentaBancaria ? { cuenta_bancaria: result.cuentaBancaria } : {}) });
       }
     }
     if (entries.length > 0) await supabase.from("caja_movimientos").insert(entries);
@@ -1160,8 +1163,10 @@ export default function ListadoVentasPage() {
           await createCobroRecibo({ clienteId, monto: trMonto, formaPago: "Transferencia", fecha: hoy, hora, cuentaBancariaId: cuentaIdResolved, observacion: `Cobro #${poSelectedPedido.numero}`, allocations: [{ venta_id: ventaId, monto_aplicado: trMonto }] });
         }
       } else if (result.metodo === "Efectivo" || result.metodo === "Transferencia") {
-        if (result.monto > 0) {
-          const monto = result.metodo === "Transferencia" ? result.monto + (result.surcharge || 0) : result.monto;
+        // Cobro parcial: usar lo realmente cobrado para la venta, no el total.
+        const cobrado = result.metodo === "Transferencia" ? result.transferencia : result.efectivo;
+        if (cobrado > 0) {
+          const monto = result.metodo === "Transferencia" ? cobrado + (result.surcharge || 0) : cobrado;
           await createCobroRecibo({ clienteId, monto, formaPago: result.metodo, fecha: hoy, hora, cuentaBancariaId: result.metodo === "Transferencia" ? cuentaIdResolved : null, observacion: `Cobro #${poSelectedPedido.numero}`, allocations: [{ venta_id: ventaId, monto_aplicado: monto }] });
         }
       }

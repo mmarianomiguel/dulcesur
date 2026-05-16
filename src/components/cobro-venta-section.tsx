@@ -321,7 +321,10 @@ export function CobroVentaSection({
     return metodo === "Transferencia" ? montoVenta : metodo === "Mixto" ? mixtoTransferencia : 0;
   })();
 
-  const totalACobrar = (montoVenta + surcharge) + (cobrarSaldo ? saldoTotalAsignado : 0);
+  // Cobro parcial: el total a cobrar es el efectivo realmente recibido (venta + saldo), no el total de la venta.
+  const totalACobrar = cobroParcialActivo && cobroParcialSplit
+    ? cobroParcialSplit.aVenta + cobroParcialSplit.aSaldo + surcharge
+    : (montoVenta + surcharge) + (cobrarSaldo ? saldoTotalAsignado : 0);
 
   // Notify parent of preview changes (for reactive display)
   useEffect(() => {
