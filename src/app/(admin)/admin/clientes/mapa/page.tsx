@@ -42,19 +42,15 @@ interface Zona {
 function ClusteredMarkers({
   clientes,
   onSelect,
-  onMove,
 }: {
   clientes: ClienteMap[];
   onSelect: (id: string) => void;
-  onMove: (id: string, lat: number, lng: number) => void;
 }) {
   const map = useMap();
   const clustererRef = useRef<MarkerClusterer | null>(null);
   const markersRef = useRef<Record<string, google.maps.Marker>>({});
   const onSelectRef = useRef(onSelect);
-  const onMoveRef = useRef(onMove);
   onSelectRef.current = onSelect;
-  onMoveRef.current = onMove;
 
   useEffect(() => {
     if (!map) return;
@@ -79,11 +75,8 @@ function ClusteredMarkers({
       const icon = c.saldo > 0 ? ICON_ROJO : ICON_VERDE;
       const m = markers[c.id];
       if (!m) {
-        const nuevo = new google.maps.Marker({ position: pos, icon, draggable: true });
+        const nuevo = new google.maps.Marker({ position: pos, icon });
         nuevo.addListener("click", () => onSelectRef.current(c.id));
-        nuevo.addListener("dragend", (e: google.maps.MapMouseEvent) => {
-          if (e.latLng) onMoveRef.current(c.id, e.latLng.lat(), e.latLng.lng());
-        });
         markers[c.id] = nuevo;
       } else {
         m.setPosition(pos);
@@ -284,7 +277,7 @@ export default function ClientesMapaPage() {
         <span className="flex items-center gap-1.5">
           <span className="w-3 h-3 rounded-full" style={{ background: "#dc2626" }} /> Con deuda
         </span>
-        <span className="text-muted-foreground/80">· Tocá un grupo para acercar · Arrastrá un marcador para corregirlo</span>
+        <span className="text-muted-foreground/80">· Tocá un grupo para acercar · Tocá un marcador para ver el cliente</span>
       </div>
 
       {/* Filtro por zona de entrega */}
@@ -355,7 +348,7 @@ export default function ClientesMapaPage() {
                 style={{ width: "100%", height: "100%" }}
                 onClick={onMapClick}
               >
-                <ClusteredMarkers clientes={withCoords} onSelect={setSelectedId} onMove={guardarCoords} />
+                <ClusteredMarkers clientes={withCoords} onSelect={setSelectedId} />
                 {selected && selected.lat != null && selected.lng != null && (
                   <InfoWindow
                     position={{ lat: selected.lat, lng: selected.lng }}
@@ -386,6 +379,14 @@ export default function ClientesMapaPage() {
                       >
                         Abrir en Google Maps →
                       </a>
+                      <button
+                        type="button"
+                        onClick={() => iniciarUbicarEnMapa(selected.id)}
+                        className="mt-1.5 flex items-center gap-1 text-xs font-medium text-sky-700 hover:text-sky-900"
+                      >
+                        <Crosshair className="w-3 h-3" />
+                        Corregir ubicación
+                      </button>
                     </div>
                   </InfoWindow>
                 )}
