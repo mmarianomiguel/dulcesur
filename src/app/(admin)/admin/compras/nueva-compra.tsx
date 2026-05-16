@@ -189,7 +189,7 @@ export default function NuevaCompra({
           const next = prev === null ? 0 : Math.min(prev + 1, len - 1);
           setTimeout(() => {
             const rows = document.querySelectorAll("[data-compra-item]");
-            rows[next]?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+            rows[next]?.scrollIntoView({ block: "center", behavior: "smooth" });
           }, 0);
           return next;
         });
@@ -199,7 +199,7 @@ export default function NuevaCompra({
           const next = prev === null ? 0 : Math.max(prev - 1, 0);
           setTimeout(() => {
             const rows = document.querySelectorAll("[data-compra-item]");
-            rows[next]?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+            rows[next]?.scrollIntoView({ block: "center", behavior: "smooth" });
           }, 0);
           return next;
         });
