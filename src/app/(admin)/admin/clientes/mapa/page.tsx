@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useState, useCallback, useRef } from "react";
-import { APIProvider, Map, Marker, InfoWindow } from "@vis.gl/react-google-maps";
+import { APIProvider, Map, InfoWindow, useMap } from "@vis.gl/react-google-maps";
+import { MarkerClusterer } from "@googlemaps/markerclusterer";
 import { supabase } from "@/lib/supabase";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -26,6 +27,79 @@ interface ClienteMap {
   saldo: number;
   lat: number | null;
   lng: number | null;
+}
+
+// ─── Marcadores agrupados (clustering) ───
+// Renderiza los marcadores de forma imperativa con MarkerClusterer: cuando hay
+// muchos clientes juntos, se agrupan en un círculo numerado. Mucho más liviano
+// y prolijo que pintar 100+ pines sueltos.
+function ClusteredMarkers({
+  clientes,
+  onSelect,
+  onMove,
+}: {
+  clientes: ClienteMap[];
+  onSelect: (id: string) => void;
+  onMove: (id: string, lat: number, lng: number) => void;
+}) {
+  const map = useMap();
+  const clustererRef = useRef<MarkerClusterer | null>(null);
+  const markersRef = useRef<Record<string, google.maps.Marker>>({});
+  const onSelectRef = useRef(onSelect);
+  const onMoveRef = useRef(onMove);
+  onSelectRef.current = onSelect;
+  onMoveRef.current = onMove;
+
+  useEffect(() => {
+    if (!map) return;
+    if (!clustererRef.current) {
+      clustererRef.current = new MarkerClusterer({ map });
+    }
+    const markers = markersRef.current;
+    const wanted = new Set(clientes.map((c) => c.id));
+
+    // Eliminar marcadores de clientes que ya no están.
+    for (const id of Object.keys(markers)) {
+      if (!wanted.has(id)) {
+        google.maps.event.clearInstanceListeners(markers[id]);
+        markers[id].setMap(null);
+        delete markers[id];
+      }
+    }
+    // Crear o actualizar el resto.
+    for (const c of clientes) {
+      if (c.lat == null || c.lng == null) continue;
+      const pos = { lat: c.lat, lng: c.lng };
+      const icon = c.saldo > 0 ? ICON_ROJO : ICON_VERDE;
+      const m = markers[c.id];
+      if (!m) {
+        const nuevo = new google.maps.Marker({ position: pos, icon, draggable: true });
+        nuevo.addListener("click", () => onSelectRef.current(c.id));
+        nuevo.addListener("dragend", (e: google.maps.MapMouseEvent) => {
+          if (e.latLng) onMoveRef.current(c.id, e.latLng.lat(), e.latLng.lng());
+        });
+        markers[c.id] = nuevo;
+      } else {
+        m.setPosition(pos);
+        m.setIcon(icon);
+      }
+    }
+    clustererRef.current.clearMarkers();
+    clustererRef.current.addMarkers(Object.values(markers));
+  }, [map, clientes]);
+
+  // Limpieza al desmontar.
+  useEffect(() => {
+    return () => {
+      clustererRef.current?.clearMarkers();
+      for (const id of Object.keys(markersRef.current)) {
+        markersRef.current[id].setMap(null);
+      }
+      markersRef.current = {};
+    };
+  }, []);
+
+  return null;
 }
 
 export default function ClientesMapaPage() {
@@ -157,6 +231,15 @@ export default function ClientesMapaPage() {
   const placingCliente = placingClientId ? clientes.find((c) => c.id === placingClientId) : null;
   const selected = selectedId ? clientes.find((c) => c.id === selectedId) : null;
 
+  const onMapClick = useCallback((e: { detail: { latLng: google.maps.LatLngLiteral | null } }) => {
+    const id = placingRef.current;
+    const ll = e.detail.latLng;
+    if (id && ll) {
+      guardarCoords(id, ll.lat, ll.lng);
+      setPlacingClientId(null);
+    }
+  }, [guardarCoords]);
+
   return (
     <div className="p-3 sm:p-6 lg:p-8 space-y-4">
       <div className="flex flex-wrap items-center gap-3">
@@ -185,7 +268,7 @@ export default function ClientesMapaPage() {
         <span className="flex items-center gap-1.5">
           <span className="w-3 h-3 rounded-full" style={{ background: "#dc2626" }} /> Con deuda
         </span>
-        <span className="text-muted-foreground/80">· Arrastrá un marcador para corregir su ubicación</span>
+        <span className="text-muted-foreground/80">· Tocá un grupo para acercar · Arrastrá un marcador para corregirlo</span>
       </div>
 
       {/* Banner modo "ubicar en mapa" */}
@@ -223,32 +306,14 @@ export default function ClientesMapaPage() {
             <APIProvider apiKey={GMAPS_KEY}>
               <Map
                 defaultCenter={defaultCenter}
-                defaultZoom={13}
+                defaultZoom={12}
                 gestureHandling="greedy"
                 disableDefaultUI={false}
                 clickableIcons={false}
                 style={{ width: "100%", height: "100%" }}
-                onClick={(e) => {
-                  const id = placingRef.current;
-                  const ll = e.detail.latLng;
-                  if (id && ll) {
-                    guardarCoords(id, ll.lat, ll.lng);
-                    setPlacingClientId(null);
-                  }
-                }}
+                onClick={onMapClick}
               >
-                {withCoords.map((c) => (
-                  <Marker
-                    key={c.id}
-                    position={{ lat: c.lat!, lng: c.lng! }}
-                    icon={c.saldo > 0 ? ICON_ROJO : ICON_VERDE}
-                    draggable
-                    onClick={() => setSelectedId(c.id)}
-                    onDragEnd={(e) => {
-                      if (e.latLng) guardarCoords(c.id, e.latLng.lat(), e.latLng.lng());
-                    }}
-                  />
-                ))}
+                <ClusteredMarkers clientes={withCoords} onSelect={setSelectedId} onMove={guardarCoords} />
                 {selected && selected.lat != null && selected.lng != null && (
                   <InfoWindow
                     position={{ lat: selected.lat, lng: selected.lng }}
