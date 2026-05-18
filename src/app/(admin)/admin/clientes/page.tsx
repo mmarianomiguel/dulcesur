@@ -3772,7 +3772,7 @@ export default function ClientesPage() {
           ) : (
             <div className="space-y-3">
               <p className="text-xs text-muted-foreground">
-                Compara 3 fuentes: <strong>Cliente</strong> (campo <code>clientes.saldo</code>), <strong>CC</strong> (sum de <code>cuenta_corriente.debe − haber</code>), <strong>Ventas</strong> (sum <code>total − monto_pagado</code> — la fuente de verdad). Si Ventas dice 0, el cliente NO debe.
+                Compara 3 fuentes: <strong>Cliente</strong> (<code>clientes.saldo</code>), <strong>CC</strong> (suma de <code>cuenta_corriente.debe − haber</code>) y <strong>Ventas</strong> (suma <code>total − monto_pagado</code>). Ninguna es infalible: esta herramienta sirve para <strong>detectar</strong> diferencias, no para corregir a ciegas.
               </p>
               <div className="border rounded-lg overflow-hidden">
                 <table className="w-full text-xs">
@@ -3819,44 +3819,13 @@ export default function ClientesPage() {
                                   let targetSaldo = 0;
                                   let logMsg = "";
 
-                                  if (it.diagnostico === "ventas_mal") {
-                                    // Cliente y CC dicen $0 (no debe), ventas tienen monto_pagado<total por NC/transf no registradas.
-                                    // Marcar todas las ventas pendientes como pagadas (monto_pagado=total).
-                                    const { data: vAjuste } = await supabase
-                                      .from("ventas")
-                                      .select("id, total, monto_pagado, estado, tipo_comprobante")
-                                      .eq("cliente_id", it.id)
-                                      .range(0, 9999);
-                                    const PENDING = new Set(["pendiente", "armado", "confirmado"]);
-                                    let count = 0;
-                                    for (const v of vAjuste || []) {
-                                      if (v.estado === "anulada") continue;
-                                      if (PENDING.has(String(v.estado || "").toLowerCase())) continue;
-                                      if (String(v.tipo_comprobante || "").includes("Nota de Crédito")) continue;
-                                      const gap = Number(v.total || 0) - Number(v.monto_pagado || 0);
-                                      if (gap > 0.01) {
-                                        await supabase.from("ventas").update({ monto_pagado: v.total }).eq("id", v.id);
-                                        count++;
-                                      }
-                                    }
-                                    targetSaldo = it.saldoCliente; // sin cambio
-                                    logMsg = `${count} venta(s) marcadas como pagas (NC/transf no registradas). Saldo: ${formatCurrency(targetSaldo)}`;
-                                  } else if (it.diagnostico === "sin_deuda_real") {
-                                    // Cliente y CC dicen >0 pero ventas dicen 0 → cliente ya pagó, hay que zero out.
-                                    targetSaldo = it.saldoVentas; // = 0
-                                    await supabase.from("clientes").update({ saldo: targetSaldo }).eq("id", it.id);
-                                    const ajusteCC = targetSaldo - it.saldoCC;
-                                    if (Math.abs(ajusteCC) > 1) {
-                                      await supabase.from("cuenta_corriente").insert({
-                                        cliente_id: it.id, fecha: hoy,
-                                        comprobante: "Conciliación",
-                                        descripcion: `Ajuste por conciliación (cliente ya pagó según ventas)`,
-                                        debe: ajusteCC > 0 ? ajusteCC : 0,
-                                        haber: ajusteCC < 0 ? Math.abs(ajusteCC) : 0,
-                                        saldo: targetSaldo, forma_pago: "Ajuste", venta_id: null,
-                                      });
-                                    }
-                                    logMsg = `Saldo cliente ${formatCurrency(it.saldoCliente)} → ${formatCurrency(targetSaldo)}`;
+                                  if (it.diagnostico === "ventas_mal" || it.diagnostico === "sin_deuda_real") {
+                                    // No auto-corregir: hay que saber QUÉ venta o cobro puntual está mal.
+                                    // Marcar ventas como pagadas o forzar el saldo a 0 a ciegas puede
+                                    // BORRAR deuda real (ver casos Norma / Florencia / Lorenza).
+                                    showAdminToast(`${it.nombre}: requiere revisión manual — la diferencia está en una venta o cobro puntual. Corregir automáticamente podría borrar deuda real.`, "error");
+                                    setConciliarFixing(null);
+                                    return;
                                   } else if (it.diagnostico === "saldo_desactualizado") {
                                     // CC y ventas coinciden, cliente.saldo desactualizado → actualizar cliente.saldo
                                     targetSaldo = it.saldoVentas;
@@ -3892,7 +3861,9 @@ export default function ClientesPage() {
                                 }
                               }}
                             >
-                              {conciliarFixing === it.id ? <Loader2 className="w-3 h-3 animate-spin" /> : "Corregir"}
+                              {conciliarFixing === it.id
+                                ? <Loader2 className="w-3 h-3 animate-spin" />
+                                : (it.diagnostico === "ventas_mal" || it.diagnostico === "sin_deuda_real" || it.diagnostico === "inconsistencia_profunda" ? "Revisar" : "Corregir")}
                             </Button>
                           </td>
                         </tr>
@@ -3902,7 +3873,7 @@ export default function ClientesPage() {
                 </table>
               </div>
               <p className="text-[11px] text-muted-foreground">
-                <strong>Corregir</strong> usa <em>ventas.monto_pagado</em> como verdad: actualiza <code>clientes.saldo</code> al saldo real y agrega una entry "Conciliación" en CC si hace falta.
+                <strong>Corregir</strong> solo actúa cuando 2 de las 3 fuentes coinciden y el ajuste es seguro (recalcular <code>clientes.saldo</code> o agregar un asiento de ajuste en CC). Si la diferencia está en una venta o cobro puntual, marca <strong>Revisar</strong>: hay que investigar el caso — corregir a ciegas podría borrar deuda real.
               </p>
             </div>
           )}
