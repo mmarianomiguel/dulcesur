@@ -2381,6 +2381,7 @@ export default function VentasPage() {
               saldo: Math.max(0, runningSaldo),
               forma_pago: formaPago,
               venta_id: pv.id,
+              cobro_origen_venta_id: venta.id,
             });
 
             // Actualizar monto_pagado en la venta vieja

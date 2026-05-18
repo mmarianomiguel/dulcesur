@@ -3133,6 +3133,7 @@ export default function HojaDeRutaPage() {
                             descripcion: `Cobro deuda anterior — ${result.metodo}`,
                             debe: 0, haber: alloc.aplicar, saldo: Math.max(0, runningSaldo2),
                             forma_pago: result.metodo, venta_id: alloc.venta_id,
+                            cobro_origen_venta_id: payVenta.id,
                           });
                         }
                       }
