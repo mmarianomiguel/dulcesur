@@ -3096,45 +3096,30 @@ export default function HojaDeRutaPage() {
                       }
                     }
 
-                    // FIFO saldo allocation (pay old debts) — atomic saldo + caja + per-venta CC entries
-                    if (result.cobrarSaldo && result.saldoAllocations.length > 0) {
-                      for (const alloc of result.saldoAllocations) {
-                        if (alloc.aplicar <= 0) continue;
-                        const { data: old } = await supabase.from("ventas").select("monto_pagado").eq("id", alloc.venta_id).single();
-                        await supabase.from("ventas").update({ monto_pagado: ((old as any)?.monto_pagado || 0) + alloc.aplicar }).eq("id", alloc.venta_id);
-                      }
-                      const totalAllocated = result.saldoAllocations.reduce((s, a) => s + a.aplicar, 0);
-                      if (totalAllocated > 0 && payVenta.cliente_id) {
-                        // Register in caja — the collector received this money
-                        // Si fue por transferencia, persistir cuenta destino para el desglose por cuenta.
+                    // FIFO saldo allocation (pay old debts) — ATÓMICO: caja + CC + monto_pagado
+                    // en una transacción. El saldo del cliente ya fue actualizado arriba por la
+                    // RPC combinada (netSaldoChange), por eso p_skip_saldo_update=true.
+                    if (result.cobrarSaldo && result.saldoAllocations.length > 0 && payVenta.cliente_id) {
+                      const cobroAllocs = result.saldoAllocations
+                        .filter(a => a.aplicar > 0)
+                        .map(a => ({ venta_id: a.venta_id, numero: a.numero, aplicar: a.aplicar }));
+                      if (cobroAllocs.length > 0) {
                         const metodoCobroSaldo = result.metodo === "Mixto" ? "Efectivo" : result.metodo;
-                        await supabase.from("caja_movimientos").insert({
-                          fecha: hoy, hora, tipo: "ingreso",
-                          descripcion: `Cobro saldo adeudado — ${clienteNombre} (${result.saldoAllocations.filter(a => a.aplicar > 0).map(a => `#${a.numero}`).join(", ")})`,
-                          metodo_pago: metodoCobroSaldo,
-                          monto: totalAllocated,
-                          referencia_id: payVenta.id,
-                          referencia_tipo: "cobro_saldo",
-                          ...(metodoCobroSaldo === "Transferencia" && cuentaNombre ? { cuenta_bancaria: cuentaNombre } : {}),
+                        const { error: cobroSaldoErr } = await supabase.rpc("atomic_cobro_saldo", {
+                          p_cliente_id: payVenta.cliente_id,
+                          p_origen_venta_id: payVenta.id,
+                          p_origen_numero: payVenta.numero,
+                          p_fecha: hoy,
+                          p_hora: hora,
+                          p_metodo: result.metodo,
+                          p_caja_metodo: metodoCobroSaldo,
+                          p_caja_descripcion: `Cobro saldo adeudado — ${clienteNombre} (${cobroAllocs.map(a => `#${a.numero}`).join(", ")})`,
+                          p_caja_cuenta_bancaria: metodoCobroSaldo === "Transferencia" && cuentaNombre ? cuentaNombre : null,
+                          p_allocations: cobroAllocs,
+                          p_skip_saldo_update: true,
                         });
-
-                        // Saldo already updated in the combined RPC above (+CC -cobro)
-                        // Read current saldo for CC entry snapshots
-                        const { data: saldoNow } = await supabase.from("clientes").select("saldo").eq("id", payVenta.cliente_id).single();
-                        const saldoAfter2 = Math.max(0, saldoNow?.saldo ?? 0);
-                        // Create per-venta CC haber entries (so each venta shows the cobro)
-                        let runningSaldo2 = saldoAfter2 + totalAllocated; // reconstruct pre-update
-                        for (const alloc of result.saldoAllocations) {
-                          if (alloc.aplicar <= 0) continue;
-                          runningSaldo2 -= alloc.aplicar;
-                          await supabase.from("cuenta_corriente").insert({
-                            cliente_id: payVenta.cliente_id, fecha: hoy,
-                            comprobante: `Cobro saldo #${alloc.numero}`,
-                            descripcion: `Cobro deuda anterior — ${result.metodo}`,
-                            debe: 0, haber: alloc.aplicar, saldo: Math.max(0, runningSaldo2),
-                            forma_pago: result.metodo, venta_id: alloc.venta_id,
-                            cobro_origen_venta_id: payVenta.id,
-                          });
+                        if (cobroSaldoErr) {
+                          showOrderToast(`No se pudo registrar el cobro de saldo: ${cobroSaldoErr.message}`);
                         }
                       }
                     }

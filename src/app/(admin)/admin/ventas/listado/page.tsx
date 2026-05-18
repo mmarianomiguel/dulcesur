@@ -1242,40 +1242,30 @@ export default function ListadoVentasPage() {
       total: ventaUpd.total,
     } as any) : p));
 
-    // FIFO allocation: update monto_pagado on old invoices
-    if (result.cobrarSaldo && result.saldoAllocations.length > 0) {
-      for (const alloc of result.saldoAllocations) {
-        if (alloc.aplicar <= 0) continue;
-        const { data: old } = await supabase.from("ventas").select("monto_pagado").eq("id", alloc.venta_id).single();
-        await supabase.from("ventas").update({ monto_pagado: ((old as any)?.monto_pagado || 0) + alloc.aplicar }).eq("id", alloc.venta_id);
-      }
-      const totalAllocated = result.saldoAllocations.reduce((s, a) => s + a.aplicar, 0);
-      if (totalAllocated > 0 && clienteId) {
+    // Cobro de saldo ATÓMICO: caja + saldo + CC + monto_pagado en una sola transacción.
+    if (result.cobrarSaldo && result.saldoAllocations.length > 0 && clienteId) {
+      const cobroAllocs = result.saldoAllocations
+        .filter(a => a.aplicar > 0)
+        .map(a => ({ venta_id: a.venta_id, numero: a.numero, aplicar: a.aplicar }));
+      if (cobroAllocs.length > 0) {
         const clienteNombreCobro = poSelectedPedido.nombre_cliente || "";
-        await supabase.from("caja_movimientos").insert({
-          fecha: hoy, hora, tipo: "ingreso",
-          descripcion: `Cobro saldo adeudado — ${clienteNombreCobro} (${result.saldoAllocations.filter(a => a.aplicar > 0).map(a => `#${a.numero}`).join(", ")})`,
-          metodo_pago: result.metodo === "Mixto" ? "Efectivo" : result.metodo,
-          monto: totalAllocated,
-          referencia_tipo: "cobro_saldo",
+        const { data: saldoTrasCobro, error: cobroSaldoErr } = await supabase.rpc("atomic_cobro_saldo", {
+          p_cliente_id: clienteId,
+          p_origen_venta_id: ventaId,
+          p_origen_numero: numero,
+          p_fecha: hoy,
+          p_hora: hora,
+          p_metodo: result.metodo,
+          p_caja_metodo: result.metodo === "Mixto" ? "Efectivo" : result.metodo,
+          p_caja_descripcion: `Cobro saldo adeudado — ${clienteNombreCobro} (${cobroAllocs.map(a => `#${a.numero}`).join(", ")})`,
+          p_caja_cuenta_bancaria: null,
+          p_allocations: cobroAllocs,
         });
-
-        const { data: newSaldo2 } = await supabase.rpc("atomic_update_client_saldo", { p_client_id: clienteId, p_change: -totalAllocated });
-        const saldoAfter2 = Math.max(0, newSaldo2 ?? 0);
-        let runningSaldo2 = saldoAfter2 + totalAllocated;
-        for (const alloc of result.saldoAllocations) {
-          if (alloc.aplicar <= 0) continue;
-          runningSaldo2 -= alloc.aplicar;
-          await supabase.from("cuenta_corriente").insert({
-            cliente_id: clienteId, fecha: hoy,
-            comprobante: `Cobro saldo #${alloc.numero}`,
-            descripcion: `Cobro deuda anterior — ${result.metodo}`,
-            debe: 0, haber: alloc.aplicar, saldo: Math.max(0, runningSaldo2),
-            forma_pago: result.metodo, venta_id: alloc.venta_id,
-            cobro_origen_venta_id: ventaId,
-          });
+        if (cobroSaldoErr) {
+          showAdminToast(`No se pudo registrar el cobro de saldo: ${cobroSaldoErr.message}`, "error");
+        } else {
+          setClienteSaldo(Math.max(0, saldoTrasCobro ?? 0));
         }
-        setClienteSaldo(saldoAfter2);
       }
     }
 

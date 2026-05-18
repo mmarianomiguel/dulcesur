@@ -2323,32 +2323,7 @@ export default function VentasPage() {
             ? cuentasBancarias.find((c) => c.id === cuentaBancariaId)
             : null;
 
-          // 1. Registrar cobro en caja
-          await supabase.from("caja_movimientos").insert({
-            fecha: hoy,
-            hora,
-            tipo: "ingreso",
-            descripcion: `Cobro saldo pendiente - ${selectedClient.nombre} (Venta #${numero})`,
-            metodo_pago: formaPago,
-            monto: saldoPendiente,
-            referencia_id: venta.id,
-            referencia_tipo: "cobro_saldo",
-            ...(selectedCuentaSaldo ? { cuenta_bancaria: selectedCuentaSaldo.nombre } : {}),
-          });
-
-          // 2. Reducir saldo del cliente atómicamente
-          const { data: newSaldoAfterCobro, error: saldoCobErr } = await supabase.rpc("atomic_update_client_saldo", {
-            p_client_id: clientId,
-            p_change: -saldoPendiente,
-          });
-          let finalSaldoAfterCobro = newSaldoAfterCobro ?? 0;
-          if (saldoCobErr) {
-            const { data: currCli } = await supabase.from("clientes").select("saldo").eq("id", clientId).single();
-            finalSaldoAfterCobro = Math.max(0, Math.round(((currCli?.saldo ?? 0) - saldoPendiente) * 100) / 100);
-            await supabase.from("clientes").update({ saldo: finalSaldoAfterCobro }).eq("id", clientId);
-          }
-
-          // 3. FIFO: insertar haber en cuenta_corriente por cada venta vieja saldada
+          // FIFO: armar las imputaciones sobre las ventas viejas
           const { data: pendingVentas } = await supabase
             .from("ventas")
             .select("id, numero, total, monto_pagado")
@@ -2359,33 +2334,36 @@ export default function VentasPage() {
             .order("fecha", { ascending: true })
             .order("created_at", { ascending: true });
 
+          const cobroAllocations: { venta_id: string; numero: string; aplicar: number }[] = [];
           let remainingCobro = saldoPendiente;
-          let runningSaldo = (finalSaldoAfterCobro ?? 0) + saldoPendiente; // saldo antes del cobro
-
           for (const pv of pendingVentas || []) {
             if (remainingCobro <= 0) break;
             const pvPendiente = pv.total - (pv.monto_pagado || 0);
             if (pvPendiente <= 0) continue;
             const aplicar = Math.min(remainingCobro, pvPendiente);
             remainingCobro = Math.round((remainingCobro - aplicar) * 100) / 100;
-            runningSaldo -= aplicar;
+            cobroAllocations.push({ venta_id: pv.id, numero: pv.numero, aplicar });
+          }
 
-            // Insertar haber en cuenta_corriente vinculado a la venta vieja
-            await supabase.from("cuenta_corriente").insert({
-              cliente_id: clientId,
-              fecha: hoy,
-              comprobante: `Cobro saldo #${pv.numero}`,
-              descripcion: `Cobro deuda anterior — ${formaPago} (Venta #${numero})`,
-              debe: 0,
-              haber: aplicar,
-              saldo: Math.max(0, runningSaldo),
-              forma_pago: formaPago,
-              venta_id: pv.id,
-              cobro_origen_venta_id: venta.id,
-            });
-
-            // Actualizar monto_pagado en la venta vieja
-            await supabase.from("ventas").update({ monto_pagado: (pv.monto_pagado || 0) + aplicar }).eq("id", pv.id);
+          // Cobro de saldo ATÓMICO: caja + saldo del cliente + CC + monto_pagado en una sola
+          // transacción. Si algo falla, se revierte todo (no deja cobros a medias).
+          const { data: saldoTrasCobro, error: cobroSaldoErr } = await supabase.rpc("atomic_cobro_saldo", {
+            p_cliente_id: clientId,
+            p_origen_venta_id: venta.id,
+            p_origen_numero: numero,
+            p_fecha: hoy,
+            p_hora: hora,
+            p_metodo: formaPago,
+            p_caja_metodo: formaPago,
+            p_caja_descripcion: `Cobro saldo pendiente - ${selectedClient.nombre} (Venta #${numero})`,
+            p_caja_cuenta_bancaria: selectedCuentaSaldo?.nombre ?? null,
+            p_allocations: cobroAllocations,
+          });
+          let finalSaldoAfterCobro = saldoTrasCobro ?? 0;
+          if (cobroSaldoErr) {
+            showAdminToast(`No se pudo registrar el cobro de saldo: ${cobroSaldoErr.message}`, "error");
+            const { data: cli } = await supabase.from("clientes").select("saldo").eq("id", clientId).single();
+            finalSaldoAfterCobro = cli?.saldo ?? 0;
           }
 
           if (clientId) setClients((prev) => prev.map((c) => c.id === clientId ? { ...c, saldo: finalSaldoAfterCobro } : c));
