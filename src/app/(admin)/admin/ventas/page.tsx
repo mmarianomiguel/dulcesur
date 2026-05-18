@@ -2105,6 +2105,8 @@ export default function VentasPage() {
 
         const hoy = fechaVenta;
         const hora = nowTimeARG();
+        // Junta fallos de registro de pago (caja/CC) para avisar al final con un toast.
+        const pagoErrores: string[] = [];
 
         // Pendiente de cobro: skip all payment processing
         if (formaPago === "Pendiente") {
@@ -2118,7 +2120,7 @@ export default function VentasPage() {
             });
             const saldoActual = (newSaldo ?? 0) - total; // reconstruct pre-update saldo
             const saldoAFavorAplicado = saldoActual < 0 ? Math.min(Math.abs(saldoActual), total) : 0;
-            await supabase.from("cuenta_corriente").insert({
+            const { error: errCC1 } = await supabase.from("cuenta_corriente").insert({
               cliente_id: clientId,
               fecha: hoy,
               comprobante: `Venta #${numero}`,
@@ -2131,6 +2133,7 @@ export default function VentasPage() {
               forma_pago: "Cuenta Corriente",
               venta_id: venta.id,
             });
+            if (errCC1) pagoErrores.push("cuenta corriente de la venta");
           }
         } else if (formaPago === "Mixto") {
           const mixtoEntries: { metodo: string; monto: number }[] = [];
@@ -2155,7 +2158,9 @@ export default function VentasPage() {
             const paidForSale = totalPaid - oldDebtCollected; // what's left for this sale
             const saleCCPortion = Math.max(0, Math.round((total - paidForSale) * 100) / 100); // unpaid portion of new sale
 
-            // 1. COBRO SALDO VIEJO — FIFO per-venta CC haber entries
+            // 1. COBRO SALDO VIEJO — atómico (saldo + CC + monto_pagado en una transacción).
+            // La caja del cobro de saldo se registra aparte en el split de pagos mixtos
+            // (más abajo), por eso p_skip_caja=true.
             if (oldDebtCollected > 0) {
               const { data: pendingVentasMixto } = await supabase
                 .from("ventas")
@@ -2167,13 +2172,7 @@ export default function VentasPage() {
                 .order("fecha", { ascending: true })
                 .order("created_at", { ascending: true });
 
-              // Reduce client saldo by old debt amount
-              const { data: saldoAfterCobro } = await supabase.rpc("atomic_update_client_saldo", {
-                p_client_id: clientId,
-                p_change: -oldDebtCollected,
-              });
-              let runningSaldo = (saldoAfterCobro ?? 0) + oldDebtCollected; // reconstruct pre-cobro
-
+              const cobroAllocs: { venta_id: string; numero: string; aplicar: number }[] = [];
               let remMixto = oldDebtCollected;
               for (const pv of pendingVentasMixto || []) {
                 if (remMixto <= 0) break;
@@ -2181,16 +2180,25 @@ export default function VentasPage() {
                 if (pvPend <= 0) continue;
                 const apl = Math.min(remMixto, pvPend);
                 remMixto = Math.round((remMixto - apl) * 100) / 100;
-                runningSaldo -= apl;
-                // CC haber entry linked to old venta
-                await supabase.from("cuenta_corriente").insert({
-                  cliente_id: clientId, fecha: hoy,
-                  comprobante: `Cobro saldo #${pv.numero}`,
-                  descripcion: `Cobro deuda anterior`,
-                  debe: 0, haber: apl, saldo: Math.max(0, runningSaldo),
-                  forma_pago: "Efectivo", venta_id: pv.id,
+                cobroAllocs.push({ venta_id: pv.id, numero: pv.numero, aplicar: apl });
+              }
+              if (cobroAllocs.length > 0) {
+                const { error: cobroSaldoErr } = await supabase.rpc("atomic_cobro_saldo", {
+                  p_cliente_id: clientId,
+                  p_origen_venta_id: venta.id,
+                  p_origen_numero: numero,
+                  p_fecha: hoy,
+                  p_hora: hora,
+                  p_metodo: "Efectivo",
+                  p_caja_metodo: "Efectivo",
+                  p_caja_descripcion: "",
+                  p_caja_cuenta_bancaria: null,
+                  p_allocations: cobroAllocs,
+                  p_skip_caja: true,
                 });
-                await supabase.from("ventas").update({ monto_pagado: (pv.monto_pagado || 0) + apl }).eq("id", pv.id);
+                if (cobroSaldoErr) {
+                  showAdminToast(`No se pudo registrar el cobro de saldo: ${cobroSaldoErr.message}`, "error");
+                }
               }
             }
 
@@ -2200,13 +2208,14 @@ export default function VentasPage() {
                 p_client_id: clientId,
                 p_change: saleCCPortion,
               });
-              await supabase.from("cuenta_corriente").insert({
+              const { error: errCC2 } = await supabase.from("cuenta_corriente").insert({
                 cliente_id: clientId, fecha: hoy,
                 comprobante: `Venta #${numero}`,
                 descripcion: `Saldo pendiente de venta`,
                 debe: saleCCPortion, haber: 0, saldo: saldoAfterCC,
                 forma_pago: "Cuenta Corriente", venta_id: venta.id,
               });
+              if (errCC2) pagoErrores.push("cuenta corriente (saldo de venta)");
               setClients((prev) => prev.map((c) => c.id === clientId ? { ...c, saldo: saldoAfterCC } : c));
             } else {
               // Re-read saldo for local state
@@ -2222,7 +2231,7 @@ export default function VentasPage() {
             });
             const saldoActualMixto = (newSaldoMixto ?? 0) - ccEntry.monto; // reconstruct pre-update saldo
             const favorAplicadoMixto = saldoActualMixto < 0 ? Math.min(Math.abs(saldoActualMixto), ccEntry.monto) : 0;
-            await supabase.from("cuenta_corriente").insert({
+            const { error: errCC3 } = await supabase.from("cuenta_corriente").insert({
               cliente_id: clientId,
               fecha: hoy,
               comprobante: `Venta #${numero}`,
@@ -2235,6 +2244,7 @@ export default function VentasPage() {
               forma_pago: "Cuenta Corriente",
               venta_id: venta.id,
             });
+            if (errCC3) pagoErrores.push("cuenta corriente (parcial)");
           }
           // Handle non-CC entries (Efectivo, Transferencia) → caja
           // Skip caja for envío when cobrarEnEntrega — cobro confirmed from venta detail
@@ -2258,13 +2268,14 @@ export default function VentasPage() {
               portionRemaining -= ventaAmt;
 
               if (ventaAmt > 0) {
-                await supabase.from("caja_movimientos").insert({
+                const { error: errCaja1 } = await supabase.from("caja_movimientos").insert({
                   fecha: hoy, hora, tipo: "ingreso",
                   descripcion: `Venta #${numero} (${entry.metodo})${mixCuenta ? ` → ${mixCuenta.nombre}` : ""}`,
                   metodo_pago: entry.metodo, monto: ventaAmt,
                   referencia_id: venta.id, referencia_tipo: "venta",
                   ...(mixCuenta ? { cuenta_bancaria: mixCuenta.nombre } : {}),
                 });
+                if (errCaja1) pagoErrores.push(`caja (${entry.metodo})`);
                 if (clientId) {
                   await createCobroRecibo({
                     clienteId: clientId, monto: ventaAmt, formaPago: entry.metodo,
@@ -2275,7 +2286,7 @@ export default function VentasPage() {
                 }
               }
               if (saldoAmt > 0) {
-                await supabase.from("caja_movimientos").insert({
+                const { error: errCaja2 } = await supabase.from("caja_movimientos").insert({
                   fecha: hoy, hora, tipo: "ingreso",
                   descripcion: `Cobro saldo anterior — ${selectedClient?.nombre || ""} (Venta #${numero})`,
                   metodo_pago: entry.metodo, monto: saldoAmt,
@@ -2283,6 +2294,7 @@ export default function VentasPage() {
                   referencia_tipo: "cobro_saldo",
                   ...(mixCuenta ? { cuenta_bancaria: mixCuenta.nombre } : {}),
                 });
+                if (errCaja2) pagoErrores.push(`caja cobro saldo (${entry.metodo})`);
               }
             }
           }
@@ -2291,7 +2303,7 @@ export default function VentasPage() {
           const selectedCuenta = formaPago === "Transferencia" && cuentaBancariaId
             ? cuentasBancarias.find((c) => c.id === cuentaBancariaId)
             : null;
-          await supabase.from("caja_movimientos").insert({
+          const { error: errCaja3 } = await supabase.from("caja_movimientos").insert({
             fecha: hoy,
             hora,
             tipo: "ingreso",
@@ -2302,6 +2314,7 @@ export default function VentasPage() {
             referencia_tipo: "venta",
             ...(selectedCuenta ? { cuenta_bancaria: selectedCuenta.nombre } : {}),
           });
+          if (errCaja3) pagoErrores.push("caja de la venta");
           if (clientId) {
             await createCobroRecibo({
               clienteId: clientId, monto: total, formaPago,
@@ -2367,6 +2380,11 @@ export default function VentasPage() {
           }
 
           if (clientId) setClients((prev) => prev.map((c) => c.id === clientId ? { ...c, saldo: finalSaldoAfterCobro } : c));
+        }
+
+        // Avisar si algún registro de pago (caja/CC) falló — la venta ya se creó igual.
+        if (pagoErrores.length > 0) {
+          showAdminToast(`Venta creada, pero falló registrar: ${pagoErrores.join(", ")}. Revisá caja y cuenta corriente.`, "error");
         }
 
         // Calculate CC amounts for receipt
