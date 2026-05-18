@@ -539,18 +539,10 @@ export default function DashboardPage() {
     const [
       { data: allClients },
       { data: provs },
-      { data: ventasParaSaldo },
       { data: ventasCat },
     ] = await Promise.all([
       supabase.from("clientes").select("id, nombre, saldo").eq("activo", true).range(0, 49999),
       supabase.from("proveedores").select("saldo").eq("activo", true).range(0, 9999),
-      // Detección de saldos descuadrados: usamos la misma fuente que "Recalcular"
-      // (ventas + monto_pagado), no la tabla cuenta_corriente que tiene huecos historicos.
-      supabase.from("ventas")
-        .select("id, cliente_id, total, monto_pagado, tipo_comprobante, remito_origen_id, subtotal")
-        .neq("estado", "anulada")
-        .not("cliente_id", "is", null)
-        .range(0, 49999),
       // Paginar venta_items con join inner — el cap default de 1000 también afecta queries con join sin .in().
       (async () => {
         const PAGE = 1000;
@@ -612,60 +604,24 @@ export default function DashboardPage() {
     setCuentasCobrar((allClients || []).reduce((a, c) => a + ((c.saldo || 0) > 0 ? c.saldo : 0), 0));
     setCuentasPagar((provs || []).reduce((a, p) => a + (p.saldo > 0 ? p.saldo : 0), 0));
 
-    // Saldo mismatch detection — mismo calculo que el boton Recalcular del cliente.
-    // Saldo esperado = SUM(total ventas regulares) - SUM(monto_pagado, capeado al total)
-    //                  - NCs standalone (sin padre)
-    //                  - NCs vinculadas no "baked" (no descontadas del total padre).
-    if (allClients && allClients.length > 0 && ventasParaSaldo) {
-      // Agrupar ventas por cliente
-      const ventasByClient: Record<string, any[]> = {};
-      for (const v of ventasParaSaldo as any[]) {
-        if (!ventasByClient[v.cliente_id]) ventasByClient[v.cliente_id] = [];
-        ventasByClient[v.cliente_id].push(v);
-      }
-      const calcSaldo = (vts: any[]) => {
-        const ncs = vts.filter((v) => v.tipo_comprobante?.includes("Nota de Crédito"));
-        const regulares = vts.filter((v) => !v.tipo_comprobante?.includes("Nota de Crédito") && !v.tipo_comprobante?.includes("Nota de Débito"));
-        const ncByParent = new Map<string, { total: number; baked: boolean }>();
-        for (const nc of ncs) {
-          if (nc.remito_origen_id) {
-            const parent = regulares.find((rv) => rv.id === nc.remito_origen_id);
-            const baked = parent ? parent.total < (parent.subtotal || parent.total) : false;
-            const existing = ncByParent.get(nc.remito_origen_id);
-            ncByParent.set(nc.remito_origen_id, { total: (existing?.total || 0) + nc.total, baked });
-          }
-        }
-        let totalDebe = 0;
-        let totalHaber = 0;
-        for (const v of vts) {
-          const isNC = v.tipo_comprobante?.includes("Nota de Crédito");
-          const isND = v.tipo_comprobante?.includes("Nota de Débito");
-          if (isNC) {
-            if (!v.remito_origen_id) totalDebe -= v.total; // standalone NC
-            continue;
-          }
-          totalDebe += v.total;
-          if (!isND) {
-            const ncInfo = ncByParent.get(v.id);
-            if (ncInfo && !ncInfo.baked) {
-              totalDebe -= ncInfo.total;
-              totalHaber += Math.min(v.monto_pagado || 0, Math.max(0, v.total - ncInfo.total));
-            } else {
-              totalHaber += Math.min(v.monto_pagado || 0, v.total);
-            }
-          }
-        }
-        return Math.round((totalDebe - totalHaber) * 100) / 100;
-      };
-      const mismatches = allClients
-        .map((c) => {
-          const calculado = calcSaldo(ventasByClient[c.id] || []);
-          const saldo = Math.round((c.saldo || 0) * 100) / 100;
-          return { id: c.id, nombre: c.nombre, saldo, calculado, diff: Math.round((saldo - calculado) * 100) / 100 };
-        })
-        .filter((c) => Math.abs(c.diff) > 0.5)
-        .sort((a, b) => Math.abs(b.diff) - Math.abs(a.diff));
-      setSaldoMismatches(mismatches);
+    // Saldo mismatch detection — fuente canónica: RPC get_descuadres_cc(), la misma
+    // lógica que el conciliador de Clientes (compara las 3 fuentes: clientes.saldo,
+    // cuenta_corriente y ventas). Una sola query eficiente del lado del servidor.
+    {
+      const { data: descuadres } = await supabase.rpc("get_descuadres_cc");
+      setSaldoMismatches(
+        (descuadres || []).map((d: { cliente_id: string; nombre: string; saldo_cliente: number; saldo_ventas: number }) => {
+          const saldo = Number(d.saldo_cliente || 0);
+          const calculado = Number(d.saldo_ventas || 0);
+          return {
+            id: d.cliente_id,
+            nombre: d.nombre,
+            saldo,
+            calculado,
+            diff: Math.round((saldo - calculado) * 100) / 100,
+          };
+        }),
+      );
     }
 
     // ─── Monthly chart: carga diferida ───
