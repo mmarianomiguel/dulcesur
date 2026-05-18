@@ -1005,13 +1005,25 @@ export default function ListadoVentasPage() {
           }
           // If cobro saldo was reversed, restore monto_pagado on old ventas + add CC entry
           if (cobroSaldoAmount > 0) {
-            // Find the CC haber entries from cobro saldo (they have venta_id of OLD ventas)
-            const { data: cobroSaldoCCEntries } = await supabase
-              .from("cuenta_corriente")
-              .select("venta_id, haber")
-              .eq("cliente_id", v.cliente_id)
-              .gt("haber", 0)
-              .ilike("comprobante", "Cobro saldo%");
+            // Find the CC haber entries from cobro saldo (they have venta_id of OLD ventas).
+            // IMPORTANTE: scopear por la(s) fecha(s) de los movimientos de caja cobro_saldo
+            // que se están revirtiendo. Sin esto, se tomarían TODOS los "Cobro saldo" históricos
+            // del cliente y se le bajaría monto_pagado a ventas viejas ya pagadas.
+            const cobroSaldoFechas = [...new Set(
+              allCajaToReverse
+                .filter((c: any) => c.referencia_tipo === "cobro_saldo")
+                .map((c: any) => c.fecha)
+                .filter(Boolean)
+            )];
+            const { data: cobroSaldoCCEntries } = cobroSaldoFechas.length > 0
+              ? await supabase
+                  .from("cuenta_corriente")
+                  .select("venta_id, haber")
+                  .eq("cliente_id", v.cliente_id)
+                  .gt("haber", 0)
+                  .ilike("comprobante", "Cobro saldo%")
+                  .in("fecha", cobroSaldoFechas)
+              : { data: [] };
             // Reduce monto_pagado on each old venta that was paid by the cobro
             for (const ccEntry of cobroSaldoCCEntries || []) {
               if (!ccEntry.venta_id || ccEntry.haber <= 0) continue;
