@@ -693,6 +693,35 @@ export default function DescuentosPage() {
                       onChange={(e) => setProdSearch(e.target.value)}
                       className="h-8 text-sm"
                     />
+                    {/* Productos seleccionados — visibles siempre, sin importar la búsqueda */}
+                    {productosIds.length > 0 && (
+                      <div className="rounded-lg bg-primary/5 border border-primary/15 p-2">
+                        <p className="text-[10px] font-semibold text-primary uppercase tracking-wide mb-1.5">
+                          Aplica a estos productos
+                        </p>
+                        <div className="flex flex-wrap gap-1.5">
+                          {productosIds.map((id) => {
+                            const p = productosAll.find((x) => x.id === id);
+                            return (
+                              <span
+                                key={id}
+                                className="inline-flex items-center gap-1 rounded-full bg-primary/10 text-primary text-xs pl-2 pr-1 py-0.5"
+                              >
+                                {p ? p.nombre : "Producto eliminado"}
+                                <button
+                                  type="button"
+                                  onClick={() => setProductosIds((prev) => prev.filter((x) => x !== id))}
+                                  className="rounded-full hover:bg-primary/20 p-0.5"
+                                  title="Quitar"
+                                >
+                                  <X className="w-3 h-3" />
+                                </button>
+                              </span>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
                     <div className="border rounded-lg max-h-40 overflow-y-auto">
                       {filteredProds.slice(0, 50).map((p) => (
                         <button
