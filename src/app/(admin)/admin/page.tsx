@@ -405,26 +405,6 @@ export default function DashboardPage() {
     }
   }, []);
 
-  const fixSaldo = async (clientId: string, correctSaldo: number) => {
-    await supabase.from("clientes").update({ saldo: correctSaldo }).eq("id", clientId);
-    setSaldoMismatches((prev) => prev.filter((c) => c.id !== clientId));
-    showAdminToast("Saldo corregido", "success");
-  };
-
-  const fixAllSaldos = async () => {
-    // Paralelizar en vez de serial: supabase no permite UPDATE múltiple con
-    // valores distintos en una sola query, pero sí podemos lanzar todas las
-    // requests en paralelo.
-    const count = saldoMismatches.length;
-    await Promise.all(
-      saldoMismatches.map((c) =>
-        supabase.from("clientes").update({ saldo: c.calculado }).eq("id", c.id)
-      )
-    );
-    setSaldoMismatches([]);
-    showAdminToast(`${count} saldos corregidos`, "success");
-  };
-
   const fetchCharts = useCallback(async (start: string, end: string) => {
     setChartsLoading(true);
     try {
